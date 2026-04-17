@@ -12,6 +12,9 @@
     - Cargado en: /home/[USER_NAME]/scripts/env.sh
 - `RunBackupDB.sh`: Script para respaldar las bases de datos.
     - Cargado en: /home/[USER_NAME]/scripts/RunBackupDB.sh
+- `HestiaCPResticUserPassBackup.sh`: Script para respaldar la configuración de restic de HestiaCP.
+    - Cargado en: /home/[USER_NAME]/scripts/HestiaCPResticUserPassBackup.sh
+    - No hace falta configurarlo en el crontab. Se debe ejecutar manualmente como root cada vez que se quiera respaldar la configuración.
 
 ### Ajustes de implementación
 

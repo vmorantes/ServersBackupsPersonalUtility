@@ -1,0 +1,25 @@
+# admin:
+kCgSQeHrDarRjq6gUHBMsrxCGkskHpqq
+
+
+=====================
+# naturalsurf:
+tszdqCwaK5ez53EsZXZ9e9eiphz7pROg
+
+
+=====================
+# testing-admin:
+EJrgKgglKCARJuWLSOVxnXdrR1t9SRVz
+
+
+=====================
+# conf:
+REPO='rclone:megas3-vicsen:tejido-testing/hestiacp/'
+SNAPSHOTS='30'
+KEEP_DAILY='8'
+KEEP_WEEKLY='5'
+KEEP_MONTHLY='3'
+KEEP_YEARLY='-1'
+
+
+=====================
