@@ -99,18 +99,55 @@ confirmación en un diálogo** que explica qué va a pasar antes de lanzarlas.
 La prueba de restauración pide el nombre de la base de datos y avisa de que
 creará una desechable y la eliminará al terminar.
 
-## Lo que la web NO hace
+## Dar de alta un servidor
 
-Deliberadamente:
+El botón **+ Añadir servidor** abre un formulario que hace lo mismo que
+`backupctl setup`: comprueba la conexión, escribe el `env.sh` y, si lo pides,
+despliega.
 
-- **`restore` y `migrate`**, que escriben en bases de datos. Son las dos
-  operaciones donde equivocarse duele de verdad y merecen el terminal, con su
-  ensayo previo delante.
-- **`setup`**, que pide credenciales de administrador. Teclear una contraseña de
-  root en un formulario web local es una costumbre que no conviene coger.
-- **`cron --install`**, que necesita `sudo` interactivo.
+Si no tienes usuario de MySQL para respaldos, elige *«Créalo tú»* y te pedirá
+una credencial de **administrador** de la base de datos. Se usa una vez para
+crear el usuario con sus permisos y **se descarta**: no se guarda en ningún
+archivo, y el formulario la borra en cuanto se envía.
 
-Para eso están [la CLI](cli.md) y [las guías paso a paso](../paso-a-paso/index.md).
+Por debajo es el mismo `backupctl setup` en modo desatendido, así que no hay dos
+implementaciones que puedan divergir.
+
+## Editar la configuración
+
+La pestaña **Configuración** edita el `env.sh` del perfil. Antes de guardar se
+valida la sintaxis con `bash -n`, y la versión anterior queda como
+`env.sh.anterior`.
+
+!!! warning "El env.sh lleva la contraseña de MySQL en claro"
+    Es tu archivo, en tu equipo, servido por loopback. Pero tenlo en cuenta si
+    hay alguien mirando la pantalla.
+
+## Cobertura
+
+Todo lo de la CLI está en la web, salvo lo que no tiene sentido allí:
+
+| Orden | En la web |
+|---|---|
+| `status` `doctor` `list` `inspect` `logs` `config` | ✅ pestaña Revisar |
+| `backup` (con `--only`, `--exclude`, `--no-data`) | ✅ pestaña Respaldar |
+| `verify` (`--quick`, `--restore-test`, `--with-data`) | ✅ pestaña Respaldar |
+| `retention` | ✅ pestaña Respaldar |
+| `restore` (`--into`, `--segments`) | ✅ pestaña Restaurar |
+| `deploy` `pull` `remote` `migrate` | ✅ pestaña Servidor |
+| `cron` `notify-test` `restic` | ✅ pestaña Programación |
+| `setup` | ✅ botón + Añadir servidor |
+| `config --edit` | ✅ pestaña Configuración |
+| `tui` | ❌ es una interfaz de terminal |
+| `install` `web` | ❌ solo tienen sentido desde el terminal |
+
+Todas las acciones que escriben piden confirmación explicando qué va a pasar, y
+las que tienen ensayo lo ofrecen al lado.
+
+!!! warning "Las órdenes que necesitan `sudo`"
+    `restic` y `cron --install` necesitan root. Desde la web no hay terminal
+    donde teclear la contraseña de `sudo`, así que solo funcionan si `sudo` no
+    la pide. Si falla, la salida lo dice y hay que hacerlo desde el terminal.
 
 ## Cuándo usar cada fachada
 

@@ -181,7 +181,18 @@ bc_lock_acquire() {
   local lock_file="$dir/.backupctl.${name}.lock"
   # El descriptor 9 se mantiene abierto mientras viva el proceso; al terminar,
   # el sistema libera el bloqueo solo, incluso si el script muere de golpe.
-  exec 9>"$lock_file" || bc_die "no se pudo crear el bloqueo en $lock_file"
+  # Se comprueba el DIRECTORIO, no el archivo. Con `exec 9>fichero` el error de
+  # redirección lo imprime el propio shell antes de que podamos capturarlo, y
+  # silenciarlo con 2>/dev/null junto al exec redirigiría stderr de todo el
+  # proceso, no solo de esa orden.
+  if [[ ! -d "$dir" || ! -w "$dir" ]]; then
+    bc_err "no se pudo crear el bloqueo en $lock_file"
+    bc_err "El directorio no existe o no es escribible. Si este perfil describe"
+    bc_err "otro servidor, la orden que buscas es: backupctl -p $BC_PROFILE remote <orden>"
+    BC_DELIBERATE_EXIT=1
+    exit 2
+  fi
+  exec 9>"$lock_file"
   if ! flock -n 9; then
     bc_die "ya hay una operación '$name' en curso (bloqueo: $lock_file)."
   fi
@@ -196,7 +207,16 @@ bc_lock_acquire() {
 # fallos se comunican por el código de salida y por los avisos configurados.
 bc_start_logging() {
   local log_file="$1"
-  mkdir -p "$(dirname "$log_file")"
+  # Si el directorio de logs no se puede crear —un perfil que describe otra
+  # máquina, permisos ajenos—, se sigue sin archivo en lugar de abortar con un
+  # "fallo no controlado" que no explica nada. El problema de fondo saldrá a la
+  # luz igualmente, y con un mensaje que sí se entiende.
+  if ! mkdir -p "$(dirname "$log_file")" 2>/dev/null; then
+    bc_warn "no se pudo crear $(dirname "$log_file"): esta ejecución no se registrará en un archivo."
+    bc_warn "Si este perfil describe otro servidor, la orden que buscas es 'remote'."
+    BC_LOG_FILE=""
+    return 0
+  fi
   BC_LOG_FILE="$log_file"
   if [[ -t 1 ]]; then
     exec > >(tee -a "$log_file") 2>&1

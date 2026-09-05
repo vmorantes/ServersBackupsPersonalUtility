@@ -26,7 +26,10 @@
 
   <!-- Panel de todos los servidores a la vez -->
   <section class="panel" id="panel-general">
-    <h2>Tus servidores</h2>
+    <div class="cabecera-detalle">
+      <h2>Tus servidores</h2>
+      <button class="btn btn-escribe" id="btn-nuevo">+ Añadir servidor</button>
+    </div>
     <p class="ayuda">Estado de todos los perfiles a la vez. Nada de esto escribe.</p>
     <div id="tarjetas" class="tarjetas">
       <div class="cargando">Cargando…</div>
@@ -43,19 +46,23 @@
     <nav class="pestanas" id="pestanas">
       <button class="pestana activa" data-tab="revisar">Revisar</button>
       <button class="pestana" data-tab="respaldar">Respaldar</button>
+      <button class="pestana" data-tab="restaurar">Restaurar</button>
       <button class="pestana" data-tab="servidor">Servidor</button>
+      <button class="pestana" data-tab="programacion">Programación</button>
+      <button class="pestana" data-tab="config">Configuración</button>
       <button class="pestana" data-tab="registros">Registros</button>
     </nav>
 
+    <!-- REVISAR ------------------------------------------------------------->
     <div class="tab" data-tab="revisar">
       <p class="ayuda">Ninguna de estas acciones escribe nada.</p>
       <div class="botones">
         <button class="btn" data-act="status">Estado</button>
         <button class="btn" data-act="doctor">Diagnóstico</button>
-        <button class="btn" data-act="config">Configuración</button>
+        <button class="btn" data-act="config">Configuración efectiva</button>
         <button class="btn" data-act="config-check">Validar configuración</button>
-        <button class="btn" data-act="cron-show">Programación</button>
-        <button class="btn" data-act="restic-list">Repositorios Restic</button>
+        <button class="btn" data-act="list">Listar respaldos</button>
+        <button class="btn" data-act="list-databases">Bases del último respaldo</button>
       </div>
 
       <h3>Respaldos guardados</h3>
@@ -64,75 +71,208 @@
       </div>
     </div>
 
+    <!-- RESPALDAR ----------------------------------------------------------->
     <div class="tab" data-tab="respaldar" hidden>
-      <p class="ayuda">Los ensayos <span class="etq etq-lee">no escriben</span>
-         enseñan qué pasaría sin hacerlo.</p>
+      <h3>Respaldar</h3>
+      <div class="campos" id="form-backup">
+        <label>Solo estas bases <span class="pista">separadas por comas, opcional</span>
+          <input type="text" data-opt="only" placeholder="tienda,blog" autocomplete="off"></label>
+        <label>Excluir estas <span class="pista">opcional</span>
+          <input type="text" data-opt="exclude" placeholder="cache_temporal" autocomplete="off"></label>
+      </div>
+      <label class="radio" style="margin:10px 0">
+        <input type="checkbox" data-opt="_nodata" data-form="#form-backup"> Solo estructura, sin datos</label>
       <div class="botones">
-        <button class="btn" data-act="backup-dry">Ensayo de respaldo</button>
-        <button class="btn" data-act="verify-quick">Verificación rápida</button>
-        <button class="btn" data-act="verify">Verificación completa</button>
-        <button class="btn" data-act="retention-dry">Ensayo de retención</button>
+        <button class="btn" data-act="backup-dry" data-form="#form-backup">Ensayo</button>
+        <button class="btn btn-escribe" data-act="backup" data-form="#form-backup"
+                data-confirmar="Se creará un respaldo y se aplicará la retención.">Respaldar ahora</button>
       </div>
 
-      <h3>Acciones que escriben</h3>
+      <h3>Verificar</h3>
+      <div class="campos" id="form-verify">
+        <label>Respaldo <span class="pista">vacío = el más reciente</span>
+          <select data-opt="zip" class="sel-respaldo"><option value="">el más reciente</option></select></label>
+      </div>
       <div class="botones">
-        <button class="btn btn-escribe" data-act="backup"
-                data-confirmar="Se creará un respaldo nuevo y se aplicará la retención.">
-          Respaldar ahora</button>
+        <button class="btn" data-act="verify-quick" data-form="#form-verify">Rápida (solo el zip)</button>
+        <button class="btn" data-act="verify" data-form="#form-verify">Completa</button>
+        <button class="btn" data-act="inspect" data-form="#form-verify">Inspeccionar</button>
+      </div>
+
+      <h3>Prueba de restauración</h3>
+      <p class="ayuda">Crea una base de datos desechable, restaura ahí y la elimina.
+         Tu producción no se toca. Es la única prueba concluyente.</p>
+      <div class="campos" id="form-rtest">
+        <label>Respaldo
+          <select data-opt="zip" class="sel-respaldo"><option value="">el más reciente</option></select></label>
+        <label>Base de datos
+          <input type="text" data-opt="db" placeholder="tienda" autocomplete="off"></label>
+      </div>
+      <label class="radio" style="margin:10px 0">
+        <input type="checkbox" data-opt="_withdata" data-form="#form-rtest" checked> Incluir los datos</label>
+      <div class="botones">
+        <button class="btn btn-escribe" data-act="verify-restore-test" data-form="#form-rtest"
+                data-confirmar="Se creará una base de datos temporal, se restaurará dentro y se eliminará al terminar.">
+          Probar restauración</button>
+      </div>
+
+      <h3>Retención</h3>
+      <div class="botones">
+        <button class="btn" data-act="retention-dry">Ensayo: qué se borraría</button>
         <button class="btn btn-peligro" data-act="retention"
                 data-confirmar="Se BORRARÁN los respaldos que superen la antigüedad configurada.">
           Aplicar retención</button>
       </div>
+    </div>
 
-      <h3>Prueba de restauración</h3>
-      <p class="ayuda">Crea una base de datos desechable, restaura ahí y la
-         elimina. Tu producción no se toca. Es la única prueba concluyente.</p>
-      <div class="linea-form">
-        <input type="text" id="bd-prueba" placeholder="nombre de la base de datos"
-               autocomplete="off" spellcheck="false">
-        <button class="btn btn-escribe" id="btn-restore-test">Probar restauración</button>
+    <!-- RESTAURAR ----------------------------------------------------------->
+    <div class="tab" data-tab="restaurar" hidden>
+      <p class="ayuda"><strong>Esto escribe en la base de datos.</strong>
+         Haz siempre el ensayo primero. Lo más seguro es restaurar
+         <em>al lado</em>, con otro nombre, y comparar.</p>
+      <div class="campos" id="form-restore">
+        <label>Respaldo <span class="pista">vacío = el más reciente</span>
+          <select data-opt="zip" class="sel-respaldo"><option value="">el más reciente</option></select></label>
+        <label>Base de datos a restaurar
+          <input type="text" data-opt="db" placeholder="tienda" autocomplete="off"></label>
+        <label>Restaurar como <span class="pista">recomendado: otro nombre</span>
+          <input type="text" data-opt="into" placeholder="tienda_recuperada" autocomplete="off"></label>
+        <label>Solo estos segmentos <span class="pista">opcional</span>
+          <input type="text" data-opt="segments" placeholder="tables,views" autocomplete="off"></label>
+      </div>
+      <p class="ayuda">Segmentos válidos: <code>database</code> <code>tables</code>
+         <code>data</code> <code>views</code> <code>functions</code> <code>others</code></p>
+      <div class="botones">
+        <button class="btn" data-act="restore-dry" data-form="#form-restore">Ensayo</button>
+        <button class="btn btn-peligro" data-act="restore" data-form="#form-restore"
+                data-confirmar="Se ESCRIBIRÁ en la base de datos de destino. Si ya existe, sus tablas pueden sobrescribirse.">
+          Restaurar</button>
       </div>
     </div>
 
+    <!-- SERVIDOR ------------------------------------------------------------>
     <div class="tab" data-tab="servidor" hidden>
-      <p class="ayuda">Requiere <code>DEPLOY_HOST</code> configurado en el perfil.</p>
-      <h3>Ensayos</h3>
+      <p class="ayuda">Requiere <code>DEPLOY_HOST</code> en el perfil, o indicar el destino.</p>
+
+      <h3>Subir y descargar</h3>
+      <div class="campos" id="form-deploy">
+        <label>Destino <span class="pista">vacío = el del perfil</span>
+          <input type="text" data-opt="target" placeholder="admin@servidor" autocomplete="off"></label>
+        <label>Ruta remota <span class="pista">opcional</span>
+          <input type="text" data-opt="path" placeholder="/home/admin/scripts" autocomplete="off"></label>
+      </div>
       <div class="botones">
-        <button class="btn" data-act="deploy-dry">Ensayo de despliegue</button>
-        <button class="btn" data-act="pull-dry">Ensayo de descarga</button>
+        <button class="btn" data-act="deploy-dry" data-form="#form-deploy">Ensayo de subida</button>
+        <button class="btn" data-act="pull-dry" data-form="#form-deploy">Ensayo de descarga</button>
+        <button class="btn btn-escribe" data-act="deploy" data-form="#form-deploy"
+                data-confirmar="Se copiarán bin/, lib/ y env.sh AL servidor.">Subir (deploy)</button>
+        <button class="btn btn-escribe" data-act="pull" data-form="#form-deploy"
+                data-confirmar="Se escribirá ESTADO.md y podría actualizarse el env.sh local.">
+          Descargar estado (pull)</button>
       </div>
 
       <h3>Ejecutar en el servidor</h3>
       <div class="botones">
-        <button class="btn" data-act="remote-status">Estado remoto</button>
-        <button class="btn" data-act="remote-doctor">Diagnóstico remoto</button>
-        <button class="btn" data-act="remote-list">Respaldos del servidor</button>
-        <button class="btn" data-act="remote-logs">Errores del servidor</button>
-        <button class="btn" data-act="remote-verify">Verificar allí</button>
+        <button class="btn" data-act="remote-status">Estado</button>
+        <button class="btn" data-act="remote-doctor">Diagnóstico</button>
+        <button class="btn" data-act="remote-list">Respaldos</button>
+        <button class="btn" data-act="remote-config">Configuración</button>
+        <button class="btn" data-act="remote-cron">Programación</button>
+        <button class="btn" data-act="remote-logs">Errores</button>
+        <button class="btn" data-act="remote-verify">Verificar</button>
         <button class="btn btn-escribe" data-act="remote-backup"
-                data-confirmar="Se lanzará un respaldo EN el servidor.">
-          Respaldar en el servidor</button>
+                data-confirmar="Se lanzará un respaldo EN el servidor.">Respaldar allí</button>
+        <button class="btn btn-peligro" data-act="remote-retention"
+                data-confirmar="Se BORRARÁN respaldos antiguos EN el servidor.">Retención allí</button>
       </div>
 
-      <h3>Sincronizar</h3>
+      <h3>Migrar a otro servidor</h3>
+      <p class="ayuda">Copia las bases de datos a OTRA máquina, que debe tener
+         backupctl desplegado. Compara los recuentos al terminar.</p>
+      <div class="campos" id="form-migrate">
+        <label>Destino
+          <input type="text" data-opt="to" placeholder="admin@nuevo.example" autocomplete="off"></label>
+        <label>Solo estas bases <span class="pista">opcional</span>
+          <input type="text" data-opt="databases" placeholder="tienda,blog" autocomplete="off"></label>
+        <label>Prefijo en el destino <span class="pista">opcional</span>
+          <input type="text" data-opt="prefix" placeholder="viejo_" autocomplete="off"></label>
+      </div>
+      <label class="radio" style="margin:10px 0">
+        <input type="checkbox" data-opt="_fresh" data-form="#form-migrate" checked>
+        Generar un respaldo nuevo antes de migrar</label>
       <div class="botones">
-        <button class="btn btn-escribe" data-act="deploy"
-                data-confirmar="Se copiarán bin/, lib/ y env.sh AL servidor.">
-          Subir (deploy)</button>
-        <button class="btn btn-escribe" data-act="pull"
-                data-confirmar="Se escribirá ESTADO.md y podría actualizarse env.sh.">
-          Descargar estado (pull)</button>
-        <button class="btn btn-escribe" data-act="notify-test"
-                data-confirmar="Se enviará un aviso de prueba por los canales configurados.">
-          Probar avisos</button>
+        <button class="btn" data-act="migrate-dry" data-form="#form-migrate">Ensayo</button>
+        <button class="btn btn-peligro" data-act="migrate" data-form="#form-migrate"
+                data-confirmar="Se ESCRIBIRÁ en las bases de datos del servidor destino.">
+          Migrar</button>
       </div>
     </div>
 
+    <!-- PROGRAMACIÓN -------------------------------------------------------->
+    <div class="tab" data-tab="programacion" hidden>
+      <h3>Cron</h3>
+      <div class="campos" id="form-cron">
+        <label>Hora <span class="pista">por defecto 3</span>
+          <input type="text" data-opt="hour" placeholder="3" autocomplete="off"></label>
+        <label>Minuto <span class="pista">por defecto 30</span>
+          <input type="text" data-opt="minute" placeholder="30" autocomplete="off"></label>
+      </div>
+      <div class="botones">
+        <button class="btn" data-act="cron-show">Ver la programación</button>
+        <button class="btn btn-escribe" data-act="cron-install" data-form="#form-cron"
+                data-confirmar="Se modificará la programación de este perfil.">Instalar aquí</button>
+        <button class="btn btn-peligro" data-act="cron-remove"
+                data-confirmar="Se quitarán las entradas de backupctl de este perfil.">Quitar aquí</button>
+        <button class="btn btn-escribe" data-act="remote-cron-install"
+                data-confirmar="Se instalará la programación EN el servidor.">Instalar en el servidor</button>
+        <button class="btn btn-peligro" data-act="remote-cron-remove"
+                data-confirmar="Se quitará la programación EN el servidor.">Quitar del servidor</button>
+      </div>
+      <p class="ayuda">En HestiaCP, instalar el cron necesita <code>sudo</code>.
+         Sin terminal donde teclear la contraseña, esto solo funciona si
+         <code>sudo</code> no la pide. Si falla, hazlo desde el terminal.</p>
+
+      <h3>Avisos</h3>
+      <div class="botones">
+        <button class="btn btn-escribe" data-act="notify-test"
+                data-confirmar="Se enviará un aviso de prueba.">Probar avisos aquí</button>
+        <button class="btn btn-escribe" data-act="remote-notify"
+                data-confirmar="Se enviará un aviso de prueba desde el servidor.">Probar en el servidor</button>
+      </div>
+
+      <h3>Claves Restic de HestiaCP</h3>
+      <div class="botones">
+        <button class="btn" data-act="restic-list">Ver repositorios</button>
+        <button class="btn" data-act="restic-dry">Ensayo del volcado</button>
+        <button class="btn btn-escribe" data-act="restic"
+                data-confirmar="Se volcarán las claves Restic. Necesita root.">Volcar aquí</button>
+        <button class="btn btn-escribe" data-act="remote-restic"
+                data-confirmar="Se volcarán las claves Restic EN el servidor. Necesita root allí.">
+          Volcar en el servidor</button>
+      </div>
+    </div>
+
+    <!-- CONFIGURACIÓN ------------------------------------------------------->
+    <div class="tab" data-tab="config" hidden>
+      <p class="ayuda">Es el <code>env.sh</code> del perfil. Se valida la sintaxis
+         antes de guardar, y la versión anterior queda como <code>env.sh.anterior</code>.</p>
+      <p class="ayuda"><strong>Contiene la contraseña de MySQL en claro.</strong>
+         Es tu archivo, en tu equipo, pero tenlo en cuenta si hay alguien mirando.</p>
+      <div class="botones">
+        <button class="btn" id="btn-cargar-config">Cargar</button>
+        <button class="btn btn-escribe" id="btn-guardar-config">Guardar</button>
+        <span class="etq" id="ruta-config"></span>
+      </div>
+      <textarea id="editor-config" class="editor" spellcheck="false"
+                placeholder="Pulsa «Cargar» para editar el env.sh de este perfil."></textarea>
+    </div>
+
+    <!-- REGISTROS ----------------------------------------------------------->
     <div class="tab" data-tab="registros" hidden>
       <div class="botones">
         <button class="btn" data-act="logs">Listar registros</button>
         <button class="btn" data-act="logs-errors">Solo errores</button>
-        <button class="btn" data-act="logs-full">Último registro completo</button>
+        <button class="btn" data-act="logs-full">Último completo</button>
       </div>
     </div>
   </section>
@@ -150,6 +290,64 @@
   </section>
 
 </main>
+
+<div id="alta" class="modal" hidden>
+  <div class="modal-caja modal-ancho">
+    <h3>Añadir un servidor</h3>
+    <p class="ayuda">Se comprueba la conexión, se escribe el <code>env.sh</code>
+       y, si lo pides, se despliega.</p>
+
+    <div class="campos">
+      <label>Nombre del perfil
+        <input type="text" id="f-name" placeholder="MiVPS" autocomplete="off"></label>
+      <label>Servidor
+        <input type="text" id="f-host" placeholder="mivps.example.com" autocomplete="off"></label>
+      <label>Usuario SSH <span class="pista">necesita shell</span>
+        <input type="text" id="f-ssh" value="admin" autocomplete="off"></label>
+      <label>Usuario propietario <span class="pista">no necesita shell</span>
+        <input type="text" id="f-owner" placeholder="igual que el de SSH" autocomplete="off"></label>
+      <label>Ruta en el servidor
+        <input type="text" id="f-path" placeholder="/home/admin/scripts" autocomplete="off"></label>
+      <label>URL de healthcheck <span class="pista">opcional</span>
+        <input type="text" id="f-hc" placeholder="https://hc-ping.com/…" autocomplete="off"></label>
+    </div>
+
+    <h4>Acceso a MySQL</h4>
+    <div class="opcion">
+      <label class="radio"><input type="radio" name="db" value="existente" checked>
+        Ya tengo un usuario para respaldos</label>
+      <label class="radio"><input type="radio" name="db" value="crear">
+        Créalo tú (pediré una credencial de administrador)</label>
+    </div>
+
+    <div class="campos" id="db-existente">
+      <label>Usuario de MySQL
+        <input type="text" id="f-dbuser" placeholder="admin_general" autocomplete="off"></label>
+      <label>Contraseña
+        <input type="password" id="f-dbpass" autocomplete="new-password"></label>
+    </div>
+
+    <div class="campos" id="db-crear" hidden>
+      <label>Usuario administrador de MySQL
+        <input type="text" id="f-adminuser" value="root" autocomplete="off"></label>
+      <label>Su contraseña <span class="pista">no se guarda</span>
+        <input type="password" id="f-adminpass" autocomplete="new-password"></label>
+      <label>Nombre del usuario a crear
+        <input type="text" id="f-newdbuser" value="backupctl" autocomplete="off"></label>
+      <p class="ayuda">La contraseña del usuario nuevo se genera aquí (28 caracteres)
+         y se guarda en el <code>env.sh</code>. La de administrador se usa una vez
+         y se descarta.</p>
+    </div>
+
+    <label class="radio" style="margin-top:12px">
+      <input type="checkbox" id="f-deploy" checked> Desplegar backupctl al terminar</label>
+
+    <div class="modal-botones">
+      <button class="btn btn-sec" id="alta-no">Cancelar</button>
+      <button class="btn btn-escribe" id="alta-si">Crear</button>
+    </div>
+  </div>
+</div>
 
 <div id="modal" class="modal" hidden>
   <div class="modal-caja">

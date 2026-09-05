@@ -44,56 +44,147 @@ SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 # -----------------------------------------------------------------------------
 # Lista blanca de acciones
 # -----------------------------------------------------------------------------
-# clave -> (argv extra, ¿escribe?, descripción)
-# Los argumentos variables se validan uno a uno más abajo; nunca se concatenan
-# cadenas del navegador en una orden.
-ACTIONS = {
-    "status":        (["status"],                       False),
-    "doctor":        (["doctor"],                       False),
-    "list":          (["list"],                         False),
-    "inspect":       (["inspect"],                      False),
-    "logs":          (["logs", "--list"],               False),
-    "logs-errors":   (["logs", "--errors"],             False),
-    "logs-full":     (["logs", "--full"],               False),
-    "config":        (["config", "--show"],             False),
-    "config-check":  (["config", "--check"],            False),
-    "cron-show":     (["cron", "--show"],               False),
-    "restic-list":   (["restic-list"],                  False),
-    "verify":        (["verify"],                       False),
-    "verify-quick":  (["verify", "--quick"],            False),
+# El navegador manda el NOMBRE de una acción y un diccionario de opciones. Aquí
+# se construye el argv real: nada de lo que llega del navegador se concatena en
+# una cadena ni pasa por una shell.
+#
+# Cada opción declara cómo se traduce y con qué validador. Una opción que no
+# valide hace que la petición entera se rechace, no que se ignore en silencio.
+# -----------------------------------------------------------------------------
 
-    "backup-dry":    (["backup", "--dry-run"],          False),
-    "retention-dry": (["retention", "--dry-run"],       False),
-    "deploy-dry":    (["deploy", "--dry-run"],          False),
-    "pull-dry":      (["pull", "--dry-run"],            False),
+def _v_db(v):       return bool(re.match(r"^[A-Za-z0-9._\-]{1,64}$", v))
+def _v_dblist(v):   return all(_v_db(x) for x in v.split(",") if x.strip())
+def _v_zip(v):      return bool(re.match(r"^all_databases_[0-9_]+\.zip$", v))
+def _v_target(v):   return bool(re.match(r"^[A-Za-z0-9._\-]+@[A-Za-z0-9._\-]+$", v))
+def _v_path(v):     return bool(re.match(r"^/[A-Za-z0-9._\-/]{0,200}$", v))
+def _v_prefix(v):   return bool(re.match(r"^[A-Za-z0-9._\-]{0,32}$", v))
+def _v_segments(v):
+    ok = {"database", "tables", "data", "views", "functions", "others"}
+    return all(x in ok for x in v.split(",") if x.strip())
 
-    "backup":        (["backup"],                       True),
-    "retention":     (["retention"],                    True),
-    "deploy":        (["deploy"],                       True),
-    "pull":          (["pull"],                         True),
-    "notify-test":   (["notify-test"],                  True),
+# nombre -> (argv base, [(clave, forma, validador)], ¿escribe?)
+#   forma "pos"        -> se añade como argumento posicional
+#   forma "--x"        -> se añade como "--x VALOR"
+#   forma "flag:--x"   -> se añade "--x" si el valor es verdadero
+A = {
+    # --- solo lectura ------------------------------------------------------
+    "status":        (["status"], [], False),
+    "doctor":        (["doctor"], [], False),
+    "list":          (["list"], [], False),
+    "list-databases":(["list", "--databases"], [("zip", "pos", _v_zip)], False),
+    "inspect":       (["inspect"], [("zip", "pos", _v_zip)], False),
+    "logs":          (["logs", "--list"], [], False),
+    "logs-errors":   (["logs", "--errors"], [], False),
+    "logs-full":     (["logs", "--full"], [], False),
+    "config":        (["config", "--show"], [], False),
+    "config-check":  (["config", "--check"], [], False),
+    "cron-show":     (["cron", "--show"], [], False),
+    "restic-list":   (["restic-list"], [], False),
+    "verify":        (["verify"], [("zip", "pos", _v_zip)], False),
+    "verify-quick":  (["verify", "--quick"], [("zip", "pos", _v_zip)], False),
 
-    "remote-status": (["remote", "status"],             False),
-    "remote-doctor": (["remote", "doctor"],             False),
-    "remote-list":   (["remote", "list"],               False),
-    "remote-logs":   (["remote", "logs", "--errors"],   False),
-    "remote-backup": (["remote", "backup"],             True),
-    "remote-verify": (["remote", "verify"],             False),
+    # --- ensayos -----------------------------------------------------------
+    "backup-dry":    (["backup", "--dry-run"],
+                      [("only", "--only", _v_dblist), ("exclude", "--exclude", _v_dblist)], False),
+    "restore-dry":   (["restore"],
+                      [("zip", "pos", _v_zip), ("db", "pos", _v_db),
+                       ("into", "--into", _v_db), ("segments", "--segments", _v_segments),
+                       ("_dry", "flag:--dry-run", None)], False),
+    "retention-dry": (["retention", "--dry-run"], [], False),
+    "restic-dry":    (["restic", "--dry-run"], [], False),
+    "deploy-dry":    (["deploy", "--dry-run"], [("target", "pos", _v_target),
+                                                ("path", "--path", _v_path)], False),
+    "pull-dry":      (["pull", "--dry-run"], [("target", "pos", _v_target),
+                                              ("path", "--path", _v_path)], False),
+    "migrate-dry":   (["migrate", "--dry-run"],
+                      [("to", "--to", _v_target), ("databases", "--databases", _v_dblist),
+                       ("prefix", "--prefix", _v_prefix), ("_fresh", "flag:--fresh", None)], False),
+
+    # --- escriben ----------------------------------------------------------
+    "backup":        (["backup"],
+                      [("only", "--only", _v_dblist), ("exclude", "--exclude", _v_dblist),
+                       ("_nodata", "flag:--no-data", None)], True),
+    "verify-restore-test": (["verify"],
+                      [("zip", "pos", _v_zip), ("db", "--restore-test", _v_db),
+                       ("_withdata", "flag:--with-data", None)], True),
+    "restore":       (["restore"],
+                      [("zip", "pos", _v_zip), ("db", "pos", _v_db),
+                       ("into", "--into", _v_db), ("segments", "--segments", _v_segments)], True),
+    "retention":     (["retention"], [], True),
+    "restic":        (["restic"], [], True),
+    "notify-test":   (["notify-test"], [], True),
+    "deploy":        (["deploy"], [("target", "pos", _v_target),
+                                   ("path", "--path", _v_path)], True),
+    "pull":          (["pull"], [("target", "pos", _v_target),
+                                 ("path", "--path", _v_path)], True),
+    "migrate":       (["migrate"],
+                      [("to", "--to", _v_target), ("databases", "--databases", _v_dblist),
+                       ("prefix", "--prefix", _v_prefix), ("_fresh", "flag:--fresh", None)], True),
+    "cron-install":  (["cron", "--install"], [("hour", "--hour", lambda v: v.isdigit()),
+                                              ("minute", "--minute", lambda v: v.isdigit())], True),
+    "cron-remove":   (["cron", "--remove"], [], True),
+
+    # --- en el servidor ----------------------------------------------------
+    "remote-status": (["remote", "status"], [], False),
+    "remote-doctor": (["remote", "doctor"], [], False),
+    "remote-list":   (["remote", "list"], [], False),
+    "remote-logs":   (["remote", "logs", "--errors"], [], False),
+    "remote-config": (["remote", "config", "--show"], [], False),
+    "remote-cron":   (["remote", "cron", "--show"], [], False),
+    "remote-verify": (["remote", "verify"], [], False),
+    "remote-backup": (["remote", "backup"], [], True),
+    "remote-retention": (["remote", "retention"], [], True),
+    "remote-restic": (["remote", "restic"], [], True),
+    "remote-cron-install": (["remote", "cron", "--install"], [], True),
+    "remote-cron-remove":  (["remote", "cron", "--remove"], [], True),
+    "remote-notify": (["remote", "notify-test"], [], True),
 }
 
-# Acciones que aceptan un argumento extra, con su validador
-def _valid_db(v):   return bool(re.match(r"^[A-Za-z0-9._\-]{1,64}$", v))
-def _valid_zip(v):  return bool(re.match(r"^all_databases_[0-9_]+\.zip$", v))
+# Acciones que en la máquina destino necesitan root. Desde la web no hay
+# terminal donde teclear la contraseña de sudo, así que se avisa antes.
+NECESITA_ROOT = {"restic", "cron-install", "cron-remove",
+                 "remote-restic", "remote-cron-install", "remote-cron-remove"}
 
-PARAMS = {
-    "inspect":       ("zip", _valid_zip),
-    "verify":        ("zip", _valid_zip),
-    "verify-quick":  ("zip", _valid_zip),
-}
 
-# Acciones con una prueba de restauración: llevan la base de datos como
-# argumento y se tratan aparte por ser las más delicadas.
-RESTORE_TEST = "verify-restore-test"
+def build_argv(profile, action, opts):
+    """Construye el argv real. Devuelve (argv, error)."""
+    if not SAFE_NAME.match(profile or ""):
+        return None, "perfil no válido"
+    spec = A.get(action)
+    if spec is None:
+        return None, "acción no permitida"
+
+    base, campos, _escribe = spec
+    argv = [str(BACKUPCTL), "--no-color", "-y", "-p", profile] + list(base)
+    opts = opts if isinstance(opts, dict) else {}
+    posicionales = []
+
+    for clave, forma, validador in campos:
+        v = opts.get(clave)
+        if forma.startswith("flag:"):
+            if v:
+                argv.append(forma.split(":", 1)[1])
+            continue
+        if v is None or v == "":
+            # Un posicional vacío sigue haciendo falta para no desplazar los
+            # siguientes: backupctl acepta '' como "el más reciente".
+            if forma == "pos":
+                posicionales.append("")
+            continue
+        v = str(v).strip()
+        if validador and not validador(v):
+            return None, f"valor no válido para '{clave}'"
+        if forma == "pos":
+            posicionales.append(v)
+        else:
+            argv += [forma, v]
+
+    # Los posicionales van detrás de las opciones, y se recortan los vacíos
+    # finales para no pasar argumentos de más.
+    while posicionales and posicionales[-1] == "":
+        posicionales.pop()
+    argv += posicionales
+    return argv, None
 
 
 def profiles():
@@ -175,31 +266,6 @@ def quick_status(name):
         "destino": destino,
         "remoto": es_remoto,
     }
-
-
-def build_argv(profile, action, arg):
-    """Construye el argv real. Devuelve None si algo no está permitido."""
-    if not SAFE_NAME.match(profile or ""):
-        return None
-
-    if action == RESTORE_TEST:
-        if not arg or not _valid_db(arg):
-            return None
-        return [str(BACKUPCTL), "--no-color", "-y", "-p", profile,
-                "verify", "--restore-test", arg, "--with-data"]
-
-    spec = ACTIONS.get(action)
-    if spec is None:
-        return None
-    extra, _writes = spec
-    argv = [str(BACKUPCTL), "--no-color", "-y", "-p", profile] + list(extra)
-
-    if action in PARAMS and arg:
-        _kind, validator = PARAMS[action]
-        if not validator(arg):
-            return None
-        argv.append(arg)
-    return argv
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -287,11 +353,30 @@ class Handler(BaseHTTPRequestHandler):
                                       "bd": c[5] if len(c) > 5 else "?"})
             return self._json({"respaldos": filas})
 
+        if u.path == "/api/config-raw":
+            name = parse_qs(u.query).get("profile", [""])[0]
+            if not SAFE_NAME.match(name or ""):
+                return self._json({"error": "perfil no válido"}, 400)
+            r = subprocess.run(
+                [str(BACKUPCTL), "--no-color", "-p", name, "config", "--path"],
+                capture_output=True, text=True, timeout=20)
+            ruta = Path(r.stdout.strip())
+            # El archivo tiene que estar dentro del repositorio: corta cualquier
+            # intento de leer otra cosa a través del nombre de perfil.
+            try:
+                ruta.resolve().relative_to(BC_ROOT.resolve())
+            except ValueError:
+                return self._json({"error": "ruta fuera del repositorio"}, 400)
+            if not ruta.is_file():
+                return self._json({"error": "no se encontró el env.sh"}, 404)
+            return self._json({"ruta": str(ruta), "contenido": ruta.read_text()})
+
         return self._send(404, "no encontrado", "text/plain; charset=utf-8")
 
     # --- POST: ejecutar una acción, retransmitiendo la salida ---------------
     def do_POST(self):
-        if urlparse(self.path).path != "/api/run":
+        ruta = urlparse(self.path).path
+        if ruta not in ("/api/run", "/api/setup", "/api/config-save"):
             return self._send(404, "no encontrado", "text/plain; charset=utf-8")
         if not self._auth_ok():
             return self._json({"error": "no autorizado"}, 403)
@@ -302,11 +387,16 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return self._json({"error": "petición ilegible"}, 400)
 
-        argv = build_argv(payload.get("profile"),
-                          payload.get("action"),
-                          payload.get("arg"))
+        if ruta == "/api/config-save":
+            return self._guardar_config(payload)
+        if ruta == "/api/setup":
+            return self._alta(payload)
+
+        argv, err = build_argv(payload.get("profile"),
+                               payload.get("action"),
+                               payload.get("opts"))
         if argv is None:
-            return self._json({"error": "acción no permitida"}, 400)
+            return self._json({"error": err}, 400)
 
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -333,6 +423,81 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             # El navegador cerró la pestaña: se corta la orden en curso
             p.terminate()
+
+
+    # --- Guardar el env.sh de un perfil ------------------------------------
+    def _guardar_config(self, payload):
+        name = payload.get("profile") or ""
+        contenido = payload.get("contenido")
+        if not SAFE_NAME.match(name) or not isinstance(contenido, str):
+            return self._json({"error": "petición no válida"}, 400)
+        if len(contenido) > 64_000:
+            return self._json({"error": "archivo demasiado grande"}, 400)
+
+        ruta = BC_ROOT / name / "env.sh"
+        try:
+            ruta.resolve().relative_to(BC_ROOT.resolve())
+        except ValueError:
+            return self._json({"error": "ruta fuera del repositorio"}, 400)
+        if not ruta.is_file():
+            return self._json({"error": "no existe ese env.sh"}, 404)
+
+        # Se valida la sintaxis ANTES de tocar el archivo bueno: un env.sh roto
+        # deja el perfil inservible y todas las órdenes fallando.
+        tmp = ruta.with_suffix(".sh.nuevo")
+        tmp.write_text(contenido)
+        chk = subprocess.run(["bash", "-n", str(tmp)],
+                             capture_output=True, text=True)
+        if chk.returncode != 0:
+            tmp.unlink(missing_ok=True)
+            return self._json({"error": "error de sintaxis:\n" + chk.stderr.strip()}, 400)
+
+        shutil.copy2(ruta, ruta.with_suffix(".sh.anterior"))
+        tmp.replace(ruta)
+        return self._json({"ok": True, "ruta": str(ruta)})
+
+    # --- Alta de un perfil, retransmitiendo la salida -----------------------
+    def _alta(self, payload):
+        campos = {
+            "BC_SETUP_NAME":        payload.get("name", ""),
+            "BC_SETUP_HOST":        payload.get("host", ""),
+            "BC_SETUP_SSH_USER":    payload.get("ssh_user", "admin"),
+            "BC_SETUP_OWNER":       payload.get("owner", ""),
+            "BC_SETUP_PATH":        payload.get("path", ""),
+            "BC_SETUP_DB_USER":     payload.get("db_user", ""),
+            "BC_SETUP_DB_PASS":     payload.get("db_pass", ""),
+            "BC_SETUP_HEALTHCHECK": payload.get("healthcheck", ""),
+            "BC_SETUP_CREATE_DB":   "si" if payload.get("crear_db") else "no",
+            "BC_SETUP_ADMIN_USER":  payload.get("admin_user", ""),
+            "BC_SETUP_ADMIN_PASS":  payload.get("admin_pass", ""),
+            "BC_SETUP_DEPLOY":      "si" if payload.get("desplegar") else "no",
+        }
+        if not SAFE_NAME.match(campos["BC_SETUP_NAME"]):
+            return self._json({"error": "nombre de perfil no válido"}, 400)
+        if not campos["BC_SETUP_HOST"]:
+            return self._json({"error": "falta el servidor"}, 400)
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
+        # Las credenciales van por el entorno del proceso hijo, no por la línea
+        # de órdenes: así no aparecen en `ps` para el resto de la máquina.
+        env = dict(os.environ, BC_NO_COLOR="1", **{k: str(v) for k, v in campos.items()})
+        try:
+            p = subprocess.Popen([str(BACKUPCTL), "--no-color", "-y", "setup"],
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                 stdin=subprocess.DEVNULL, text=True,
+                                 bufsize=1, env=env)
+            for line in p.stdout:
+                self.wfile.write(line.encode("utf-8", "replace")); self.wfile.flush()
+            p.wait()
+            self.wfile.write(f"\n__FIN__{p.returncode}\n".encode())
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception as e:
+            self.wfile.write(f"[ERROR] {e}\n".encode())
 
 
 def main():

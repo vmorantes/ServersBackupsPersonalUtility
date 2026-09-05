@@ -245,7 +245,7 @@ case "$BC_CMD" in
   backup|restic|migrate)
     bc_start_logging "$LOG_DIR/${BC_CMD}_$(date +%Y%m%d_%H%M%S).log"
     bc_log "===== backupctl $BC_VERSION · orden '$BC_CMD' · perfil '$BC_PROFILE' ====="
-    bc_log "Log: $BC_LOG_FILE"
+    [[ -n "$BC_LOG_FILE" ]] && bc_log "Log: $BC_LOG_FILE"
     bc_lock_acquire "$BC_CMD" "$BACKUP_WORK_DIR"
     ;;
 esac

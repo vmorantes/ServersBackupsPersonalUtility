@@ -56,22 +56,49 @@ function marcarEstado(txt, clase) {
 }
 
 // --- Ejecutar una acción -----------------------------------------------------
-async function ejecutar(accion, arg) {
+// Recoge los valores de un formulario: todo elemento con data-opt dentro del
+// contenedor, más las casillas sueltas que declaren data-form apuntando a él.
+function recogerOpciones(selector) {
+  const opts = {};
+  if (!selector) return opts;
+  const cont = $(selector);
+  if (cont) {
+    cont.querySelectorAll('[data-opt]').forEach(el => {
+      opts[el.dataset.opt] = el.type === 'checkbox' ? el.checked : el.value.trim();
+    });
+  }
+  $$(`[data-opt][data-form="${selector}"]`).forEach(el => {
+    opts[el.dataset.opt] = el.type === 'checkbox' ? el.checked : el.value.trim();
+  });
+  return opts;
+}
+
+function resumenOpciones(opts) {
+  return Object.entries(opts)
+    .filter(([k, v]) => v !== '' && v !== false && v != null)
+    .map(([k, v]) => (v === true ? '--' + k.replace(/^_/, '') : `${k}=${v}`))
+    .join(' ');
+}
+
+async function ejecutar(accion, opts, endpoint) {
   if (ejecutando) return;
-  if (!perfilActual) { limpiarConsola('Elige un servidor primero.'); return; }
+  if (!perfilActual && !endpoint) { limpiarConsola('Elige un servidor primero.'); return; }
+  opts = opts || {};
 
   ejecutando = true;
   $$('.btn').forEach(b => b.disabled = true);
   marcarEstado('ejecutando…', 'etq-warn');
   limpiarConsola('');
-  anadirLinea(`$ backupctl -p ${perfilActual} ${accion}${arg ? ' ' + arg : ''}`);
+  anadirLinea(`$ backupctl -p ${perfilActual || '?'} ${accion} ${resumenOpciones(opts)}`.trimEnd());
   anadirLinea('');
 
   try {
-    const r = await api('/api/run', {
+    const r = await api(endpoint || '/api/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ profile: perfilActual, action: accion, arg: arg || null }),
+      body: JSON.stringify(endpoint
+        ? opts
+        : { profile: perfilActual, action: accion, opts }),
     });
 
     if (!r.ok) {
@@ -200,12 +227,12 @@ async function cargarPanel() {
         b.textContent = p.destino ? 'Consultar el servidor' : 'Ver la configuración';
         if (!p.destino) {
           b.addEventListener('click', (ev) => {
-            ev.stopPropagation(); seleccionar(p.name); ejecutar('config', null);
+            ev.stopPropagation(); seleccionar(p.name); ejecutar('config', {});
           }, { once: false });
         }
         if (p.destino) {
           b.addEventListener('click', (ev) => {
-            ev.stopPropagation(); seleccionar(p.name); ejecutar('remote-status', null);
+            ev.stopPropagation(); seleccionar(p.name); ejecutar('remote-status', {});
           });
         }
         ls.appendChild(b);
@@ -272,11 +299,91 @@ async function cargarRespaldos(nombre) {
     cont.innerHTML = `<table>
       <thead><tr><th>Archivo</th><th>Tamaño</th><th>Fecha</th><th>Edad</th><th>BD</th><th></th></tr></thead>
       <tbody>${filas}</tbody></table>`;
+    rellenarSelectores(d.respaldos);
     cont.querySelectorAll('[data-inspect]').forEach(b =>
-      b.addEventListener('click', () => ejecutar('inspect', b.dataset.inspect)));
+      b.addEventListener('click', () => ejecutar('inspect', { zip: b.dataset.inspect })));
   } catch (e) {
     cont.innerHTML = '<p class="ayuda n-error">' + esc(e.message) + '</p>';
   }
+}
+
+// Los <select> de respaldo se rellenan con lo que hay realmente
+function rellenarSelectores(respaldos) {
+  $$('.sel-respaldo').forEach(sel => {
+    const actual = sel.value;
+    sel.innerHTML = '<option value="">el más reciente</option>';
+    for (const b of respaldos) {
+      const o = document.createElement('option');
+      o.value = b.archivo;
+      o.textContent = `${b.archivo}  (${b.tamano}, ${b.edad})`;
+      sel.appendChild(o);
+    }
+    sel.value = actual;
+  });
+}
+
+// --- Editor de configuración -------------------------------------------------
+async function cargarConfig() {
+  if (!perfilActual) { limpiarConsola('Elige un servidor primero.'); return; }
+  try {
+    const r = await api('/api/config-raw?profile=' + encodeURIComponent(perfilActual));
+    const d = await r.json();
+    if (d.error) { limpiarConsola('[ERROR] ' + d.error); return; }
+    $('#editor-config').value = d.contenido;
+    $('#ruta-config').textContent = d.ruta;
+  } catch (e) { limpiarConsola('[ERROR] ' + e.message); }
+}
+
+async function guardarConfig() {
+  if (!perfilActual) return;
+  const contenido = $('#editor-config').value;
+  if (!contenido.trim()) { limpiarConsola('El editor está vacío. Pulsa «Cargar» primero.'); return; }
+  if (!(await confirmar('Se sobrescribirá el env.sh de «' + perfilActual +
+                        '». La versión actual quedará como env.sh.anterior.'))) return;
+  try {
+    const r = await api('/api/config-save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: perfilActual, contenido }),
+    });
+    const d = await r.json();
+    if (d.error) { limpiarConsola('[ERROR] ' + d.error); marcarEstado('error', 'etq-error'); return; }
+    limpiarConsola('Guardado: ' + d.ruta);
+    marcarEstado('guardado', 'etq-ok');
+    cargarPanel();
+  } catch (e) { limpiarConsola('[ERROR] ' + e.message); }
+}
+
+// --- Alta de un servidor -----------------------------------------------------
+function abrirAlta()  { $('#alta').hidden = false; $('#f-name').focus(); }
+function cerrarAlta() { $('#alta').hidden = true; }
+
+async function crearPerfil() {
+  const crear = document.querySelector('input[name=db]:checked').value === 'crear';
+  const datos = {
+    name:        $('#f-name').value.trim(),
+    host:        $('#f-host').value.trim(),
+    ssh_user:    $('#f-ssh').value.trim() || 'admin',
+    owner:       $('#f-owner').value.trim() || $('#f-ssh').value.trim() || 'admin',
+    path:        $('#f-path').value.trim(),
+    healthcheck: $('#f-hc').value.trim(),
+    crear_db:    crear,
+    db_user:     crear ? $('#f-newdbuser').value.trim() : $('#f-dbuser').value.trim(),
+    db_pass:     crear ? '' : $('#f-dbpass').value,
+    admin_user:  crear ? $('#f-adminuser').value.trim() : '',
+    admin_pass:  crear ? $('#f-adminpass').value : '',
+    desplegar:   $('#f-deploy').checked,
+  };
+  if (!datos.name || !datos.host) {
+    alert('Hacen falta al menos el nombre del perfil y el servidor.');
+    return;
+  }
+  if (!datos.path) datos.path = '/home/' + datos.owner + '/scripts';
+  cerrarAlta();
+  // Las contraseñas se limpian del formulario en cuanto se envían
+  $('#f-dbpass').value = ''; $('#f-adminpass').value = '';
+  await ejecutar('setup', datos, '/api/setup');
+  perfilActual = datos.name;
+  cargarPanel();
 }
 
 function esc(s) {
@@ -288,9 +395,10 @@ function esc(s) {
 document.addEventListener('click', async (ev) => {
   const b = ev.target.closest('[data-act]');
   if (!b) return;
+  const opts = recogerOpciones(b.dataset.form);
   const aviso = b.dataset.confirmar;
   if (aviso && !(await confirmar(aviso))) return;
-  ejecutar(b.dataset.act, null);
+  ejecutar(b.dataset.act, opts);
 });
 
 $('#pestanas').addEventListener('click', (ev) => {
@@ -300,16 +408,18 @@ $('#pestanas').addEventListener('click', (ev) => {
   $$('.tab').forEach(t => t.hidden = t.dataset.tab !== p.dataset.tab);
 });
 
-$('#btn-restore-test').addEventListener('click', async () => {
-  const bd = $('#bd-prueba').value.trim();
-  if (!bd) { limpiarConsola('Escribe el nombre de una base de datos.'); return; }
-  const ok = await confirmar(
-    `Se creará una base de datos temporal, se restaurará "${bd}" dentro y se ` +
-    `eliminará al terminar. Tu producción no se toca.`);
-  if (ok) ejecutar('verify-restore-test', bd);
-});
-
 $('#btn-refrescar').addEventListener('click', cargarPanel);
+$('#btn-nuevo').addEventListener('click', abrirAlta);
+$('#alta-no').addEventListener('click', cerrarAlta);
+$('#alta-si').addEventListener('click', crearPerfil);
+$('#btn-cargar-config').addEventListener('click', cargarConfig);
+$('#btn-guardar-config').addEventListener('click', guardarConfig);
+$$('input[name=db]').forEach(r => r.addEventListener('change', () => {
+  const crear = document.querySelector('input[name=db]:checked').value === 'crear';
+  $('#db-existente').hidden = crear;
+  $('#db-crear').hidden = !crear;
+}));
+$('#alta').addEventListener('click', (ev) => { if (ev.target === $('#alta')) cerrarAlta(); });
 $('#btn-limpiar').addEventListener('click', () => { limpiarConsola(''); marcarEstado('', ''); });
 $('#btn-cerrar').addEventListener('click', () => {
   $('#panel-detalle').hidden = true;
@@ -321,6 +431,7 @@ $('#btn-cerrar').addEventListener('click', () => {
 (async function inicio() {
   // Por si alguna regla de estilo volviera a anular el atributo `hidden`
   $('#modal').hidden = true;
+  $('#alta').hidden = true;
   if (!TOKEN) {
     limpiarConsola('Falta la credencial de sesión.\n\nAbre la dirección completa que imprimió el servidor, la que lleva ?t=…');
     return;

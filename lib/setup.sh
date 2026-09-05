@@ -21,8 +21,119 @@
 [[ -n "${BC_SETUP_LOADED:-}" ]] && return 0
 BC_SETUP_LOADED=1
 
+# -----------------------------------------------------------------------------
+# Modo desatendido
+# -----------------------------------------------------------------------------
+# Los valores llegan por variables de entorno en lugar de por preguntas. Lo usa
+# la interfaz web: así hay UNA sola implementación del alta y no dos que puedan
+# divergir. También sirve para guionizarlo.
+#
+#   BC_SETUP_NAME NAME_HOST SSH_USER OWNER PATH DB_USER DB_PASS
+#   BC_SETUP_ADMIN_USER ADMIN_PASS   (solo si CREATE_DB=si)
+#   BC_SETUP_CREATE_DB=si|no   BC_SETUP_HEALTHCHECK   BC_SETUP_DEPLOY=si|no
+# -----------------------------------------------------------------------------
+bc_setup_auto() {
+  local name="${BC_SETUP_NAME:-}"
+  local host="${BC_SETUP_HOST:-}"
+  local ssh_user="${BC_SETUP_SSH_USER:-admin}"
+  local owner="${BC_SETUP_OWNER:-$ssh_user}"
+  local path="${BC_SETUP_PATH:-/home/$owner/scripts}"
+  local hc="${BC_SETUP_HEALTHCHECK:-}"
+  local db_user="${BC_SETUP_DB_USER:-}"
+  local db_pass="${BC_SETUP_DB_PASS:-}"
+
+  [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || bc_die "nombre de perfil no válido: '$name'"
+  [[ -n "$host" ]] || bc_die "hace falta un servidor (BC_SETUP_HOST)."
+
+  local dir="$BC_ROOT/$name"
+  local target="$ssh_user@$host"
+
+  bc_section "Alta de '$name' en $target"
+
+  bc_log "Probando la conexión..."
+  bc_ssh_init "$target" || bc_die "no se pudo conectar a $target."
+  trap 'bc_ssh_close' RETURN
+  bc_ok "conectado a $(bc_ssh 'hostname -f 2>/dev/null || hostname')"
+
+  if [[ "${BC_SETUP_CREATE_DB:-no}" == "si" ]]; then
+    local admin_user="${BC_SETUP_ADMIN_USER:-root}"
+    local admin_pass="${BC_SETUP_ADMIN_PASS:-}"
+    [[ -n "$db_user" ]] || db_user="backupctl"
+    db_pass="$(bc_gen_password 28)"
+    bc_log "Se creará el usuario '$db_user' con una contraseña de 28 caracteres."
+    BC_ASSUME_YES=1 bc_setup_create_db_user "$admin_user" "$admin_pass" "$db_user" "$db_pass" \
+      || bc_die "no se pudo crear el usuario de MySQL."
+    admin_pass=""; admin_user=""
+  else
+    [[ -n "$db_user" ]] || bc_die "hace falta MYSQL_USER (BC_SETUP_DB_USER)."
+    bc_setup_check_db "$db_user" "$db_pass" \
+      || bc_warn "esas credenciales no funcionaron; se guardan igual para que las corrijas."
+  fi
+
+  mkdir -p "$dir"
+  [[ -f "$dir/env.sh" ]] && cp "$dir/env.sh" "$dir/env.sh.anterior"
+  bc_setup_escribir_env "$dir/env.sh" "$name" "$owner" "$path" \
+                        "$db_user" "$db_pass" "$hc" "$host" "$ssh_user"
+  bash -n "$dir/env.sh" || bc_die "el env.sh generado tiene errores de sintaxis."
+  bc_ok "Escrito $dir/env.sh"
+
+  if [[ "${BC_SETUP_DEPLOY:-no}" == "si" ]]; then
+    bc_ssh_close
+    bc_config_load "$dir/env.sh"
+    BC_ASSUME_YES=1 bc_deploy_run "$target"
+  fi
+
+  bc_ok "Perfil '$name' listo."
+}
+
+# Escritura del env.sh, común a los dos modos
+bc_setup_escribir_env() {
+  local archivo="$1" name="$2" owner="$3" path="$4"
+  local db_user="$5" db_pass="$6" hc="$7" host="$8" ssh_user="$9"
+  cat > "$archivo" <<CONF
+#!/usr/bin/env bash
+# =============================================================================
+# env.sh — $name
+# =============================================================================
+# Generado por: backupctl setup, el $(date '+%Y-%m-%d %H:%M')
+# Referencia completa de las variables: config/env.sh.example
+# =============================================================================
+
+export USER_NAME="$owner"
+export SCRIPTS_DIR="$path"
+
+export MYSQL_USER="$db_user"
+export MYSQL_PASS="$db_pass"
+export MYSQL_HOST=""
+export MYSQL_PORT=""
+export MYSQL_SOCKET=""
+export MYSQL_CHARSET="utf8mb4"
+
+export EXCLUDE_DBS="('information_schema','performance_schema','mysql','sys','phpmyadmin')"
+
+export BACKUP_RETENTION_DAYS="14"
+export LOG_RETENTION_DAYS="30"
+export RESTIC_RETENTION_DAYS="90"
+export BACKUP_KEEP_MIN="3"
+export MIN_FREE_MB="2048"
+
+export NOTIFY_EMAIL=""
+export NOTIFY_COMMAND=""
+export HEALTHCHECK_URL="$hc"
+
+export HESTIA_DIR="/usr/local/hestia"
+
+export DEPLOY_HOST="$host"
+export DEPLOY_USER="$ssh_user"
+export DEPLOY_PATH="$path"
+CONF
+}
+
 bc_setup_run() {
   local name="${1:-}"
+
+  # La web y los guiones entran por aquí
+  [[ -n "${BC_SETUP_NAME:-}" ]] && { bc_setup_auto; return $?; }
 
   bc_can_prompt || bc_die "el asistente necesita un terminal interactivo."
 
@@ -129,43 +240,9 @@ bc_setup_run() {
   mkdir -p "$dir"
   [[ -f "$dir/env.sh" ]] && cp "$dir/env.sh" "$dir/env.sh.anterior"
 
-  cat > "$dir/env.sh" <<CONF
-#!/usr/bin/env bash
-# =============================================================================
-# env.sh — $name
-# =============================================================================
-# Generado por: backupctl setup, el $(date '+%Y-%m-%d %H:%M')
-# Referencia completa de las variables: config/env.sh.example
-# =============================================================================
+  bc_setup_escribir_env "$dir/env.sh" "$name" "$owner" "$path" \
+                        "$db_user" "$db_pass" "$hc" "$host" "$ssh_user"
 
-export USER_NAME="$owner"
-export SCRIPTS_DIR="$path"
-
-export MYSQL_USER="$db_user"
-export MYSQL_PASS="$db_pass"
-export MYSQL_HOST=""
-export MYSQL_PORT=""
-export MYSQL_SOCKET=""
-export MYSQL_CHARSET="utf8mb4"
-
-export EXCLUDE_DBS="('information_schema','performance_schema','mysql','sys','phpmyadmin')"
-
-export BACKUP_RETENTION_DAYS="14"
-export LOG_RETENTION_DAYS="30"
-export RESTIC_RETENTION_DAYS="90"
-export BACKUP_KEEP_MIN="3"
-export MIN_FREE_MB="2048"
-
-export NOTIFY_EMAIL=""
-export NOTIFY_COMMAND=""
-export HEALTHCHECK_URL="$hc"
-
-export HESTIA_DIR="/usr/local/hestia"
-
-export DEPLOY_HOST="$host"
-export DEPLOY_USER="$ssh_user"
-export DEPLOY_PATH="$path"
-CONF
 
   bash -n "$dir/env.sh" || bc_die "el env.sh generado tiene errores de sintaxis."
   bc_ok "Escrito $dir/env.sh"

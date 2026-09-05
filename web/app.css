@@ -220,3 +220,28 @@ td.mono { font-family: var(--mono); }
   .disposicion { padding: 12px; }
   input[type=text] { min-width: 0; width: 100%; }
 }
+
+/* --- Formulario de alta y editor ----------------------------------------- */
+.modal-ancho { max-width: 640px; max-height: 88vh; overflow-y: auto; }
+.modal-caja h4 { margin: 20px 0 8px; font-size: 13px; color: var(--suave);
+                 text-transform: uppercase; letter-spacing: .04em; }
+.campos { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.campos label { display: flex; flex-direction: column; gap: 4px;
+                font-size: 12.5px; color: var(--suave); }
+.campos input { width: 100%; }
+.pista { color: var(--acento); font-size: 11px; }
+.opcion { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.radio { display: flex; align-items: center; gap: 8px; font-size: 13.5px;
+         color: var(--texto); cursor: pointer; }
+input[type=password] {
+  font: inherit; font-family: var(--mono); font-size: 13.5px;
+  padding: 7px 11px; border: 1px solid var(--borde); border-radius: 7px;
+  background: var(--fondo); color: var(--texto); width: 100%;
+}
+.editor {
+  width: 100%; min-height: 340px; margin-top: 12px; padding: 12px 14px;
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
+  border: 1px solid var(--borde); border-radius: 8px; resize: vertical;
+  background: var(--consola-fondo); color: var(--consola-texto);
+}
+.editor:focus { outline: 2px solid var(--acento); outline-offset: -1px; }
