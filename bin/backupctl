@@ -32,7 +32,7 @@ export BC_ROOT BC_VERSION
 
 # --- Carga de la biblioteca --------------------------------------------------
 for _m in core config mysql notify retention backup verify restore archive \
-          restic doctor cron logs deploy pull migrate tui; do
+          restic doctor cron logs ssh deploy pull remote migrate tui; do
   # shellcheck source=/dev/null
   source "$BC_ROOT/lib/$_m.sh" || { echo "ERROR: no se pudo cargar lib/$_m.sh" >&2; exit 2; }
 done
@@ -84,6 +84,7 @@ ${BC_BLD}ORDENES PRINCIPALES${BC_RST}
 ${BC_BLD}MIGRACIÓN${BC_RST}
   ${BC_YEL}~${BC_RST} ${BC_CYA}deploy${BC_RST} [usuario@host]  SUBIR backupctl y la config a un servidor
   ${BC_YEL}~${BC_RST} ${BC_CYA}pull${BC_RST}   [usuario@host]  DESCARGAR el estado real de un servidor al repo
+  ${BC_CYA}remote <orden>${BC_RST}         ejecutar cualquier orden EN el servidor, desde aquí
   ${BC_RED}!${BC_RST} ${BC_CYA}migrate${BC_RST} --to <destino> migrar bases de datos a otro servidor
 
 ${BC_BLD}OPERACIÓN${BC_RST}
@@ -120,6 +121,7 @@ ${BC_BLD}OPCIONES POR ORDEN${BC_RST}
             --prefix <pre>   --path <ruta_remota>   --dry-run
   deploy    --path <ruta_remota>   --dry-run
   pull      --path <ruta_remota>   --dry-run
+  remote    --to <usuario@host>    --path <ruta_remota>
   cron      --hour <h>   --minute <m>
   config    --show-secrets
 
@@ -131,6 +133,8 @@ ${BC_BLD}EJEMPLOS${BC_RST}
   backupctl restore '' tienda --into tienda_prueba
   backupctl -p TejidoTesting status
   backupctl migrate --to admin@nuevo.example --fresh
+  backupctl -p MiVPS remote status             ejecutar en el servidor sin abrir SSH
+  backupctl -p MiVPS remote backup
 
 ${BC_BLD}CREDENCIALES${BC_RST}
   backupctl NUNCA pide la contraseña de MySQL: la lee de env.sh.
@@ -359,6 +363,17 @@ case "$BC_CMD" in
       esac
     done
     bc_pull_run "$_target"
+    ;;
+
+  remote)
+    while (( $# > 0 )); do
+      case "$1" in
+        --to)   BC_OPT_TO="${2:-}"; shift 2 ;;
+        --path) BC_OPT_REMOTE_PATH="${2:-}"; shift 2 ;;
+        *) break ;;
+      esac
+    done
+    bc_remote_run "$@"
     ;;
 
   migrate)

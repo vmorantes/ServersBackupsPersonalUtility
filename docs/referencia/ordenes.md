@@ -18,6 +18,7 @@ backupctl [opciones globales] <orden> [opciones]
 | [`inspect`](#inspect) | Metadatos e inventario de un respaldo |
 | [`deploy`](#deploy) | **Subir** backupctl y la config a un servidor |
 | [`pull`](#pull) | **Descargar** al repo el estado real de un servidor |
+| [`remote`](#remote) | Ejecutar cualquier orden **en** el servidor, desde tu equipo |
 | [`migrate`](#migrate) | Migrar bases de datos a otro servidor |
 | [`restic`](#restic) | Volcar las claves Restic de HestiaCP |
 | [`restic-list`](#restic-list) | Ver los repositorios Restic detectados |
@@ -179,6 +180,26 @@ diagnóstico. Crea `NOTAS.md` si no existe; nunca lo sobrescribe.
 
 Sin argumento usa `DEPLOY_USER@DEPLOY_HOST`. Ver
 [Subir y descargar](../migracion/despliegues.md).
+
+## remote
+
+```bash
+backupctl remote [--to usuario@host] [--path <ruta>] <orden> [opciones]
+```
+
+Ejecuta cualquier orden de `backupctl` en el servidor, con la salida en vivo.
+Sin `--to` usa `DEPLOY_USER@DEPLOY_HOST`.
+
+```bash
+backupctl -p MiVPS remote status
+backupctl -p MiVPS remote backup
+backupctl -p MiVPS remote verify --restore-test tienda --with-data
+backupctl -p MiVPS remote cron --install
+```
+
+Las órdenes que allí necesitan root (`restic`, `cron --install/--remove`) se
+detectan y se lanzan con `sudo` automáticamente. La contraseña, si hace falta,
+se pide una sola vez gracias a la conexión reutilizada.
 
 ## migrate
 

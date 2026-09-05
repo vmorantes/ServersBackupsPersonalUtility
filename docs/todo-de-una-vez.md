@@ -44,25 +44,32 @@ backupctl -p MiVPS config --check
 Tres cosas, y solo tres.
 
 ```bash
-# 1. Acceso SSH por clave
-ssh-copy-id admin@mivps.example.com
-ssh admin@mivps.example.com 'hostname'    # debe entrar y darte una shell
+# 1. Un usuario con acceso SSH. Vale contraseña; no hace falta clave.
+ssh admin@mivps.example.com 'hostname'
 ```
 
+!!! tip "Con clave es más cómodo, pero no obligatorio"
+    `backupctl` abre una conexión maestra y pide la contraseña **una sola vez**
+    para todo el despliegue. Si prefieres no escribirla nunca:
+    `ssh-copy-id admin@mivps.example.com`
+
 !!! warning "Si entra y cierra al instante"
-    Los usuarios de HestiaCP se crean a menudo con `nologin`. Actívalo en el
-    panel (**Usuarios → SSH Access → bash**) o:
+    Ese usuario tiene `nologin`, habitual en HestiaCP. **No hace falta darle
+    shell**: conéctate con uno que sí la tenga (`admin` o `root`) y pon en
+    `env.sh`:
 
     ```bash
-    sudo v-change-user-shell admin bash
+    export DEPLOY_USER="admin"      # quién se conecta
+    export USER_NAME="cliente07"    # de quién es la instalación
     ```
 
-```bash
-# 2. Paquetes que faltan en una instalación mínima
-ssh admin@mivps.example.com 'sudo apt update && sudo apt install -y zip unzip rsync'
+    `deploy` ajusta el propietario al final.
 
-# 3. Usuario de MySQL con permisos (omítelo si ya lo tenías)
-ssh admin@mivps.example.com
+```bash
+# 2. Paquetes: NO hace falta hacerlo a mano.
+#    deploy detecta lo que falta y se ofrece a instalarlo.
+
+# 3. Usuario de MySQL con permisos (esto sí es manual, una sola vez)
 ```
 
 ```sql
@@ -107,30 +114,26 @@ servidor.
 
 ---
 
-## Parte 4 · Comprobar en el VPS (5 min)
+## Parte 4 · Comprobar (5 min)
 
-```bash
-ssh admin@mivps.example.com
-cd /home/admin/scripts
-```
+**Sin salir de tu equipo.** `remote` ejecuta la orden en el servidor:
 
 ```bash
 # 🛡️ Diagnóstico. No escribe nada. Debe salir SIN fallos (✗)
-./bin/backupctl doctor
+backupctl -p MiVPS remote doctor
 
 # El primer respaldo
-./bin/backupctl backup
-echo "código: $?"           # 0 = correcto
+backupctl -p MiVPS remote backup
 
 # 🛡️ Verificarlo
-./bin/backupctl verify
+backupctl -p MiVPS remote verify
 ```
 
 Y la prueba que de verdad importa. Elige una base de datos cualquiera:
 
 ```bash
-./bin/backupctl list --databases | head
-./bin/backupctl verify --restore-test <una_base_de_datos> --with-data
+backupctl -p MiVPS remote list --databases | head
+backupctl -p MiVPS remote verify --restore-test <una_bd> --with-data
 ```
 
 !!! danger "No sigas si este paso falla"
@@ -145,16 +148,12 @@ Primero los avisos, porque sin ellos un fallo pasa inadvertido.
 
 Crea un check gratuito en [healthchecks.io](https://healthchecks.io) y:
 
-```bash
-./bin/backupctl config --edit
-```
+Edítalo en tu equipo y súbelo:
 
 ```bash
-export HEALTHCHECK_URL="https://hc-ping.com/tu-uuid"
-```
-
-```bash
-./bin/backupctl notify-test      # comprueba que llega
+backupctl -p MiVPS config --edit     # export HEALTHCHECK_URL="https://hc-ping.com/tu-uuid"
+backupctl -p MiVPS deploy            # subir el cambio
+backupctl -p MiVPS remote notify-test
 ```
 
 !!! tip "Por qué un healthcheck y no un correo"
@@ -165,10 +164,10 @@ Ahora la programación:
 
 ```bash
 # 🛡️ Ver qué propone, sin instalar
-./bin/backupctl cron --show
+backupctl -p MiVPS remote cron --show
 
-# Instalar
-sudo ./bin/backupctl cron --install
+# Instalar (detecta que necesita sudo y lo usa)
+backupctl -p MiVPS remote cron --install
 ```
 
 !!! info "En HestiaCP hace falta `sudo`, y es importante"

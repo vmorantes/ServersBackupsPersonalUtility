@@ -12,8 +12,85 @@ graph LR
 |---|---|---|
 | `deploy` | repo → servidor | `bin/`, `lib/` y el `env.sh` del perfil |
 | `pull` | servidor → repo | El `env.sh` real y una foto del estado (`ESTADO.md`) |
+| `remote` | — | Ejecuta cualquier orden **en** el servidor, desde tu equipo |
 
-Ninguna de las dos toca los respaldos ni los logs del servidor.
+Ninguna toca los respaldos ni los logs del servidor.
+
+## Todo desde tu equipo
+
+No hace falta abrir una sesión SSH ni recordar rutas:
+
+```bash
+backupctl -p MiVPS remote status
+backupctl -p MiVPS remote backup
+backupctl -p MiVPS remote verify --restore-test tienda --with-data
+backupctl -p MiVPS remote cron --install       # detecta que necesita sudo
+backupctl -p MiVPS remote logs --errors
+```
+
+`remote` antepone lo que sea y lo ejecuta allí, con la salida en vivo.
+
+### Contraseña, una sola vez
+
+Un despliegue hace unas ocho conexiones. Con autenticación por contraseña eso
+serían ocho peticiones, así que `backupctl` abre **una conexión maestra** y todo
+lo demás —incluidos los `rsync`— viaja por ese mismo túnel.
+
+```
+[INFO ] Conectando (si hace falta contraseña, se pedirá una sola vez)...
+[  OK ] conectado a mivps.example.com como 'admin'
+```
+
+Funciona igual con clave (no pide nada) o con contraseña (la pide una vez). No
+hace falta configurar `ssh-copy-id` por adelantado, aunque sigue siendo lo más
+cómodo.
+
+!!! info "Sin terminal se exige clave"
+    Bajo cron o en un script no hay a quién pedirle una contraseña, así que se
+    usa `BatchMode` y se falla con un mensaje claro en lugar de quedarse
+    colgado.
+
+### El usuario que conecta no tiene que ser el propietario
+
+En HestiaCP muchos usuarios se crean con `nologin` y no pueden entrar por SSH.
+No hay que darles shell: se conecta con uno que sí la tenga y se instala en el
+home del otro.
+
+```bash
+export DEPLOY_USER="admin"     # quién se conecta (necesita shell)
+export USER_NAME="cliente07"   # de quién es la instalación (no necesita shell)
+```
+
+`deploy` crea los directorios, y si hacen falta permisos de root los pide con
+`sudo`, ajustando el propietario al final:
+
+```
+[INFO ] La instalación es de 'cliente07' pero has conectado como 'admin'.
+[  OK ] propietario ajustado a cliente07.
+```
+
+### Crea lo que haga falta
+
+Si al servidor le faltan paquetes, `deploy` se ofrece a instalarlos:
+
+```
+[AVISO] faltan órdenes en el servidor: rsync zip
+¿Instalarlas ahora en el servidor (apt install rsync zip)? [S/n]
+[  OK ] paquetes instalados.
+```
+
+Y los directorios (`logs/`, `output/`) los crea siempre, con `sudo` si el home
+no es escribible por quien conecta.
+
+!!! warning "Lo único que no crea: el usuario de MySQL"
+    Crear un usuario de base de datos exige credenciales de administrador de
+    MySQL que `backupctl` no tiene ni debería tener. Ese paso sigue siendo
+    manual, y es de una sola vez:
+
+    ```sql
+    GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES, PROCESS, CREATE, DROP
+      ON *.* TO 'admin_general'@'localhost';
+    ```
 
 ---
 

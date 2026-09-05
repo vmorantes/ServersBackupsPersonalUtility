@@ -34,17 +34,18 @@ bc_pull_run() {
   bc_section "Trayendo el estado de $target al perfil '$BC_PROFILE'"
 
   # --- Conectividad ----------------------------------------------------------
+  # Una sola conexión maestra: la recogida hace una docena de consultas y sin
+  # esto, con autenticación por contraseña, la pediría una vez por consulta.
+  bc_log "Conectando (si hace falta contraseña, se pedirá una sola vez)..."
+  bc_ssh_init "$target" || bc_die "no se pudo conectar a $target."
+  trap 'bc_ssh_close; rm -f "${remote_env:-}"' RETURN
+
   local host_info
-  if ! host_info="$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$target" \
-        'hostname -f 2>/dev/null || hostname' 2>&1)"; then
-    bc_err "no se pudo conectar por SSH a $target:"
-    sed 's/^/        /' <<<"$host_info" >&2
-    bc_die "configura el acceso por clave (ssh-copy-id $target) y reinténtalo."
-  fi
+  host_info="$(bc_ssh 'hostname -f 2>/dev/null || hostname')"
   bc_ok "conectado a $host_info"
 
   local has_ctl="no"
-  ssh "$target" "test -x '$path/bin/backupctl'" 2>/dev/null && has_ctl="si"
+  bc_ssh "test -x '$path/bin/backupctl'" 2>/dev/null && has_ctl="si"
   if [[ "$has_ctl" == "no" ]]; then
     bc_warn "no hay backupctl en $target:$path. Se recogerá lo que se pueda."
     bc_warn "Para desplegarlo: backupctl -p $BC_PROFILE deploy $target"
@@ -53,10 +54,8 @@ bc_pull_run() {
   # --- 1. env.sh remoto ------------------------------------------------------
   bc_step "Comparando la configuración"
   local remote_env; remote_env="$(mktemp)"
-  # shellcheck disable=SC2064
-  trap "rm -f '$remote_env'" RETURN
 
-  if ssh "$target" "cat '$path/env.sh'" > "$remote_env" 2>/dev/null && [[ -s "$remote_env" ]]; then
+  if bc_ssh "cat '$path/env.sh'" > "$remote_env" 2>/dev/null && [[ -s "$remote_env" ]]; then
     if diff -q "$BC_ENV_FILE" "$remote_env" >/dev/null 2>&1; then
       bc_ok "el env.sh del servidor es idéntico al del repositorio."
     else
@@ -88,20 +87,20 @@ bc_pull_run() {
   local crontab_block remote_tree disk
 
   if [[ "$has_ctl" == "si" ]]; then
-    ctl_version="$(ssh "$target" "'$path/bin/backupctl' --version" 2>/dev/null || echo '?')"
-    ctl_status="$(ssh "$target"  "'$path/bin/backupctl' --no-color status" 2>&1 || true)"
-    ctl_doctor="$(ssh "$target"  "'$path/bin/backupctl' --no-color doctor" 2>&1 || true)"
-    ctl_list="$(ssh "$target"    "'$path/bin/backupctl' --no-color list"   2>&1 || true)"
-    db_count="$(ssh "$target"    "'$path/bin/backupctl' --no-color list --databases 2>/dev/null | grep -c ." 2>/dev/null || echo '?')"
+    ctl_version="$(bc_ssh "'$path/bin/backupctl' --version" 2>/dev/null || echo '?')"
+    ctl_status="$(bc_ssh "'$path/bin/backupctl' --no-color status" 2>&1 || true)"
+    ctl_doctor="$(bc_ssh "'$path/bin/backupctl' --no-color doctor" 2>&1 || true)"
+    ctl_list="$(bc_ssh "'$path/bin/backupctl' --no-color list"   2>&1 || true)"
+    db_count="$(bc_ssh "'$path/bin/backupctl' --no-color list --databases 2>/dev/null | grep -c ." 2>/dev/null || echo '?')"
   fi
 
-  crontab_block="$(ssh "$target" "crontab -l 2>/dev/null | grep -v '^#\$'" 2>/dev/null || echo '(sin crontab o sin acceso)')"
+  crontab_block="$(bc_ssh "crontab -l 2>/dev/null | grep -v '^#\$'" 2>/dev/null || echo '(sin crontab o sin acceso)')"
   # En HestiaCP la fuente de verdad del cron es cron.conf, no el crontab del
   # sistema: se recoge también para que ESTADO.md refleje lo que el panel ve.
   local hestia_cron
-  hestia_cron="$(ssh "$target" "sudo -n cat /usr/local/hestia/data/users/$USER_NAME/cron.conf 2>/dev/null || cat /usr/local/hestia/data/users/$USER_NAME/cron.conf 2>/dev/null" 2>/dev/null || true)"
-  remote_tree="$(ssh "$target" "ls -la '$path' 2>/dev/null" 2>/dev/null || echo '(no accesible)')"
-  disk="$(ssh "$target" "df -h '$path' 2>/dev/null | tail -1" 2>/dev/null || echo '?')"
+  hestia_cron="$(bc_ssh "sudo -n cat /usr/local/hestia/data/users/$USER_NAME/cron.conf 2>/dev/null || cat /usr/local/hestia/data/users/$USER_NAME/cron.conf 2>/dev/null" 2>/dev/null || true)"
+  remote_tree="$(bc_ssh "ls -la '$path' 2>/dev/null" 2>/dev/null || echo '(no accesible)')"
+  disk="$(bc_ssh "df -h '$path' 2>/dev/null | tail -1" 2>/dev/null || echo '?')"
 
   if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
     bc_ok "Simulación (--dry-run): no se ha escrito ESTADO.md."
