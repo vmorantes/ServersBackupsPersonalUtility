@@ -1,0 +1,16 @@
+# Salidas generadas: peso muerto para el repositorio.
+# 40 MB por ejecución diaria no tienen por qué vivir en git.
+TejidoTesting/output/mysql_backups/
+*/output/mysql_backups/
+*.zip
+temp_sql_*
+
+# Logs de ejecución
+*/logs/
+*.log
+
+# Sitio compilado de MkDocs: se regenera con `mkdocs build`
+site/
+
+# Copias que deja `backupctl pull` al traer un env.sh del servidor
+*.anterior
