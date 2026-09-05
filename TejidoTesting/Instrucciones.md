@@ -1,41 +1,50 @@
-# Instrucciones de administración
+# TejidoTesting
 
-- Administración de servidor HestiaCP de TejidoTesting.
+Servidor HestiaCP de TejidoTesting. Este directorio contiene únicamente la
+**configuración** de este servidor (`env.sh`) y sus salidas.
 
-## Generales
+El código vive en `bin/` y `lib/` en la raíz del repositorio, y es idéntico para
+todos los servidores. Aquí no hay ninguna copia que mantener.
 
-- Como se enfoca en el respaldo de información es recomendable que el usuario donde se cargaran los scripts tenga configurado un paquete con respaldos y respaldos incrementales si es posible.
+## Documentación
 
-## Scripts base
-
-- `env.sh`: Script para configurar las variables de entorno.
-    - Cargado en: /home/[USER_NAME]/scripts/env.sh
-- `RunBackupDB.sh`: Script para respaldar las bases de datos.
-    - Cargado en: /home/[USER_NAME]/scripts/RunBackupDB.sh
-- `HestiaCPResticUserPassBackup.sh`: Script para respaldar la configuración de restic de HestiaCP.
-    - Cargado en: /home/[USER_NAME]/scripts/HestiaCPResticUserPassBackup.sh
-    - No hace falta configurarlo en el crontab. Se debe ejecutar manualmente como root cada vez que se quiera respaldar la configuración.
-
-### Ajustes de implementación
+La documentación completa —instalación, operación, migración, referencia,
+recetas y recuperación ante desastre— está en el sitio MkDocs:
 
 ```bash
-export USER_NAME=admin
-# 1. Dar permisos de ejecución a todos los scripts:
-find /home/$USER_NAME/scripts/ -name "*.sh" -exec chmod +x {} \;
-# 2. Preparar directorio de logs:
-mkdir -p /home/$USER_NAME/scripts/logs
-# 3. Preparar directorio de salida:
-mkdir -p /home/$USER_NAME/scripts/output
-# 4. Ajustar permisos del usuario al que pertenece el script para que pueda ejecutarlo:
-chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/scripts/
-chmod -R 755 /home/$USER_NAME/scripts/
+mkdocs serve        # http://127.0.0.1:8000
 ```
-    
-## Crontab
+
+La página específica de este servidor es **Servidores → TejidoTesting**, o
+directamente [`docs/servidores/tejidotesting.md`](../docs/servidores/tejidotesting.md).
+
+## Lo mínimo
 
 ```bash
-# RunBackupDB.sh, se recomienda a alguna hora de la madrugada, una vez por día
-/home/[USER_NAME]/scripts/RunBackupDB.sh >> /home/[USER_NAME]/scripts/logs/RunBackupDB_$(date +%Y%m%d_%H%M%S).log 2>&1
+# Desde el repositorio
+backupctl -p TejidoTesting status
+backupctl -p TejidoTesting doctor
+
+# En el servidor (allí el perfil se llama 'local' y no hace falta -p)
+ssh admin@servidor
+/home/admin/scripts/bin/backupctl status
 ```
 
+## Puesta al día desde los scripts antiguos
 
+Este servidor venía de tres scripts sueltos. Equivalencias:
+
+| Antes | Ahora |
+|---|---|
+| `RunBackupDB.sh` | `backupctl backup` |
+| `BackupAllMySQLServer.sh` | `backupctl backup` |
+| `HestiaCPResticUserPassBackup.sh` | `sudo backupctl restic` |
+
+```bash
+backupctl -p TejidoTesting deploy admin@servidor    # instalar la versión nueva
+ssh admin@servidor '/home/admin/scripts/bin/backupctl doctor'
+ssh admin@servidor '/home/admin/scripts/bin/backupctl cron --install'
+```
+
+El `cron --install` es necesario: la línea antigua llevaba un `%` sin escapar que
+cron convierte en salto de línea y parte la orden.
