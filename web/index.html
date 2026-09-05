@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>backupctl</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<header class="barra">
+  <div class="marca">
+    <span class="punto"></span>
+    <strong>backupctl</strong>
+    <span class="version" id="version"></span>
+  </div>
+  <div class="acciones-barra">
+    <button id="btn-refrescar" class="btn btn-sec">Actualizar estado</button>
+    <span class="local">solo local · 127.0.0.1</span>
+  </div>
+</header>
+
+<main class="disposicion">
+
+  <!-- Panel de todos los servidores a la vez -->
+  <section class="panel" id="panel-general">
+    <h2>Tus servidores</h2>
+    <p class="ayuda">Estado de todos los perfiles a la vez. Nada de esto escribe.</p>
+    <div id="tarjetas" class="tarjetas">
+      <div class="cargando">Cargando…</div>
+    </div>
+  </section>
+
+  <!-- Detalle del perfil seleccionado -->
+  <section class="panel" id="panel-detalle" hidden>
+    <div class="cabecera-detalle">
+      <h2 id="titulo-perfil"></h2>
+      <button class="btn btn-sec" id="btn-cerrar">Cerrar</button>
+    </div>
+
+    <nav class="pestanas" id="pestanas">
+      <button class="pestana activa" data-tab="revisar">Revisar</button>
+      <button class="pestana" data-tab="respaldar">Respaldar</button>
+      <button class="pestana" data-tab="servidor">Servidor</button>
+      <button class="pestana" data-tab="registros">Registros</button>
+    </nav>
+
+    <div class="tab" data-tab="revisar">
+      <p class="ayuda">Ninguna de estas acciones escribe nada.</p>
+      <div class="botones">
+        <button class="btn" data-act="status">Estado</button>
+        <button class="btn" data-act="doctor">Diagnóstico</button>
+        <button class="btn" data-act="config">Configuración</button>
+        <button class="btn" data-act="config-check">Validar configuración</button>
+        <button class="btn" data-act="cron-show">Programación</button>
+        <button class="btn" data-act="restic-list">Repositorios Restic</button>
+      </div>
+
+      <h3>Respaldos guardados</h3>
+      <div id="tabla-respaldos" class="tabla-envoltorio">
+        <p class="ayuda">Selecciona un perfil para verlos.</p>
+      </div>
+    </div>
+
+    <div class="tab" data-tab="respaldar" hidden>
+      <p class="ayuda">Los ensayos <span class="etq etq-lee">no escriben</span>
+         enseñan qué pasaría sin hacerlo.</p>
+      <div class="botones">
+        <button class="btn" data-act="backup-dry">Ensayo de respaldo</button>
+        <button class="btn" data-act="verify-quick">Verificación rápida</button>
+        <button class="btn" data-act="verify">Verificación completa</button>
+        <button class="btn" data-act="retention-dry">Ensayo de retención</button>
+      </div>
+
+      <h3>Acciones que escriben</h3>
+      <div class="botones">
+        <button class="btn btn-escribe" data-act="backup"
+                data-confirmar="Se creará un respaldo nuevo y se aplicará la retención.">
+          Respaldar ahora</button>
+        <button class="btn btn-peligro" data-act="retention"
+                data-confirmar="Se BORRARÁN los respaldos que superen la antigüedad configurada.">
+          Aplicar retención</button>
+      </div>
+
+      <h3>Prueba de restauración</h3>
+      <p class="ayuda">Crea una base de datos desechable, restaura ahí y la
+         elimina. Tu producción no se toca. Es la única prueba concluyente.</p>
+      <div class="linea-form">
+        <input type="text" id="bd-prueba" placeholder="nombre de la base de datos"
+               autocomplete="off" spellcheck="false">
+        <button class="btn btn-escribe" id="btn-restore-test">Probar restauración</button>
+      </div>
+    </div>
+
+    <div class="tab" data-tab="servidor" hidden>
+      <p class="ayuda">Requiere <code>DEPLOY_HOST</code> configurado en el perfil.</p>
+      <h3>Ensayos</h3>
+      <div class="botones">
+        <button class="btn" data-act="deploy-dry">Ensayo de despliegue</button>
+        <button class="btn" data-act="pull-dry">Ensayo de descarga</button>
+      </div>
+
+      <h3>Ejecutar en el servidor</h3>
+      <div class="botones">
+        <button class="btn" data-act="remote-status">Estado remoto</button>
+        <button class="btn" data-act="remote-doctor">Diagnóstico remoto</button>
+        <button class="btn" data-act="remote-list">Respaldos del servidor</button>
+        <button class="btn" data-act="remote-logs">Errores del servidor</button>
+        <button class="btn" data-act="remote-verify">Verificar allí</button>
+        <button class="btn btn-escribe" data-act="remote-backup"
+                data-confirmar="Se lanzará un respaldo EN el servidor.">
+          Respaldar en el servidor</button>
+      </div>
+
+      <h3>Sincronizar</h3>
+      <div class="botones">
+        <button class="btn btn-escribe" data-act="deploy"
+                data-confirmar="Se copiarán bin/, lib/ y env.sh AL servidor.">
+          Subir (deploy)</button>
+        <button class="btn btn-escribe" data-act="pull"
+                data-confirmar="Se escribirá ESTADO.md y podría actualizarse env.sh.">
+          Descargar estado (pull)</button>
+        <button class="btn btn-escribe" data-act="notify-test"
+                data-confirmar="Se enviará un aviso de prueba por los canales configurados.">
+          Probar avisos</button>
+      </div>
+    </div>
+
+    <div class="tab" data-tab="registros" hidden>
+      <div class="botones">
+        <button class="btn" data-act="logs">Listar registros</button>
+        <button class="btn" data-act="logs-errors">Solo errores</button>
+        <button class="btn" data-act="logs-full">Último registro completo</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Consola -->
+  <section class="panel consola-panel">
+    <div class="cabecera-consola">
+      <h2>Salida</h2>
+      <div>
+        <span id="estado-ejecucion" class="etq"></span>
+        <button class="btn btn-sec" id="btn-limpiar">Limpiar</button>
+      </div>
+    </div>
+    <pre id="consola" class="consola">Elige un servidor para empezar.</pre>
+  </section>
+
+</main>
+
+<div id="modal" class="modal" hidden>
+  <div class="modal-caja">
+    <h3 id="modal-titulo">¿Seguro?</h3>
+    <p id="modal-texto"></p>
+    <div class="modal-botones">
+      <button class="btn btn-sec" id="modal-no">Cancelar</button>
+      <button class="btn btn-peligro" id="modal-si">Continuar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

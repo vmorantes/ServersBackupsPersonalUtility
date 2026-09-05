@@ -32,7 +32,7 @@ export BC_ROOT BC_VERSION
 
 # --- Carga de la biblioteca --------------------------------------------------
 for _m in core config mysql notify retention backup verify restore archive \
-          restic doctor cron logs ssh deploy pull remote migrate setup tui; do
+          restic doctor cron logs ssh deploy pull remote migrate setup web tui; do
   # shellcheck source=/dev/null
   source "$BC_ROOT/lib/$_m.sh" || { echo "ERROR: no se pudo cargar lib/$_m.sh" >&2; exit 2; }
 done
@@ -44,6 +44,7 @@ BC_OPT_RESTORE_TEST=""; BC_OPT_WITH_DATA=0; BC_OPT_QUICK=0
 BC_OPT_INTO=""; BC_OPT_SEGMENTS=""
 BC_OPT_TO=""; BC_OPT_FROM=""; BC_OPT_FRESH=0; BC_OPT_PREFIX=""; BC_OPT_DATABASES=""
 BC_OPT_REMOTE_PATH=""; BC_OPT_HOUR=""; BC_OPT_MINUTE=""
+BC_OPT_PORT=""; BC_OPT_HOST=""; BC_OPT_OPEN=""
 BC_ASSUME_YES=0; BC_DEBUG="${BC_DEBUG:-0}"
 BC_PROFILE_ARG=""
 
@@ -127,10 +128,12 @@ ${BC_BLD}OPCIONES POR ORDEN${BC_RST}
   pull      --path <ruta_remota>   --dry-run
   remote    --to <usuario@host>    --path <ruta_remota>
   cron      --hour <h>   --minute <m>
+  web       --port <n>   --open
   config    --show-secrets
 
 ${BC_BLD}EJEMPLOS${BC_RST}
   backupctl setup                              dar de alta un servidor, paso a paso
+  backupctl web --open                         interfaz web: todos los VPS a la vez
   backupctl                                    menú interactivo
   backupctl backup                             respaldo completo (esto va en cron)
   backupctl backup --only tienda --dry-run     simular el respaldo de una BD
@@ -196,6 +199,19 @@ case "$BC_CMD" in
   version)  echo "backupctl $BC_VERSION"; exit 0 ;;
   setup)
     bc_setup_run "${1:-}"
+    exit $?
+    ;;
+
+  web)
+    while (( $# > 0 )); do
+      case "$1" in
+        --port) BC_OPT_PORT="${2:-}"; shift 2 ;;
+        --host) BC_OPT_HOST="${2:-}"; shift 2 ;;
+        --open) BC_OPT_OPEN=1; shift ;;
+        *) bc_die "opción desconocida para 'web': $1" ;;
+      esac
+    done
+    bc_web_run
     exit $?
     ;;
 

@@ -45,11 +45,24 @@ Si solo te llevas tres cosas de esta documentación, que sean estas.
     **[Chuleta](referencia/chuleta.md)**: todo en una página, con lo que no
     toca nada arriba del todo.
 
-## Las dos compuertas
+## Las tres fachadas
 
-El sistema tiene dos formas de uso sobre **la misma lógica**:
+Tres formas de uso sobre **la misma lógica**:
 
 <div class="grid cards" markdown>
+
+-   :material-monitor-dashboard: **Web — todos los VPS a la vez**
+
+    ---
+
+    Un panel local en el navegador con el estado de todos tus servidores,
+    y la salida real de cada orden en vivo.
+
+    ```bash
+    backupctl web --open
+    ```
+
+    [:octicons-arrow-right-24: La interfaz web](interfaces/web.md)
 
 -   :material-console: **TUI — para personas**
 

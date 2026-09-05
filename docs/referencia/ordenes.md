@@ -10,6 +10,7 @@ backupctl [opciones globales] <orden> [opciones]
 |---|---|
 | [`setup`](#setup) | Asistente de alta de un servidor |
 | [`tui`](#tui) | Menú interactivo (por defecto sin argumentos) |
+| [`web`](#web) | Interfaz web local en 127.0.0.1 |
 | [`status`](#status) | ¿Estoy protegido ahora mismo? |
 | [`doctor`](#doctor) | Diagnóstico completo del entorno |
 | [`backup`](#backup) | Respaldar las bases de datos |
@@ -88,6 +89,21 @@ backupctl              # equivalente, si hay terminal
 ```
 
 Abre el menú interactivo. Requiere terminal.
+
+## web
+
+```bash
+backupctl web [--port 8787] [--host 127.0.0.1] [--open]
+```
+
+Interfaz web local. Muestra todos los perfiles a la vez, con el estado de cada
+uno y la salida de las órdenes en vivo.
+
+Escucha solo en `127.0.0.1` y exige una credencial de sesión que se regenera en
+cada arranque y viaja en la URL. No ejecuta órdenes arbitrarias: hay una lista
+blanca de acciones. Ver [Interfaz web](../interfaces/web.md).
+
+Requiere `python3`. No expone `restore`, `migrate`, `setup` ni `cron --install`.
 
 ## status
 

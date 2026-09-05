@@ -10,6 +10,7 @@ en producción sin pensarlo.
 Ejecuta lo que quieras de aquí. Solo lee.
 
 ```bash
+backupctl web --open            # panel en el navegador, todos los VPS a la vez
 backupctl                       # menú interactivo
 backupctl --help                # ayuda, con la leyenda de qué escribe cada orden
 backupctl profiles              # servidores que conoce el repositorio
