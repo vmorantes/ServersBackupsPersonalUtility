@@ -74,6 +74,7 @@ plugins:
 
 nav:
   - Inicio: index.md
+  - Hacerlo todo de una vez: todo-de-una-vez.md
   - Empezar:
       - Qué es cada cosa: empezar/que-es-cada-cosa.md
       - Conceptos: empezar/conceptos.md

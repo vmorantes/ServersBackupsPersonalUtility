@@ -79,9 +79,28 @@ bc_cron_hestia_jobs() {
   bc_cron_hestia_sudo_quiet "$BC_HESTIA_BIN/v-list-cron-jobs" "$USER_NAME" plain || true
 }
 
-# Identificadores de los trabajos que apuntan a nuestro backupctl
+# Identificadores de los trabajos que apuntan a NUESTRO backupctl.
+#
+# Doble filtro a propósito, porque de esta lista sale lo que se va a BORRAR:
+#   1. la línea debe contener la ruta exacta de este backupctl, no la palabra
+#      suelta "backupctl" — así un cron ajeno que solo la mencione no se toca;
+#   2. el identificador debe ser numérico, que es como los emite HestiaCP. Si
+#      el formato de v-list-cron-jobs no fuera el esperado, el campo 1 sería
+#      cualquier otra cosa y preferimos no borrar nada a borrar lo que no toca.
 bc_cron_hestia_our_jobs() {
-  bc_cron_hestia_jobs | awk -F'\t' '$0 ~ /backupctl/ {print $1}'
+  local exe="$BC_ROOT/bin/backupctl"
+  bc_cron_hestia_jobs \
+    | awk -F'\t' -v exe="$exe" 'index($0, exe) > 0 {print $1}' \
+    | grep -E '^[0-9]+$' || true
+}
+
+# Muestra los trabajos completos que se van a retirar, no solo sus números.
+bc_cron_hestia_describe_jobs() {
+  local ids="$1" id
+  while IFS= read -r id; do
+    [[ -z "$id" ]] && continue
+    bc_cron_hestia_jobs | awk -F'\t' -v j="$id" '$1 == j {print "        [" j "] " $0}'
+  done <<<"$ids"
 }
 
 # Las órdenes se dejan SIN "|| echo ..." a propósito: HestiaCP valida el campo
@@ -117,7 +136,12 @@ bc_cron_hestia_install() {
   local existing job
   existing="$(bc_cron_hestia_our_jobs)"
   if [[ -n "$existing" ]]; then
-    bc_log "Trabajos de backupctl ya registrados: $(tr '\n' ' ' <<<"$existing")"
+    bc_warn "SE VAN A RETIRAR estos trabajos ya registrados, para no duplicarlos:"
+    bc_cron_hestia_describe_jobs "$existing"
+    bc_log "Solo se retiran los que apuntan a $BC_ROOT/bin/backupctl."
+    echo
+  else
+    bc_log "No hay trabajos previos de backupctl: no se retirará ninguno."
   fi
 
   bc_log "Se van a registrar:"
@@ -165,7 +189,8 @@ bc_cron_hestia_remove() {
     bc_log "No hay trabajos de backupctl registrados en HestiaCP para '$USER_NAME'."
     return 0
   fi
-  bc_log "Trabajos de backupctl en HestiaCP: $(tr '\n' ' ' <<<"$existing")"
+  bc_warn "Se eliminarán estos trabajos:"
+  bc_cron_hestia_describe_jobs "$existing"
   bc_confirm "¿Eliminarlos?" n || { bc_log "Cancelado."; return 0; }
   while IFS= read -r job; do
     [[ -z "$job" ]] && continue

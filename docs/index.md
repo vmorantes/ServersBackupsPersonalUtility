@@ -3,6 +3,10 @@
 Documentación operativa de **`backupctl`**: respaldo, verificación, restauración
 y migración de bases de datos MySQL/MariaDB en servidores HestiaCP.
 
+!!! success "¿Quieres hacerlo todo sin recorrer la documentación?"
+    **[Hacerlo todo de una vez](todo-de-una-vez.md)** — una sola página, de cero
+    a funcionando en unos 30 minutos. Copiar, pegar y seguir.
+
 !!! tip "¿Vienes a buscar algo concreto?"
     Usa el buscador de arriba. Si no sabes qué buscar, empieza por
     [Recetas](guias/recetas.md): son las tareas del día a día resueltas de una

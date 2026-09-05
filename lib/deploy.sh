@@ -36,6 +36,7 @@ bc_deploy_packages() {
 #   destino: user@host   (por defecto, DEPLOY_USER@DEPLOY_HOST del perfil)
 bc_deploy_run() {
   local target="${1:-}"
+  BC_DEPLOY_SKIP_ENV=0
   local path="${BC_OPT_REMOTE_PATH:-$DEPLOY_PATH}"
 
   if [[ -z "$target" ]]; then
@@ -91,6 +92,42 @@ bc_deploy_run() {
   local files=(bin lib)
   bc_log "Se copiarán: ${files[*]} + env.sh del perfil '$BC_PROFILE'"
 
+  # --- env.sh: comparar antes de sobrescribir ---------------------------------
+  # Es el único archivo del despliegue que puede llevar cambios hechos
+  # directamente en el servidor. Sobrescribirlo en silencio destruiría un ajuste
+  # que quizá era el bueno.
+  bc_log "Comparando la configuración con la del servidor..."
+  local remote_env; remote_env="$(mktemp)"
+  if ssh "$target" "cat '$path/env.sh'" > "$remote_env" 2>/dev/null && [[ -s "$remote_env" ]]; then
+    if diff -q "$BC_ENV_FILE" "$remote_env" >/dev/null 2>&1; then
+      bc_ok "el env.sh del servidor ya es idéntico: no hay nada que cambiar."
+    else
+      bc_warn "el env.sh del SERVIDOR difiere del que vas a subir:"
+      echo
+      diff -u "$remote_env" "$BC_ENV_FILE" \
+        --label "servidor (se PERDERÁ): $target:$path/env.sh" \
+        --label "repositorio (se sube): $BC_ENV_FILE" | sed 's/^/    /' || true
+      echo
+      bc_warn "Si el bueno es el del servidor, cancela y tráetelo antes:"
+      bc_warn "    backupctl -p $BC_PROFILE pull $target"
+      if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
+        bc_log "Simulación: el env.sh del servidor NO se tocaría en este ensayo."
+        BC_DEPLOY_SKIP_ENV=1
+      elif bc_confirm "¿Sobrescribir el env.sh del servidor con el del repositorio?" n; then
+        # Copia de seguridad en el propio servidor, por si el ajuste hacía falta
+        ssh "$target" "cp '$path/env.sh' '$path/env.sh.anterior'" 2>/dev/null \
+          && bc_log "La versión del servidor quedará como env.sh.anterior"
+      else
+        bc_warn "NO se tocará el env.sh del servidor. Solo se actualizará el código."
+        BC_DEPLOY_SKIP_ENV=1
+      fi
+    fi
+  else
+    bc_log "el servidor todavía no tiene env.sh: se creará."
+  fi
+  rm -f "$remote_env"
+
+
   if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
     bc_log "Simulación (--dry-run):"
     # La salida se captura en lugar de canalizarse: con set -e y pipefail, un
@@ -120,9 +157,13 @@ bc_deploy_run() {
     "${files[@]/#/$BC_ROOT/}" "$target:$path/" \
     || bc_die "falló la copia de bin/ y lib/."
 
-  bc_log "Copiando la configuración del perfil '$BC_PROFILE'..."
-  rsync -az "$BC_ENV_FILE" "$target:$path/env.sh" \
-    || bc_die "falló la copia de env.sh."
+  if [[ "${BC_DEPLOY_SKIP_ENV:-0}" == "1" ]]; then
+    bc_log "env.sh: se conserva el del servidor (decidido antes de copiar nada)."
+  else
+    bc_log "Copiando la configuración del perfil '$BC_PROFILE'..."
+    rsync -az "$BC_ENV_FILE" "$target:$path/env.sh" \
+      || bc_die "falló la copia de env.sh."
+  fi
 
   ssh "$target" "chmod +x '$path/bin/backupctl'" || true
 
