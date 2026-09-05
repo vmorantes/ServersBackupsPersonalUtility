@@ -52,13 +52,31 @@ bc_cron_hestia_available() {
   return 0
 }
 
-# Las órdenes v-* de HestiaCP exigen root
+# Las órdenes v-* de HestiaCP exigen root.
+#
+# Se distingue entre "puedo elevar sin preguntar" y "sudo pediría contraseña",
+# para no quedarse esperando una contraseña a mitad de una operación —o colgado
+# para siempre si no hay terminal.
+bc_cron_hestia_can_sudo() {
+  [[ "$(id -u)" -eq 0 ]] && return 0
+  sudo -n true 2>/dev/null
+}
+
+# Elevación silenciosa: si haría falta contraseña, falla en lugar de pedirla.
+# Se usa en las operaciones de SOLO LECTURA, donde interrumpir para pedir una
+# contraseña sería desproporcionado.
+bc_cron_hestia_sudo_quiet() {
+  if [[ "$(id -u)" -eq 0 ]]; then "$@"; else sudo -n "$@" 2>/dev/null; fi
+}
+
+# Elevación normal: puede pedir contraseña. Solo en operaciones de escritura,
+# y siempre después de avisar de que va a pedirla.
 bc_cron_hestia_sudo() {
   if [[ "$(id -u)" -eq 0 ]]; then "$@"; else sudo "$@"; fi
 }
 
 bc_cron_hestia_jobs() {
-  bc_cron_hestia_sudo "$BC_HESTIA_BIN/v-list-cron-jobs" "$USER_NAME" plain 2>/dev/null || true
+  bc_cron_hestia_sudo_quiet "$BC_HESTIA_BIN/v-list-cron-jobs" "$USER_NAME" plain || true
 }
 
 # Identificadores de los trabajos que apuntan a nuestro backupctl
@@ -77,6 +95,17 @@ bc_cron_hestia_install() {
   bc_section "Instalación mediante HestiaCP"
   bc_log "Usuario HestiaCP: $USER_NAME"
   bc_log "Los trabajos quedarán registrados en cron.conf y visibles en el panel."
+
+  # Las órdenes v-* exigen root. Se comprueba AQUÍ, antes de tocar nada, para no
+  # quedarse pidiendo una contraseña a mitad del proceso.
+  if ! bc_cron_hestia_can_sudo; then
+    if bc_is_tty; then
+      bc_warn "hacen falta permisos de root: sudo pedirá tu contraseña a continuación."
+      bc_log  "Si prefieres evitarlo, cancela y repite con: sudo backupctl cron --install"
+    else
+      bc_die "hacen falta permisos de root y no hay terminal para pedir la contraseña. Ejecuta: sudo backupctl -p $BC_PROFILE cron --install"
+    fi
+  fi
 
   if [[ -z "${NOTIFY_EMAIL:-}${NOTIFY_COMMAND:-}${HEALTHCHECK_URL:-}" ]]; then
     bc_warn "no hay ningún aviso configurado en $BC_ENV_FILE."
@@ -170,8 +199,14 @@ bc_cron_show() {
     bc_log "Este servidor gestiona el cron con HestiaCP, así que la instalación"
     bc_log "se hará con v-add-cron-job y el trabajo aparecerá en el panel."
     bc_log "Trabajos actuales del usuario '$USER_NAME':"
-    bc_cron_hestia_sudo "$BC_HESTIA_BIN/v-list-cron-jobs" "$USER_NAME" 2>/dev/null \
-      | sed 's/^/    /' || bc_warn "    no se pudieron listar (¿hace falta sudo?)"
+    # cron --show es de solo lectura: nunca debe pedir una contraseña.
+    if bc_cron_hestia_can_sudo; then
+      bc_cron_hestia_sudo_quiet "$BC_HESTIA_BIN/v-list-cron-jobs" "$USER_NAME" \
+        | sed 's/^/    /' || bc_warn "    no se pudieron listar"
+    else
+      bc_warn "    no se pueden listar sin permisos de root."
+      bc_log  "    Para verlos: sudo $BC_HESTIA_BIN/v-list-cron-jobs $USER_NAME"
+    fi
     echo
   fi
 

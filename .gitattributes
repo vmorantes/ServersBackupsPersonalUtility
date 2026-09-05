@@ -1,0 +1,30 @@
+# =============================================================================
+# .gitattributes
+# =============================================================================
+# Nota: aquí NO se puede fijar el bit de ejecución. Git guarda el modo en el
+# árbol (100644 / 100755), no en los atributos, y no existe ningún atributo
+# tipo "executable". Para eso se usa:
+#
+#     git update-index --chmod=+x bin/backupctl
+#
+# Lo que sí resuelve este archivo es el final de línea, que en scripts de shell
+# es un fallo real: un solo CRLF hace que el shebang falle con
+# "bad interpreter: /usr/bin/env bash^M". Forzando LF, editar desde Windows o
+# desde un editor mal configurado no puede romper los scripts.
+# =============================================================================
+
+# Todo texto se normaliza a LF en el repositorio
+* text=auto eol=lf
+
+# Scripts y configuración: LF obligatorio, sin excepción
+*.sh        text eol=lf
+bin/*       text eol=lf
+*.md        text eol=lf
+*.yml       text eol=lf
+env.sh*     text eol=lf
+
+# Binarios: que git no intente convertir nada
+*.zip       binary
+*.gz        binary
+*.png       binary
+*.jpg       binary

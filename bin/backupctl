@@ -69,30 +69,39 @@ ${BC_BLD}USO${BC_RST}
   backupctl                          abre el menú interactivo (TUI)
   backupctl [opciones] <orden> [...]  ejecuta una orden directamente
 
+${BC_BLD}LEYENDA${BC_RST}   ${BC_GRN}·${BC_RST} solo lee, no toca nada   ${BC_YEL}~${BC_RST} escribe en disco   ${BC_RED}!${BC_RST} escribe en la BD o borra
+
 ${BC_BLD}ORDENES PRINCIPALES${BC_RST}
-  ${BC_CYA}status${BC_RST}                   ¿estoy protegido ahora mismo? (código != 0 si no)
-  ${BC_CYA}doctor${BC_RST}                   diagnóstico completo del entorno
-  ${BC_CYA}backup${BC_RST}                   respaldar las bases de datos
-  ${BC_CYA}verify${BC_RST} [archivo]         verificar un respaldo
-  ${BC_CYA}restore${BC_RST} <archivo> <bd>   restaurar una base de datos
-  ${BC_CYA}list${BC_RST}                     respaldos disponibles
-  ${BC_CYA}inspect${BC_RST} [archivo]        metadatos e inventario de un respaldo
+  ${BC_GRN}·${BC_RST} ${BC_CYA}status${BC_RST}                 ¿estoy protegido ahora mismo? (código != 0 si no)
+  ${BC_GRN}·${BC_RST} ${BC_CYA}doctor${BC_RST}                 diagnóstico completo del entorno
+  ${BC_YEL}~${BC_RST} ${BC_CYA}backup${BC_RST}                 respaldar las bases de datos
+  ${BC_GRN}·${BC_RST} ${BC_CYA}verify${BC_RST} [archivo]       verificar un respaldo
+      ${BC_RED}!${BC_RST} con --restore-test crea una BD desechable y la borra al terminar
+  ${BC_RED}!${BC_RST} ${BC_CYA}restore${BC_RST} <archivo> <bd> restaurar una base de datos
+  ${BC_GRN}·${BC_RST} ${BC_CYA}list${BC_RST}                   respaldos disponibles
+  ${BC_GRN}·${BC_RST} ${BC_CYA}inspect${BC_RST} [archivo]      metadatos e inventario de un respaldo
 
 ${BC_BLD}MIGRACIÓN${BC_RST}
-  ${BC_CYA}deploy${BC_RST} [usuario@host]    SUBIR backupctl y la config a un servidor
-  ${BC_CYA}pull${BC_RST}   [usuario@host]    DESCARGAR el estado real de un servidor al repo
-  ${BC_CYA}migrate${BC_RST} --to <destino>   migrar bases de datos a otro servidor
+  ${BC_YEL}~${BC_RST} ${BC_CYA}deploy${BC_RST} [usuario@host]  SUBIR backupctl y la config a un servidor
+  ${BC_YEL}~${BC_RST} ${BC_CYA}pull${BC_RST}   [usuario@host]  DESCARGAR el estado real de un servidor al repo
+  ${BC_RED}!${BC_RST} ${BC_CYA}migrate${BC_RST} --to <destino> migrar bases de datos a otro servidor
 
 ${BC_BLD}OPERACIÓN${BC_RST}
-  ${BC_CYA}restic${BC_RST}                   volcar las claves Restic de HestiaCP (root)
-  ${BC_CYA}restic-list${BC_RST}              ver los repositorios Restic detectados
-  ${BC_CYA}retention${BC_RST}                aplicar la política de retención
-  ${BC_CYA}cron${BC_RST} --show|--install|--remove    programación automática
-  ${BC_CYA}logs${BC_RST} [--list|--errors|--follow]   registros
-  ${BC_CYA}config${BC_RST} --show|--check|--edit      configuración
-  ${BC_CYA}notify-test${BC_RST}              enviar un aviso de prueba
-  ${BC_CYA}profiles${BC_RST}                 listar los perfiles disponibles
-  ${BC_CYA}tui${BC_RST}                      abrir el menú interactivo
+  ${BC_YEL}~${BC_RST} ${BC_CYA}restic${BC_RST}                 volcar las claves Restic de HestiaCP (root)
+  ${BC_GRN}·${BC_RST} ${BC_CYA}restic-list${BC_RST}            ver los repositorios Restic detectados
+  ${BC_RED}!${BC_RST} ${BC_CYA}retention${BC_RST}              aplicar la retención (BORRA respaldos antiguos)
+  ${BC_GRN}·${BC_RST} ${BC_CYA}cron --show${BC_RST}            ver la programación
+  ${BC_YEL}~${BC_RST} ${BC_CYA}cron --install|--remove${BC_RST}  cambiar la programación
+  ${BC_GRN}·${BC_RST} ${BC_CYA}logs${BC_RST} [--list|--errors|--follow]  registros
+  ${BC_GRN}·${BC_RST} ${BC_CYA}config${BC_RST} --show|--check    ver la configuración
+  ${BC_YEL}~${BC_RST} ${BC_CYA}config --edit${BC_RST}          editar la configuración
+  ${BC_YEL}~${BC_RST} ${BC_CYA}notify-test${BC_RST}            enviar un aviso de prueba
+  ${BC_GRN}·${BC_RST} ${BC_CYA}profiles${BC_RST}               listar los perfiles disponibles
+  ${BC_GRN}·${BC_RST} ${BC_CYA}tui${BC_RST}                    abrir el menú interactivo
+
+${BC_BLD}ENSAYO${BC_RST}  Admiten ${BC_CYA}--dry-run${BC_RST} (enseñan qué harían, sin hacerlo):
+        backup · restore · retention · restic · deploy · pull · migrate
+        Para 'cron', el ensayo es ${BC_CYA}cron --show${BC_RST}.
 
 ${BC_BLD}OPCIONES GLOBALES${BC_RST}
   -p, --profile <nombre>   perfil (servidor) con el que trabajar
@@ -122,6 +131,13 @@ ${BC_BLD}EJEMPLOS${BC_RST}
   backupctl restore '' tienda --into tienda_prueba
   backupctl -p TejidoTesting status
   backupctl migrate --to admin@nuevo.example --fresh
+
+${BC_BLD}CREDENCIALES${BC_RST}
+  backupctl NUNCA pide la contraseña de MySQL: la lee de env.sh.
+  SSH nunca se queda esperando: comprueba el acceso por clave y falla con un
+  mensaje claro si no lo hay (ssh-copy-id usuario@servidor).
+  Solo 'sudo' puede pedirte una contraseña, en 'cron --install' bajo HestiaCP
+  y en 'restic'. Se avisa antes de hacerlo.
 
 ${BC_BLD}CÓDIGOS DE SALIDA${BC_RST}
   0  todo correcto      1  la operación encontró problemas      2  error de uso o entorno

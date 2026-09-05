@@ -37,8 +37,9 @@ Si solo te llevas tres cosas de esta documentación, que sean estas.
     backupctl
     ```
 
-    Sin argumentos abre el menú interactivo. Todo lo que se puede hacer desde
-    la línea de órdenes se puede hacer desde ahí.
+    Sin argumentos abre el menú interactivo. O mira la
+    **[Chuleta](referencia/chuleta.md)**: todo en una página, con lo que no
+    toca nada arriba del todo.
 
 ## Las dos compuertas
 
