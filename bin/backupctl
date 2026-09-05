@@ -1,0 +1,376 @@
+#!/usr/bin/env bash
+# =============================================================================
+# backupctl — ecosistema de respaldo y migración para servidores HestiaCP
+# =============================================================================
+# Dos compuertas sobre la MISMA lógica:
+#
+#   TUI   backupctl            → menú interactivo, para personas
+#   CLI   backupctl backup     → sin preguntas, para cron y scripts
+#
+# No hay dos implementaciones: la TUI llama a las mismas funciones de lib/ que
+# usa el cron. Lo que se prueba a mano es exactamente lo que se ejecuta de noche.
+#
+# Documentación completa:  mkdocs serve  (o docs/ en el repositorio)
+# =============================================================================
+
+set -Eeuo pipefail
+
+BC_VERSION="2.0.0"
+
+# --- Raíz de la instalación --------------------------------------------------
+# Se resuelven los enlaces simbólicos para que funcione aunque backupctl esté
+# enlazado desde /usr/local/bin.
+BC_SELF="${BASH_SOURCE[0]}"
+while [[ -L "$BC_SELF" ]]; do
+  BC_SELF_DIR="$(cd -P "$(dirname "$BC_SELF")" && pwd)"
+  BC_SELF="$(readlink "$BC_SELF")"
+  [[ "$BC_SELF" != /* ]] && BC_SELF="$BC_SELF_DIR/$BC_SELF"
+done
+BC_BIN_DIR="$(cd -P "$(dirname "$BC_SELF")" && pwd)"
+BC_ROOT="$(cd -P "$BC_BIN_DIR/.." && pwd)"
+export BC_ROOT BC_VERSION
+
+# --- Carga de la biblioteca --------------------------------------------------
+for _m in core config mysql notify retention backup verify restore archive \
+          restic doctor cron logs deploy pull migrate tui; do
+  # shellcheck source=/dev/null
+  source "$BC_ROOT/lib/$_m.sh" || { echo "ERROR: no se pudo cargar lib/$_m.sh" >&2; exit 2; }
+done
+unset _m
+
+# --- Opciones globales con valores por defecto -------------------------------
+BC_OPT_ONLY=""; BC_OPT_EXCLUDE=""; BC_OPT_DRY=0; BC_OPT_NO_DATA=0
+BC_OPT_RESTORE_TEST=""; BC_OPT_WITH_DATA=0; BC_OPT_QUICK=0
+BC_OPT_INTO=""; BC_OPT_SEGMENTS=""
+BC_OPT_TO=""; BC_OPT_FROM=""; BC_OPT_FRESH=0; BC_OPT_PREFIX=""; BC_OPT_DATABASES=""
+BC_OPT_REMOTE_PATH=""; BC_OPT_HOUR=""; BC_OPT_MINUTE=""
+BC_ASSUME_YES=0; BC_DEBUG="${BC_DEBUG:-0}"
+BC_PROFILE_ARG=""
+
+# --- Manejo de errores -------------------------------------------------------
+trap 'rc=$?; bc_cleanup_all; exit $rc' EXIT
+trap 'BC_DELIBERATE_EXIT=1; bc_err "interrumpido por señal"; exit 130' INT TERM
+trap '(( BC_DELIBERATE_EXIT )) || bc_err "fallo no controlado en $0 línea $LINENO (orden: $BASH_COMMAND)"' ERR
+
+bc_cleanup_all() {
+  set +e
+  [[ -n "${BC_TEMP_DIR:-}" && -d "${BC_TEMP_DIR:-}" ]] && rm -rf "$BC_TEMP_DIR"
+  bc_mysql_cleanup 2>/dev/null
+}
+
+# =============================================================================
+# Ayuda
+# =============================================================================
+bc_usage() {
+  cat <<AYUDA
+${BC_BLD}backupctl $BC_VERSION${BC_RST} — respaldo y migración de bases de datos
+
+${BC_BLD}USO${BC_RST}
+  backupctl                          abre el menú interactivo (TUI)
+  backupctl [opciones] <orden> [...]  ejecuta una orden directamente
+
+${BC_BLD}ORDENES PRINCIPALES${BC_RST}
+  ${BC_CYA}status${BC_RST}                   ¿estoy protegido ahora mismo? (código != 0 si no)
+  ${BC_CYA}doctor${BC_RST}                   diagnóstico completo del entorno
+  ${BC_CYA}backup${BC_RST}                   respaldar las bases de datos
+  ${BC_CYA}verify${BC_RST} [archivo]         verificar un respaldo
+  ${BC_CYA}restore${BC_RST} <archivo> <bd>   restaurar una base de datos
+  ${BC_CYA}list${BC_RST}                     respaldos disponibles
+  ${BC_CYA}inspect${BC_RST} [archivo]        metadatos e inventario de un respaldo
+
+${BC_BLD}MIGRACIÓN${BC_RST}
+  ${BC_CYA}deploy${BC_RST} [usuario@host]    SUBIR backupctl y la config a un servidor
+  ${BC_CYA}pull${BC_RST}   [usuario@host]    DESCARGAR el estado real de un servidor al repo
+  ${BC_CYA}migrate${BC_RST} --to <destino>   migrar bases de datos a otro servidor
+
+${BC_BLD}OPERACIÓN${BC_RST}
+  ${BC_CYA}restic${BC_RST}                   volcar las claves Restic de HestiaCP (root)
+  ${BC_CYA}restic-list${BC_RST}              ver los repositorios Restic detectados
+  ${BC_CYA}retention${BC_RST}                aplicar la política de retención
+  ${BC_CYA}cron${BC_RST} --show|--install|--remove    programación automática
+  ${BC_CYA}logs${BC_RST} [--list|--errors|--follow]   registros
+  ${BC_CYA}config${BC_RST} --show|--check|--edit      configuración
+  ${BC_CYA}notify-test${BC_RST}              enviar un aviso de prueba
+  ${BC_CYA}profiles${BC_RST}                 listar los perfiles disponibles
+  ${BC_CYA}tui${BC_RST}                      abrir el menú interactivo
+
+${BC_BLD}OPCIONES GLOBALES${BC_RST}
+  -p, --profile <nombre>   perfil (servidor) con el que trabajar
+  -y, --yes                responder que sí a todo (modo desatendido)
+      --debug              salida detallada
+      --no-color           sin colores
+      --plain              TUI en texto plano, sin whiptail
+  -h, --help               esta ayuda
+  -V, --version            versión
+
+${BC_BLD}OPCIONES POR ORDEN${BC_RST}
+  backup    --only a,b   --exclude c,d   --no-data   --dry-run
+  verify    --quick   --restore-test <bd>   --with-data
+  restore   --into <bd>   --segments tables,data   --dry-run
+  migrate   --to <destino>   --databases a,b   --from <zip>   --fresh
+            --prefix <pre>   --path <ruta_remota>   --dry-run
+  deploy    --path <ruta_remota>   --dry-run
+  pull      --path <ruta_remota>   --dry-run
+  cron      --hour <h>   --minute <m>
+  config    --show-secrets
+
+${BC_BLD}EJEMPLOS${BC_RST}
+  backupctl                                    menú interactivo
+  backupctl backup                             respaldo completo (esto va en cron)
+  backupctl backup --only tienda --dry-run     simular el respaldo de una BD
+  backupctl verify --restore-test tienda --with-data
+  backupctl restore '' tienda --into tienda_prueba
+  backupctl -p TejidoTesting status
+  backupctl migrate --to admin@nuevo.example --fresh
+
+${BC_BLD}CÓDIGOS DE SALIDA${BC_RST}
+  0  todo correcto      1  la operación encontró problemas      2  error de uso o entorno
+
+Documentación: ejecuta ${BC_CYA}mkdocs serve${BC_RST} en la raíz del repositorio.
+AYUDA
+}
+
+# =============================================================================
+# Análisis de opciones globales
+# =============================================================================
+BC_ARGS=()
+while (( $# > 0 )); do
+  case "$1" in
+    -p|--profile) BC_PROFILE_ARG="${2:-}"; shift 2 ;;
+    -y|--yes)     BC_ASSUME_YES=1; shift ;;
+    --debug)      BC_DEBUG=1; shift ;;
+    --no-color)   BC_NO_COLOR=1; shift ;;
+    --plain)      BC_TUI_PLAIN=1; shift ;;
+    -h|--help)    BC_NO_COLOR="${BC_NO_COLOR:-0}"; bc_usage; exit 0 ;;
+    -V|--version) echo "backupctl $BC_VERSION"; exit 0 ;;
+    --)           shift; BC_ARGS+=("$@"); break ;;
+    *)            BC_ARGS+=("$1"); shift ;;
+  esac
+done
+
+# Recargar los colores si --no-color llegó después de cargar core.sh
+if [[ "${BC_NO_COLOR:-0}" == "1" ]]; then
+  BC_RED=""; BC_GRN=""; BC_YEL=""; BC_BLU=""; BC_CYA=""; BC_DIM=""; BC_BLD=""; BC_RST=""
+fi
+
+set -- "${BC_ARGS[@]:-}"
+BC_CMD="${1:-}"
+[[ $# -gt 0 ]] && shift || true
+
+# Sin orden y con terminal: se abre la TUI. Sin orden y sin terminal (cron mal
+# configurado): se muestra la ayuda y se sale con error, en lugar de quedarse
+# esperando una entrada que nunca llegará.
+if [[ -z "$BC_CMD" ]]; then
+  if bc_is_tty; then BC_CMD="tui"
+  else bc_usage; exit 2; fi
+fi
+
+# `profiles` y `help` no necesitan un perfil cargado
+case "$BC_CMD" in
+  help)     bc_usage; exit 0 ;;
+  version)  echo "backupctl $BC_VERSION"; exit 0 ;;
+  profiles)
+    bc_section "Perfiles disponibles"
+    if [[ -z "$(bc_config_list)" ]]; then
+      bc_warn "ninguno. Crea un directorio con un env.sh dentro (parte de config/env.sh.example)."
+      exit 1
+    fi
+    { printf 'PERFIL\tCONFIGURACIÓN\n'; bc_config_list; } | bc_table
+    exit 0
+    ;;
+esac
+
+# =============================================================================
+# Carga del perfil
+# =============================================================================
+bc_config_load "$BC_PROFILE_ARG"
+
+# Las operaciones largas escriben su propio log y lo rotan. Por eso la línea de
+# cron no necesita ninguna redirección con fecha — que es donde estaba el fallo
+# del '%' sin escapar.
+case "$BC_CMD" in
+  backup|restic|migrate)
+    bc_start_logging "$LOG_DIR/${BC_CMD}_$(date +%Y%m%d_%H%M%S).log"
+    bc_log "===== backupctl $BC_VERSION · orden '$BC_CMD' · perfil '$BC_PROFILE' ====="
+    bc_log "Log: $BC_LOG_FILE"
+    bc_lock_acquire "$BC_CMD" "$BACKUP_WORK_DIR"
+    ;;
+esac
+
+# =============================================================================
+# Despacho
+# =============================================================================
+case "$BC_CMD" in
+
+  tui)
+    bc_is_tty || bc_die "la TUI necesita un terminal interactivo."
+    bc_tui_main
+    ;;
+
+  backup)
+    while (( $# > 0 )); do
+      case "$1" in
+        --only)     BC_OPT_ONLY="${2:-}"; shift 2 ;;
+        --exclude)  BC_OPT_EXCLUDE="${2:-}"; shift 2 ;;
+        --no-data)  BC_OPT_NO_DATA=1; shift ;;
+        --dry-run|-n) BC_OPT_DRY=1; shift ;;
+        *) bc_die "opción desconocida para 'backup': $1" ;;
+      esac
+    done
+    bc_backup_run
+    ;;
+
+  verify)
+    _file=""
+    while (( $# > 0 )); do
+      case "$1" in
+        --restore-test) BC_OPT_RESTORE_TEST="${2:-}"; shift 2 ;;
+        --with-data)    BC_OPT_WITH_DATA=1; shift ;;
+        --quick)        BC_OPT_QUICK=1; shift ;;
+        --latest)       _file=""; shift ;;
+        -*) bc_die "opción desconocida para 'verify': $1" ;;
+        *)  _file="$1"; shift ;;
+      esac
+    done
+    bc_verify_run "$_file"
+    ;;
+
+  restore)
+    _file=""; _db=""; _pos=0
+    while (( $# > 0 )); do
+      case "$1" in
+        --into)     BC_OPT_INTO="${2:-}"; shift 2 ;;
+        --segments) BC_OPT_SEGMENTS="${2:-}"; shift 2 ;;
+        --dry-run|-n) BC_OPT_DRY=1; shift ;;
+        -*) bc_die "opción desconocida para 'restore': $1" ;;
+        *)  if (( _pos == 0 )); then _file="$1"; else _db="$1"; fi; _pos=$(( _pos + 1 )); shift ;;
+      esac
+    done
+    [[ -n "$_db" ]] || bc_die "uso: backupctl restore <archivo|''> <base_de_datos> [--into otra]"
+    bc_restore_run "$_file" "$_db"
+    ;;
+
+  list)
+    if [[ "${1:-}" == "--databases" ]]; then
+      shift; bc_archive_databases "${1:-}"
+    else
+      bc_archive_list
+    fi
+    ;;
+
+  inspect) bc_archive_inspect "${1:-}" ;;
+  status)  bc_archive_status ;;
+  doctor)  bc_doctor_run ;;
+
+  restic)
+    [[ "${1:-}" == "--dry-run" || "${1:-}" == "-n" ]] && BC_OPT_DRY=1
+    bc_restic_run
+    ;;
+  restic-list) bc_restic_list ;;
+
+  retention)
+    _dry=0; [[ "${1:-}" == "--dry-run" || "${1:-}" == "-n" ]] && _dry=1
+    bc_retention_apply "$_dry"
+    ;;
+
+  cron)
+    _action="--show"
+    while (( $# > 0 )); do
+      case "$1" in
+        --show|--install|--remove) _action="$1"; shift ;;
+        --hour)   BC_OPT_HOUR="${2:-}"; shift 2 ;;
+        --minute) BC_OPT_MINUTE="${2:-}"; shift 2 ;;
+        *) bc_die "opción desconocida para 'cron': $1" ;;
+      esac
+    done
+    case "$_action" in
+      --show)    bc_cron_show ;;
+      --install) bc_cron_install ;;
+      --remove)  bc_cron_remove ;;
+    esac
+    ;;
+
+  logs)
+    case "${1:-}" in
+      --list|"") bc_logs_list ;;
+      --errors)  bc_logs_show errors ;;
+      --tail)    bc_logs_show tail ;;
+      --full)    bc_logs_show full ;;
+      --follow|-f) bc_logs_follow ;;
+      *) bc_die "opción desconocida para 'logs': $1" ;;
+    esac
+    ;;
+
+  config)
+    case "${1:-}" in
+      --show|"")     bc_config_show 0 ;;
+      --show-secrets) bc_config_show 1 ;;
+      --check)
+        if bc_config_check; then bc_ok "La configuración es válida."; else
+          bc_err "La configuración tiene problemas."; BC_DELIBERATE_EXIT=1; exit 1; fi
+        ;;
+      --edit)
+        "${EDITOR:-nano}" "$BC_ENV_FILE"
+        bash -n "$BC_ENV_FILE" || bc_die "el archivo editado tiene errores de sintaxis."
+        bc_ok "Configuración guardada: $BC_ENV_FILE"
+        ;;
+      --path) printf '%s\n' "$BC_ENV_FILE" ;;
+      *) bc_die "opción desconocida para 'config': $1" ;;
+    esac
+    ;;
+
+  deploy)
+    _target=""
+    while (( $# > 0 )); do
+      case "$1" in
+        --path) BC_OPT_REMOTE_PATH="${2:-}"; shift 2 ;;
+        --dry-run|-n) BC_OPT_DRY=1; shift ;;
+        -*) bc_die "opción desconocida para 'deploy': $1" ;;
+        *)  _target="$1"; shift ;;
+      esac
+    done
+    bc_deploy_run "$_target"
+    ;;
+
+  pull)
+    _target=""
+    while (( $# > 0 )); do
+      case "$1" in
+        --path) BC_OPT_REMOTE_PATH="${2:-}"; shift 2 ;;
+        --dry-run|-n) BC_OPT_DRY=1; shift ;;
+        -*) bc_die "opción desconocida para 'pull': $1" ;;
+        *)  _target="$1"; shift ;;
+      esac
+    done
+    bc_pull_run "$_target"
+    ;;
+
+  migrate)
+    while (( $# > 0 )); do
+      case "$1" in
+        --to)        BC_OPT_TO="${2:-}"; shift 2 ;;
+        --from)      BC_OPT_FROM="${2:-}"; shift 2 ;;
+        --databases) BC_OPT_DATABASES="${2:-}"; shift 2 ;;
+        --prefix)    BC_OPT_PREFIX="${2:-}"; shift 2 ;;
+        --path)      BC_OPT_REMOTE_PATH="${2:-}"; shift 2 ;;
+        --fresh)     BC_OPT_FRESH=1; shift ;;
+        --dry-run|-n) BC_OPT_DRY=1; shift ;;
+        *) bc_die "opción desconocida para 'migrate': $1" ;;
+      esac
+    done
+    bc_migrate_run
+    ;;
+
+  notify-test) bc_notify_test ;;
+
+  # Auxiliar interno: lo usa `migrate` por SSH para comparar recuentos.
+  exec-count) bc_mysql_table_count "${1:-}" ;;
+
+  *)
+    bc_err "orden desconocida: '$BC_CMD'"
+    echo
+    bc_usage
+    BC_DELIBERATE_EXIT=1
+    exit 2
+    ;;
+esac
