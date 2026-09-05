@@ -96,6 +96,10 @@ bc_pull_run() {
   fi
 
   crontab_block="$(ssh "$target" "crontab -l 2>/dev/null | grep -v '^#\$'" 2>/dev/null || echo '(sin crontab o sin acceso)')"
+  # En HestiaCP la fuente de verdad del cron es cron.conf, no el crontab del
+  # sistema: se recoge también para que ESTADO.md refleje lo que el panel ve.
+  local hestia_cron
+  hestia_cron="$(ssh "$target" "sudo -n cat /usr/local/hestia/data/users/$USER_NAME/cron.conf 2>/dev/null || cat /usr/local/hestia/data/users/$USER_NAME/cron.conf 2>/dev/null" 2>/dev/null || true)"
   remote_tree="$(ssh "$target" "ls -la '$path' 2>/dev/null" 2>/dev/null || echo '(no accesible)')"
   disk="$(ssh "$target" "df -h '$path' 2>/dev/null | tail -1" 2>/dev/null || echo '?')"
 
@@ -149,6 +153,18 @@ CAB
     printf '%s\n' "$crontab_block"
     echo '```'
     echo
+
+    if [[ -n "$hestia_cron" ]]; then
+      echo "## Cron según HestiaCP (\`cron.conf\`)"
+      echo
+      echo "Esta es la fuente de verdad en HestiaCP: el crontab de arriba se"
+      echo "regenera a partir de aquí con \`v-rebuild-cron-jobs\`."
+      echo
+      echo '```'
+      printf '%s\n' "$hestia_cron"
+      echo '```'
+      echo
+    fi
 
     echo "## Espacio en disco"
     echo

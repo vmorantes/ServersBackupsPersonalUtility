@@ -42,22 +42,42 @@ bc_doctor_run() {
 
   # --- 3. Directorios --------------------------------------------------------
   printf '\n%sDirectorios%s\n' "$BC_BLD" "$BC_RST"
-  local d
+  # doctor NO crea nada: es un diagnóstico y debe poder ejecutarse en un
+  # servidor ajeno sin dejar rastro. Si un directorio falta se informa, y ya lo
+  # creará `backup` la primera vez que corra.
+  local d parent
   for d in "$BACKUP_OUTPUT_DIR" "$BACKUP_WORK_DIR" "$LOG_DIR"; do
     if [[ -d "$d" ]]; then
       if [[ -w "$d" ]]; then bc_doc_ok "$d (escribible)"
       else bc_doc_fail "$d existe pero NO es escribible"; fi
     else
-      if mkdir -p "$d" 2>/dev/null; then bc_doc_ok "$d (creado ahora)"
-      else bc_doc_fail "$d no existe y no se puede crear"; fi
+      # Se comprueba el ancestro más cercano que sí exista: si es escribible,
+      # el directorio podrá crearse solo cuando haga falta.
+      parent="$d"
+      while [[ ! -d "$parent" && "$parent" != "/" && "$parent" != "." ]]; do
+        parent="$(dirname "$parent")"
+      done
+      if [[ -w "$parent" ]]; then
+        bc_doc_warn "$d no existe todavía (se creará en el primer respaldo)"
+      else
+        bc_doc_fail "$d no existe y $parent no es escribible: no podrá crearse"
+      fi
     fi
   done
 
   # --- 4. Espacio en disco ---------------------------------------------------
   printf '\n%sEspacio en disco%s\n' "$BC_BLD" "$BC_RST"
-  local free_mb pct
-  free_mb="$(df -Pm "$BACKUP_WORK_DIR" 2>/dev/null | awk 'NR==2 {print $4}')"
-  pct="$(df -P "$BACKUP_WORK_DIR" 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print $5}')"
+  # En una instalación nueva el directorio de trabajo todavía no existe, así que
+  # se consulta el ancestro más cercano que sí exista: el disco es el mismo y la
+  # cifra sigue siendo válida. El `|| true` evita que un df fallido aborte el
+  # diagnóstico por culpa de set -e.
+  local free_mb pct disk_ref="$BACKUP_WORK_DIR"
+  while [[ ! -d "$disk_ref" && "$disk_ref" != "/" && "$disk_ref" != "." ]]; do
+    disk_ref="$(dirname "$disk_ref")"
+  done
+  free_mb="$(df -Pm "$disk_ref" 2>/dev/null | awk 'NR==2 {print $4}' || true)"
+  pct="$(df -P "$disk_ref" 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print $5}' || true)"
+  [[ "$disk_ref" != "$BACKUP_WORK_DIR" ]] && bc_doc_warn "se mide sobre $disk_ref (el directorio de trabajo aún no existe)"
   if [[ -z "$free_mb" ]]; then bc_doc_fail "no se pudo consultar el espacio libre"
   elif (( free_mb < MIN_FREE_MB )); then bc_doc_fail "${free_mb}MB libres, por debajo del mínimo (${MIN_FREE_MB}MB)"
   elif (( pct > 90 )); then bc_doc_warn "${free_mb}MB libres pero el disco está al ${pct}%"
@@ -117,6 +137,20 @@ bc_doctor_run() {
 
   # --- 8. Automatización -----------------------------------------------------
   printf '\n%sAutomatización%s\n' "$BC_BLD" "$BC_RST"
+  # En HestiaCP el crontab del sistema es un archivo generado: lo que cuenta es
+  # cron.conf. Una línea puesta a mano con `crontab -e` desaparece en el
+  # siguiente v-rebuild-cron-jobs.
+  if bc_cron_hestia_available; then
+    if bc_cron_hestia_our_jobs | grep -q .; then
+      bc_doc_ok "backupctl registrado en HestiaCP (visible en el panel, sobrevive a los rebuilds)"
+    else
+      bc_doc_warn "sin trabajos de backupctl en HestiaCP (usa: backupctl cron --install)"
+    fi
+    if crontab -l 2>/dev/null | grep -q 'backupctl'; then
+      bc_doc_fail "hay líneas de backupctl puestas a mano en el crontab: HestiaCP las borrará en el próximo rebuild. Reinstálalas con: backupctl cron --install"
+    fi
+  fi
+
   local ct
   ct="$(crontab -l 2>/dev/null || true)"
   if grep -q 'backupctl' <<<"$ct"; then

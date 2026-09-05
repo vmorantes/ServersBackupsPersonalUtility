@@ -137,9 +137,11 @@ bc_archive_status() {
 
   # --- Disco -----------------------------------------------------------------
   local free_mb pct
-  free_mb="$(df -Pm "$BACKUP_OUTPUT_DIR" 2>/dev/null | awk 'NR==2 {print $4}')"
-  pct="$(df -P "$BACKUP_OUTPUT_DIR" 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print $5}')"
-  if [[ -n "$free_mb" ]]; then
+  free_mb="$(df -Pm "$BACKUP_OUTPUT_DIR" 2>/dev/null | awk 'NR==2 {print $4}' || true)"
+  pct="$(df -P "$BACKUP_OUTPUT_DIR" 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print $5}' || true)"
+  if [[ -z "$free_mb" ]]; then
+    bc_warn "Disco: no se pudo consultar $BACKUP_OUTPUT_DIR (¿todavía no existe?)"
+  else
     if (( free_mb < MIN_FREE_MB )); then
       bc_err "Disco: ${free_mb}MB libres (${pct}% usado). Por debajo del mínimo de ${MIN_FREE_MB}MB."
       problems=$(( problems + 1 ))
