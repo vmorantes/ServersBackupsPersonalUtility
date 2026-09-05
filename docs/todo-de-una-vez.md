@@ -13,6 +13,7 @@ Si no quieres pensar en nada, esto hace las partes 1, 2 y 3 de una vez:
 
 ```bash
 cd /ruta/al/repositorio
+./bin/backupctl install      # para poder llamarlo sin ./bin/ a partir de ahora
 backupctl setup
 ```
 

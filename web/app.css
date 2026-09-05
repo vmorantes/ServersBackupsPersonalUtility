@@ -40,6 +40,13 @@
 
 * { box-sizing: border-box; }
 
+/* El atributo `hidden` debe ganar SIEMPRE.
+   La hoja del navegador lo aplica como [hidden]{display:none}, con la misma
+   especificidad que una clase; cualquier regla nuestra posterior que fije
+   `display` lo anula en silencio. Le pasó al modal, que se quedaba visible
+   tapando toda la interfaz con un overlay a pantalla completa. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--fondo);
@@ -49,10 +56,14 @@ body {
 
 /* --- Barra superior ------------------------------------------------------ */
 .barra {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 16px; padding: 12px 20px;
   background: var(--panel); border-bottom: 1px solid var(--borde);
   position: sticky; top: 0; z-index: 10;
+  padding: 12px 20px;
+}
+.barra-interior {
+  max-width: 1180px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
 }
 .marca { display: flex; align-items: center; gap: 9px; font-size: 16px; }
 .punto {
@@ -85,7 +96,7 @@ code { font-family: var(--mono); font-size: .92em;
 /* --- Tarjetas de servidor ------------------------------------------------ */
 .tarjetas {
   display: grid; gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 .tarjeta {
   border: 1px solid var(--borde); border-radius: var(--radio);
@@ -108,6 +119,11 @@ code { font-family: var(--mono); font-size: .92em;
 .n-info  .ico { color: var(--suave); }
 .n-error { color: var(--error); }
 .cargando { color: var(--suave); padding: 12px 0; }
+.nota-remoto {
+  font-size: 12.5px; color: var(--suave); line-height: 1.5;
+  border-left: 2px solid var(--acento); padding-left: 10px;
+}
+.nota-remoto strong { color: var(--texto); font-family: var(--mono); font-weight: 600; }
 
 /* --- Etiquetas ----------------------------------------------------------- */
 .etq {
@@ -174,7 +190,7 @@ td.mono { font-family: var(--mono); }
 }
 .cabecera-consola > div { display: flex; align-items: center; gap: 10px; }
 .consola {
-  margin: 0; padding: 14px 16px; min-height: 220px; max-height: 460px;
+  margin: 0; padding: 14px 16px; min-height: 260px; max-height: 55vh;
   overflow: auto; background: var(--consola-fondo); color: var(--consola-texto);
   border-radius: 8px; font-family: var(--mono); font-size: 12.5px;
   line-height: 1.5; white-space: pre-wrap; word-break: break-word;

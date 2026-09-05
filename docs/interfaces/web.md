@@ -68,6 +68,21 @@ regular. Nada de lo que llegue del navegador acaba en una shell.
     {"arg":"../../etc/passwd"} → acción no permitida
     ```
 
+## Si el puerto está ocupado
+
+Casi siempre es una interfaz anterior que quedó abierta. Se explica en lugar de
+soltar un rastreo de Python:
+
+```
+  El puerto 8787 ya está ocupado.
+  Lo tiene: LISTEN 127.0.0.1:8787 users:(("python3",pid=110760))
+
+  Puede ser una interfaz web que dejaste abierta. Opciones:
+
+    backupctl web --port 8788      usar otro puerto
+    pkill -f web/server.py         cerrar la anterior
+```
+
 ## Opciones
 
 ```bash

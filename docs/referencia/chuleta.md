@@ -16,6 +16,12 @@ backupctl --help                # ayuda, con la leyenda de qué escribe cada ord
 backupctl profiles              # servidores que conoce el repositorio
 ```
 
+### Poder llamarlo sin `./bin/`
+
+```bash
+./bin/backupctl install         # enlace en ~/.local/bin, sin sudo
+```
+
 ### Dar de alta un servidor
 
 ```bash

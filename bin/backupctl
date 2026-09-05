@@ -32,7 +32,7 @@ export BC_ROOT BC_VERSION
 
 # --- Carga de la biblioteca --------------------------------------------------
 for _m in core config mysql notify retention backup verify restore archive \
-          restic doctor cron logs ssh deploy pull remote migrate setup web tui; do
+          restic doctor cron logs ssh deploy pull remote migrate setup web install tui; do
   # shellcheck source=/dev/null
   source "$BC_ROOT/lib/$_m.sh" || { echo "ERROR: no se pudo cargar lib/$_m.sh" >&2; exit 2; }
 done
@@ -73,6 +73,7 @@ ${BC_BLD}USO${BC_RST}
 ${BC_BLD}LEYENDA${BC_RST}   ${BC_GRN}·${BC_RST} solo lee, no toca nada   ${BC_YEL}~${BC_RST} escribe en disco   ${BC_RED}!${BC_RST} escribe en la BD o borra
 
 ${BC_BLD}EMPEZAR${BC_RST}
+  ${BC_YEL}~${BC_RST} ${BC_CYA}install${BC_RST}                dejar 'backupctl' disponible en el PATH
   ${BC_YEL}~${BC_RST} ${BC_CYA}setup${BC_RST}                  asistente: pregunta lo necesario, crea el usuario de
                            MySQL si hace falta, escribe env.sh y despliega
 
@@ -132,6 +133,7 @@ ${BC_BLD}OPCIONES POR ORDEN${BC_RST}
   config    --show-secrets
 
 ${BC_BLD}EJEMPLOS${BC_RST}
+  backupctl install                            poder llamarlo sin ./bin/
   backupctl setup                              dar de alta un servidor, paso a paso
   backupctl web --open                         interfaz web: todos los VPS a la vez
   backupctl                                    menú interactivo
@@ -197,6 +199,11 @@ fi
 case "$BC_CMD" in
   help)     bc_usage; exit 0 ;;
   version)  echo "backupctl $BC_VERSION"; exit 0 ;;
+  install)
+    if [[ "${1:-}" == "--remove" ]]; then bc_uninstall_run; else bc_install_run; fi
+    exit $?
+    ;;
+
   setup)
     bc_setup_run "${1:-}"
     exit $?

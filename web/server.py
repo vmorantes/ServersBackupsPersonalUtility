@@ -113,6 +113,22 @@ def profiles():
     return found
 
 
+def profile_meta(name):
+    """Valores efectivos del perfil: sirven para saber si es local o remoto."""
+    try:
+        r = subprocess.run(
+            [str(BACKUPCTL), "--no-color", "-p", name, "config", "--show"],
+            capture_output=True, text=True, timeout=20)
+    except Exception:
+        return {}
+    meta = {}
+    for ln in r.stdout.splitlines():
+        parts = ln.split(None, 1)
+        if len(parts) == 2 and parts[0].isupper():
+            meta[parts[0]] = parts[1].strip()
+    return meta
+
+
 def quick_status(name):
     """Resumen de un perfil para el panel. Nunca escribe nada."""
     try:
@@ -137,7 +153,28 @@ def quick_status(name):
         elif "[  OK ]" in ln: nivel = "ok"
         texto = re.sub(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \[[^\]]+\]\s*", "", ln)
         lineas.append({"nivel": nivel, "texto": texto})
-    return {"name": name, "ok": r.returncode == 0, "lineas": lineas}
+
+    # Un perfil que describe un servidor remoto se mide en el servidor, no aquí.
+    # Sin esta distinción el panel pinta de rojo rutas que en tu equipo no
+    # existen y nunca deberían existir, y ese ruido tapa los problemas reales.
+    meta = profile_meta(name)
+    destino = meta.get("DEPLOY_HOST", "")
+    if destino.startswith("("):        # "(sin configurar)"
+        destino = ""
+    salida = meta.get("BACKUP_OUTPUT_DIR", "")
+    # No se exige DEPLOY_HOST: un perfil cuyo directorio de respaldos no existe
+    # en esta máquina describe otra, tenga o no destino configurado. Es la señal
+    # honesta, y además así se detectan los perfiles a los que todavía les falta
+    # el DEPLOY_HOST.
+    es_remoto = bool(salida) and not os.path.isdir(salida)
+
+    return {
+        "name": name,
+        "ok": r.returncode == 0,
+        "lineas": lineas,
+        "destino": destino,
+        "remoto": es_remoto,
+    }
 
 
 def build_argv(profile, action, arg):
@@ -308,7 +345,30 @@ def main():
     if not BACKUPCTL.is_file():
         sys.exit(f"ERROR: no se encontró {BACKUPCTL}")
 
-    srv = ThreadingHTTPServer((a.host, a.port), Handler)
+    # Un puerto ocupado es lo más común al reabrir la interfaz, casi siempre
+    # porque quedó una instancia anterior. Un rastreo de Python no ayuda a nadie:
+    # se explica quién lo tiene y cómo salir del paso.
+    try:
+        srv = ThreadingHTTPServer((a.host, a.port), Handler)
+    except OSError as e:
+        if getattr(e, "errno", None) != 98:
+            sys.exit(f"ERROR: no se pudo abrir {a.host}:{a.port} — {e}")
+        print()
+        print(f"  El puerto {a.port} ya está ocupado.")
+        quien = shutil.which("ss") or shutil.which("lsof")
+        if quien and quien.endswith("ss"):
+            r = subprocess.run([quien, "-ltnp"], capture_output=True, text=True)
+            for ln in r.stdout.splitlines():
+                if f":{a.port} " in ln or f":{a.port}\t" in ln:
+                    print("  Lo tiene: " + ln.strip())
+        print()
+        print("  Puede ser una interfaz web que dejaste abierta. Opciones:")
+        print()
+        print(f"    backupctl web --port {a.port + 1}      usar otro puerto")
+        print( "    pkill -f web/server.py            cerrar la anterior")
+        print()
+        sys.exit(1)
+
     url = f"http://{a.host}:{a.port}/?t={TOKEN}"
 
     print()

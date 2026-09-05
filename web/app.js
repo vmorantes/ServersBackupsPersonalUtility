@@ -117,20 +117,37 @@ async function ejecutar(accion, arg) {
 }
 
 // --- Confirmación ------------------------------------------------------------
+// El diálogo es un overlay a pantalla completa: si se queda abierto, bloquea
+// toda la interfaz. Por eso tiene tres salidas —Cancelar, Escape y pulsar
+// fuera— y se fuerza cerrado al arrancar.
 function confirmar(texto) {
   return new Promise((resolver) => {
-    $('#modal-texto').textContent = texto;
-    $('#modal').hidden = false;
+    const modal = $('#modal');
+    $('#modal-texto').textContent = texto || '¿Continuar con esta acción?';
+    modal.hidden = false;
+
     const si = $('#modal-si'), no = $('#modal-no');
     const cerrar = (v) => {
-      $('#modal').hidden = true;
+      modal.hidden = true;
       si.removeEventListener('click', aSi);
       no.removeEventListener('click', aNo);
+      modal.removeEventListener('click', aFuera);
+      document.removeEventListener('keydown', aTecla);
       resolver(v);
     };
-    const aSi = () => cerrar(true), aNo = () => cerrar(false);
+    const aSi = () => cerrar(true);
+    const aNo = () => cerrar(false);
+    const aFuera = (ev) => { if (ev.target === modal) cerrar(false); };
+    const aTecla = (ev) => {
+      if (ev.key === 'Escape') cerrar(false);
+      if (ev.key === 'Enter') cerrar(true);
+    };
+
     si.addEventListener('click', aSi);
     no.addEventListener('click', aNo);
+    modal.addEventListener('click', aFuera);
+    document.addEventListener('keydown', aTecla);
+    no.focus();
   });
 }
 
@@ -155,12 +172,51 @@ async function cargarPanel() {
       const n = document.createElement('span');
       n.className = 'tarjeta-nombre'; n.textContent = p.name;
       const e = document.createElement('span');
-      e.className = 'etq ' + (p.ok ? 'etq-ok' : 'etq-warn');
-      e.textContent = p.ok ? 'correcto' : 'requiere atención';
+      if (p.remoto) {
+        // El estado local no aplica: este perfil describe otra máquina
+        e.className = 'etq etq-lee';
+        e.textContent = 'remoto';
+      } else {
+        e.className = 'etq ' + (p.ok ? 'etq-ok' : 'etq-warn');
+        e.textContent = p.ok ? 'correcto' : 'requiere atención';
+      }
       cab.append(n, e);
 
       const ls = document.createElement('div');
       ls.className = 'tarjeta-lineas';
+
+      if (p.remoto) {
+        const nota = document.createElement('div');
+        nota.className = 'nota-remoto';
+        nota.innerHTML = p.destino
+          ? ('Este perfil describe <strong>' + esc(p.destino) + '</strong>. Sus rutas ' +
+             'están allí, no en tu equipo, así que el estado local no dice nada útil.')
+          : ('Las rutas de este perfil no existen en tu equipo: describe otra máquina. ' +
+             'Define <strong>DEPLOY_HOST</strong> en su env.sh para poder consultarla desde aquí.');
+        ls.appendChild(nota);
+        const b = document.createElement('button');
+        b.className = 'btn btn-sec';
+        b.style.marginTop = '8px';
+        b.textContent = p.destino ? 'Consultar el servidor' : 'Ver la configuración';
+        if (!p.destino) {
+          b.addEventListener('click', (ev) => {
+            ev.stopPropagation(); seleccionar(p.name); ejecutar('config', null);
+          }, { once: false });
+        }
+        if (p.destino) {
+          b.addEventListener('click', (ev) => {
+            ev.stopPropagation(); seleccionar(p.name); ejecutar('remote-status', null);
+          });
+        }
+        ls.appendChild(b);
+        t.append(cab, ls);
+        const abrirR = () => seleccionar(p.name);
+        t.addEventListener('click', abrirR);
+        t.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') abrirR(); });
+        cont.appendChild(t);
+        continue;
+      }
+
       for (const l of (p.lineas || []).slice(0, 6)) {
         const d2 = document.createElement('div');
         d2.className = 'tarjeta-linea n-' + l.nivel;
@@ -263,6 +319,8 @@ $('#btn-cerrar').addEventListener('click', () => {
 
 // --- Arranque ----------------------------------------------------------------
 (async function inicio() {
+  // Por si alguna regla de estilo volviera a anular el atributo `hidden`
+  $('#modal').hidden = true;
   if (!TOKEN) {
     limpiarConsola('Falta la credencial de sesión.\n\nAbre la dirección completa que imprimió el servidor, la que lleva ?t=…');
     return;

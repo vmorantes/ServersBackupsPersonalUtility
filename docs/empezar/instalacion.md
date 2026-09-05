@@ -151,11 +151,31 @@ backupctl cron --install
     Los pasos 1–3 comprueban que el archivo existe y está íntegro. El paso 4
     es el único que comprueba que **sirve para restaurar**.
 
-## Acceso cómodo (opcional)
+## Poder llamarlo sin `./bin/`
+
+Lo primero que querrás hacer en tu equipo:
 
 ```bash
-sudo ln -s /home/admin/scripts/bin/backupctl /usr/local/bin/backupctl
+./bin/backupctl install
 ```
 
-`backupctl` resuelve los enlaces simbólicos, así que encuentra su `lib/`
-correctamente aunque se invoque desde otra ruta.
+Crea un enlace en el primer directorio de tu `PATH` donde se pueda escribir
+—normalmente `~/.local/bin`, **sin sudo**— y comprueba que funciona:
+
+```
+[INFO ] Se usará /home/tu-usuario/.local/bin (está en tu PATH, no hace falta sudo).
+[INFO ] Enlace: /home/tu-usuario/.local/bin/backupctl  ->  /ruta/al/repo/bin/backupctl
+[  OK ] 'backupctl' ya funciona desde cualquier directorio.
+```
+
+Si no hay ninguno propio en el `PATH`, usa `/usr/local/bin` y pide `sudo`.
+
+Es un **enlace, no una copia**: al actualizar el repositorio la orden apunta
+sola a la versión nueva. `backupctl` resuelve los enlaces simbólicos, así que
+encuentra su `lib/` aunque se le llame desde otra ruta.
+
+Para deshacerlo:
+
+```bash
+backupctl install --remove
+```

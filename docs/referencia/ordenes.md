@@ -8,6 +8,7 @@ backupctl [opciones globales] <orden> [opciones]
 
 | Orden | Qué hace |
 |---|---|
+| [`install`](#install) | Dejar `backupctl` disponible en el `PATH` |
 | [`setup`](#setup) | Asistente de alta de un servidor |
 | [`tui`](#tui) | Menú interactivo (por defecto sin argumentos) |
 | [`web`](#web) | Interfaz web local en 127.0.0.1 |
@@ -61,6 +62,20 @@ Ver la tabla completa de [qué escribe cada orden](../paso-a-paso/index.md#que-e
 | `-V`, `--version` | Versión |
 
 ---
+
+## install
+
+```bash
+backupctl install
+backupctl install --remove
+```
+
+Crea un enlace simbólico a `bin/backupctl` en el primer directorio escribible
+de tu `PATH` (`~/.local/bin` o `~/bin`, sin sudo). Si no hay ninguno, usa
+`/usr/local/bin` con `sudo`.
+
+Es un enlace y no una copia, así que al actualizar el repositorio la orden
+apunta sola a la versión nueva.
 
 ## setup
 
