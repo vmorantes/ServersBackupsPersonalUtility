@@ -108,6 +108,22 @@ El sistema tiene dos formas de uso sobre **la misma lógica**:
    lo único que cambia es `env.sh`.
 5. **Reversible antes de destructivo.** Casi todo tiene `--dry-run`.
 
+## Las seis guías paso a paso
+
+Cada operación en dos versiones: **ensayo** (no toca nada) y **en serio**.
+
+| # | Guía | |
+|---|---|---|
+| 1 | [Instalar — ensayo](paso-a-paso/instalar-ensayo.md) | no escribe nada |
+| 2 | [Instalar en serio](paso-a-paso/instalar.md) | |
+| 3 | [Restaurar — ensayo](paso-a-paso/restaurar-ensayo.md) | no escribe nada |
+| 4 | [Restaurar en serio](paso-a-paso/restaurar.md) | escribe en la BD |
+| 5 | [Migrar — ensayo](paso-a-paso/migrar-ensayo.md) | no escribe nada |
+| 6 | [Migrar en serio](paso-a-paso/migrar.md) | escribe en el destino |
+
+Y una tabla de [qué escribe cada orden](paso-a-paso/index.md#que-escribe-cada-orden),
+para saber qué es seguro ejecutar sin pensarlo.
+
 ## Mapa de la documentación
 
 - **[Qué es cada cosa](empezar/que-es-cada-cosa.md)** — de todos los archivos del

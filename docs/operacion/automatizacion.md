@@ -6,6 +6,47 @@ backupctl cron --install    # instalarlo
 backupctl cron --remove     # quitarlo
 ```
 
+## En HestiaCP el cron es distinto
+
+!!! danger "Una línea puesta con `crontab -e` puede desaparecer sola"
+    En un servidor HestiaCP, `/var/spool/cron/crontabs/<user>` es un archivo
+    **generado**. La fuente de verdad es:
+
+    ```
+    /usr/local/hestia/data/users/<user>/cron.conf
+    ```
+
+    HestiaCP regenera el crontab a partir de ahí cada vez que ejecuta
+    `v-rebuild-cron-jobs`: al añadir o borrar un cron desde el panel, en
+    `v-rebuild-user`, al suspender o reactivar el usuario y en algunas
+    actualizaciones.
+
+    Una línea añadida a mano **no aparece en el panel** y se pierde en el
+    siguiente rebuild. Es una forma silenciosa de quedarse sin respaldos.
+
+`backupctl cron --install` detecta HestiaCP y usa la vía oficial:
+
+```bash
+sudo backupctl cron --install
+```
+
+Registra los trabajos con `v-add-cron-job`, de modo que quedan en `cron.conf`,
+se ven en el panel y sobreviven a los rebuilds. Necesita `sudo` porque las
+órdenes `v-*` exigen root.
+
+```bash
+sudo /usr/local/hestia/bin/v-list-cron-jobs admin     # comprobarlo
+```
+
+En HestiaCP los trabajos se registran **sin** el `|| echo "..."` que se usa en
+un crontab normal: el panel valida el campo del comando y puede rechazar
+comillas y operadores. El aviso de fallo se delega en
+[`HEALTHCHECK_URL` o `NOTIFY_*`](avisos.md), que además detectan que el respaldo
+ni llegó a arrancar.
+
+`backupctl doctor` avisa si encuentra líneas de `backupctl` puestas a mano en el
+crontab de un servidor HestiaCP, porque están condenadas a desaparecer.
+
 ## Lo que instala
 
 ```cron

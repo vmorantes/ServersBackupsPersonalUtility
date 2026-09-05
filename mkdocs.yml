@@ -79,6 +79,14 @@ nav:
       - Conceptos: empezar/conceptos.md
       - Instalación: empezar/instalacion.md
       - Primeros pasos: empezar/primeros-pasos.md
+  - Paso a paso:
+      - Las seis guías: paso-a-paso/index.md
+      - 1. Instalar — ensayo: paso-a-paso/instalar-ensayo.md
+      - 2. Instalar en serio: paso-a-paso/instalar.md
+      - 3. Restaurar — ensayo: paso-a-paso/restaurar-ensayo.md
+      - 4. Restaurar en serio: paso-a-paso/restaurar.md
+      - 5. Migrar — ensayo: paso-a-paso/migrar-ensayo.md
+      - 6. Migrar en serio: paso-a-paso/migrar.md
   - Operación:
       - Respaldar: operacion/respaldar.md
       - Verificar: operacion/verificar.md
