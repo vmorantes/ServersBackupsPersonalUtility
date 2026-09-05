@@ -107,8 +107,18 @@ Ver [Avisos](../operacion/avisos.md).
 | Variable | Por defecto | Descripción |
 |---|---|---|
 | `DEPLOY_HOST` | *(vacío)* | Servidor destino por defecto |
-| `DEPLOY_USER` | `$USER_NAME` | Usuario SSH |
+| `DEPLOY_USER` | `$USER_NAME` | **Quién se conecta** por SSH. Necesita shell |
 | `DEPLOY_PATH` | `/home/$USER_NAME/scripts` | Ruta en el destino |
+
+!!! tip "`DEPLOY_USER` y `USER_NAME` son papeles distintos"
+    | Variable | Papel | ¿Necesita shell? |
+    |---|---|---|
+    | `DEPLOY_USER` | Quién abre la sesión SSH | **Sí** |
+    | `USER_NAME` | De quién es la instalación y los respaldos | No |
+
+    En HestiaCP muchos usuarios se crean con `nologin`. En vez de darles acceso,
+    conéctate como `admin` e instala en el home del otro: `deploy` ajusta el
+    propietario con `chown` al terminar.
 
 Con estas definidas, `backupctl deploy` y `migrate` funcionan sin argumentos.
 

@@ -61,7 +61,9 @@ La referencia rápida para saber qué es seguro ejecutar sin pensarlo.
 | `deploy --dry-run` | No | Se conecta por SSH y lista |
 | `pull --dry-run` | No | Se conecta por SSH y compara |
 | `migrate --dry-run` | No | Se conecta por SSH y comprueba |
+| `remote <orden>` | Depende | Lo que escriba la orden que ejecutes allí |
 | `verify --restore-test` | **Sí** | Crea una BD desechable y **la borra** al terminar |
+| `setup` | **Sí** | Escribe `env.sh` y, si se lo pides, crea un usuario de MySQL |
 | `backup` | **Sí** | Crea un `.zip`, un log y aplica retención |
 | `retention` | **Sí** | **Borra** respaldos y logs antiguos |
 | `restore` | **Sí** | **Escribe en la base de datos** |

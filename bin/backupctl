@@ -32,7 +32,7 @@ export BC_ROOT BC_VERSION
 
 # --- Carga de la biblioteca --------------------------------------------------
 for _m in core config mysql notify retention backup verify restore archive \
-          restic doctor cron logs ssh deploy pull remote migrate tui; do
+          restic doctor cron logs ssh deploy pull remote migrate setup tui; do
   # shellcheck source=/dev/null
   source "$BC_ROOT/lib/$_m.sh" || { echo "ERROR: no se pudo cargar lib/$_m.sh" >&2; exit 2; }
 done
@@ -70,6 +70,10 @@ ${BC_BLD}USO${BC_RST}
   backupctl [opciones] <orden> [...]  ejecuta una orden directamente
 
 ${BC_BLD}LEYENDA${BC_RST}   ${BC_GRN}·${BC_RST} solo lee, no toca nada   ${BC_YEL}~${BC_RST} escribe en disco   ${BC_RED}!${BC_RST} escribe en la BD o borra
+
+${BC_BLD}EMPEZAR${BC_RST}
+  ${BC_YEL}~${BC_RST} ${BC_CYA}setup${BC_RST}                  asistente: pregunta lo necesario, crea el usuario de
+                           MySQL si hace falta, escribe env.sh y despliega
 
 ${BC_BLD}ORDENES PRINCIPALES${BC_RST}
   ${BC_GRN}·${BC_RST} ${BC_CYA}status${BC_RST}                 ¿estoy protegido ahora mismo? (código != 0 si no)
@@ -126,6 +130,7 @@ ${BC_BLD}OPCIONES POR ORDEN${BC_RST}
   config    --show-secrets
 
 ${BC_BLD}EJEMPLOS${BC_RST}
+  backupctl setup                              dar de alta un servidor, paso a paso
   backupctl                                    menú interactivo
   backupctl backup                             respaldo completo (esto va en cron)
   backupctl backup --only tienda --dry-run     simular el respaldo de una BD
@@ -189,6 +194,11 @@ fi
 case "$BC_CMD" in
   help)     bc_usage; exit 0 ;;
   version)  echo "backupctl $BC_VERSION"; exit 0 ;;
+  setup)
+    bc_setup_run "${1:-}"
+    exit $?
+    ;;
+
   profiles)
     bc_section "Perfiles disponibles"
     if [[ -z "$(bc_config_list)" ]]; then

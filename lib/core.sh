@@ -54,6 +54,14 @@ bc_section() {
 # o si hay que asumir valores por defecto (modo desatendido).
 bc_is_tty() { [[ -t 0 && -t 1 ]]; }
 
+# ¿Se puede preguntar algo por teclado?
+#
+# Comprueba SOLO la entrada, no la salida. La diferencia importa: las funciones
+# que preguntan se invocan dentro de $(...), donde stdout es una tubería y no un
+# terminal. Usar bc_is_tty aquí haría que nunca llegaran a preguntar y
+# devolvieran siempre el valor por defecto en silencio.
+bc_can_prompt() { [[ -t 0 ]]; }
+
 # Comprueba que existan las órdenes indicadas. Falla con un mensaje que dice
 # exactamente qué falta, en lugar de un "command not found" a mitad del proceso.
 bc_require_cmd() {
@@ -78,16 +86,59 @@ bc_confirm() {
     bc_debug "confirmación automática (--yes): $prompt"
     return 0
   fi
-  if ! bc_is_tty; then
+  if ! bc_can_prompt; then
     bc_debug "sin terminal, se usa el valor por defecto ($default): $prompt"
     [[ "$default" == "y" ]]
     return
   fi
   local hint="[s/N]"; [[ "$default" == "y" ]] && hint="[S/n]"
   local ans
-  read -r -p "$(printf '%s%s%s %s ' "$BC_BLD" "$prompt" "$BC_RST" "$hint")" ans
+  # El prompt va a stderr: bc_confirm puede llamarse dentro de $(...)
+  printf '%s%s%s %s ' "$BC_BLD" "$prompt" "$BC_RST" "$hint" >&2
+  read -r ans
   ans="${ans:-$default}"
   [[ "$ans" =~ ^[sSyY]$ ]]
+}
+
+# -----------------------------------------------------------------------------
+# Preguntas interactivas
+# -----------------------------------------------------------------------------
+# Pregunta visible, con valor por defecto.
+bc_ask() {
+  local prompt="$1" default="${2:-}" v
+  if ! bc_can_prompt; then printf '%s' "$default"; return 0; fi
+  if [[ -n "$default" ]]; then
+    printf '%s%s%s [%s]: ' "$BC_BLD" "$prompt" "$BC_RST" "$default" >&2
+  else
+    printf '%s%s%s: ' "$BC_BLD" "$prompt" "$BC_RST" >&2
+  fi
+  read -r v
+  printf '%s' "${v:-$default}"
+}
+
+# Pregunta oculta, para contraseñas. Nunca se muestra ni queda en el historial.
+bc_ask_secret() {
+  local prompt="$1" v
+  bc_can_prompt || return 1
+  printf '%s%s%s: ' "$BC_BLD" "$prompt" "$BC_RST" >&2
+  read -rs v
+  printf '\n' >&2
+  printf '%s' "$v"
+}
+
+# Contraseña aleatoria fuerte. Se limita a caracteres alfanuméricos a propósito:
+# evita cualquier problema de citado al pasar por SQL, por shell y por env.sh.
+#
+# Se lee en bloques acotados en lugar de `tr < /dev/urandom | head -c N`: ahí
+# head cierra la tubería al llegar a N, tr muere con SIGPIPE y, con pipefail,
+# eso aborta el programa entero.
+bc_gen_password() {
+  local n="${1:-28}" out="" chunk
+  while (( ${#out} < n )); do
+    chunk="$(head -c 256 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' || true)"
+    out="$out$chunk"
+  done
+  printf '%s' "${out:0:n}"
 }
 
 # Tamaño legible a partir de bytes.

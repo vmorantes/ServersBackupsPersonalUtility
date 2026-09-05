@@ -272,6 +272,7 @@ bc_tui_menu_migrate() {
     "SUBIR   = llevar backupctl y la config del repo al servidor.\nDESCARGAR = traer al repo lo que hay realmente en el servidor.\nMIGRAR  = copiar las bases de datos a OTRA máquina." \
     desplegar "SUBIR: instalar o actualizar backupctl en un servidor" \
     descargar "DESCARGAR: traer al repo el estado real de un servidor" \
+    remoto    "EJECUTAR una orden en el servidor, sin salir de aquí" \
     simular   "Simular una migración de bases de datos" \
     migrar    "MIGRAR las bases de datos a otro servidor" \
   )" || return 0
@@ -283,6 +284,27 @@ bc_tui_menu_migrate() {
   case "$c" in
     desplegar) BC_OPT_DRY=0; bc_tui_exec "Subiendo a $target" bc_deploy_run "$target" ;;
     descargar) BC_OPT_DRY=0; bc_tui_exec "Descargando de $target" bc_pull_run "$target" ;;
+    remoto)
+      local c2
+      c2="$(bc_tui_menu "Ejecutar en $target" "La salida se ve en vivo, como si estuvieras allí." \
+        status  "Estado del respaldo en el servidor" \
+        doctor  "Diagnóstico del servidor" \
+        backup  "Respaldar AHORA en el servidor" \
+        verify  "Verificar el último respaldo del servidor" \
+        list    "Respaldos guardados en el servidor" \
+        logs    "Errores del último log del servidor" \
+        cronver "Ver la programación del servidor" \
+        croninst "INSTALAR la programación en el servidor" \
+      )" || return 0
+      BC_OPT_TO="$target"
+      case "$c2" in
+        status|doctor|backup|verify|list) bc_tui_exec "$target · $c2" bc_remote_run "$c2" ;;
+        logs)     bc_tui_exec "$target · logs" bc_remote_run logs --errors ;;
+        cronver)  bc_tui_exec "$target · cron --show" bc_remote_run cron --show ;;
+        croninst) bc_tui_exec "$target · cron --install" bc_remote_run cron --install ;;
+      esac
+      BC_OPT_TO=""
+      ;;
     simular)   BC_OPT_TO="$target"; BC_OPT_DRY=1; bc_tui_exec "Simulación de migración" bc_migrate_run; BC_OPT_DRY=0 ;;
     migrar)
       if bc_tui_yesno "Respaldo fresco" "¿Generar un respaldo NUEVO antes de migrar?\n\nSí = se migran los datos de ahora mismo.\nNo = se usa el último respaldo existente."; then

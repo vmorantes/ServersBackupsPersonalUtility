@@ -9,11 +9,26 @@ destino.
 
 ## Requisitos
 
-- Acceso SSH **por clave** (sin contraseña interactiva):
+- Un usuario que pueda entrar por SSH. **Vale con contraseña**: se pide una sola
+  vez para todo el despliegue. Con clave no la pide nunca:
   ```bash
-  ssh-copy-id admin@servidor.example
+  ssh-copy-id admin@servidor.example      # opcional, pero cómodo
   ```
-- `rsync` en ambos extremos.
+- `rsync` en tu equipo. En el servidor, si falta, `deploy` se ofrece a
+  instalarlo.
+
+!!! tip "El usuario que conecta no tiene que ser el propietario"
+    En HestiaCP muchos usuarios se crean con `nologin`. No hay que darles shell:
+    conéctate con uno que sí la tenga y declara en `env.sh` de quién es la
+    instalación.
+
+    ```bash
+    export DEPLOY_USER="admin"      # quién se conecta
+    export USER_NAME="cliente07"    # de quién es la instalación
+    ```
+
+    `deploy` crea los directorios (con `sudo` si hace falta) y ajusta el
+    propietario al final.
 
 ## Ensayo primero
 
@@ -34,17 +49,17 @@ hace falta. Una instalación mínima de Debian/Ubuntu **no trae `zip` ni
 [  OK ] todas las dependencias están presentes en el servidor.
 ```
 
-Si falta algo, te da la línea exacta con los nombres de **paquete**:
+Si falta algo, **se ofrece a instalarlo**:
 
 ```
-[ERROR] faltan órdenes en el servidor: rsync zip find
-[ERROR] Instálalas allí y vuelve a intentarlo:
-[ERROR]     sudo apt update && sudo apt install -y findutils rsync zip
+[AVISO] faltan órdenes en el servidor: rsync zip
+¿Instalarlas ahora en el servidor (apt install rsync zip)? [S/n]
+[  OK ] paquetes instalados.
 ```
 
-Sin `rsync` se aborta, porque es imprescindible para la propia copia. Con otras
-ausencias avisa y pregunta: el despliegue puede completarse e instalarlas
-después.
+Si prefieres hacerlo tú, te da la línea exacta con los nombres de **paquete**
+(no de orden: el paquete de `find` se llama `findutils`). Sin `rsync` se aborta,
+porque es imprescindible para la propia copia.
 
 ## Qué hace
 

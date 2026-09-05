@@ -15,6 +15,22 @@ backupctl --help                # ayuda, con la leyenda de qué escribe cada ord
 backupctl profiles              # servidores que conoce el repositorio
 ```
 
+### Dar de alta un servidor
+
+```bash
+backupctl setup                 # asistente: pregunta todo y despliega
+```
+
+### Operar el servidor sin entrar por SSH
+
+```bash
+backupctl -p MiVPS remote status
+backupctl -p MiVPS remote backup
+backupctl -p MiVPS remote verify --restore-test tienda --with-data
+backupctl -p MiVPS remote cron --install      # usa sudo solo si hace falta
+backupctl -p MiVPS remote logs --errors
+```
+
 ### ¿Estoy protegido?
 
 ```bash
@@ -145,15 +161,19 @@ backupctl verify --restore-test <bd> --with-data
 
 | Qué | ¿Pide algo? |
 |---|---|
-| MySQL | **Nunca.** Sale de `env.sh` |
-| SSH (`deploy`, `pull`, `migrate`) | **No se queda esperando.** Comprueba el acceso por clave y falla con un mensaje claro si no lo hay |
+| MySQL, al respaldar | **Nunca.** Sale de `env.sh` |
+| MySQL, en `setup` | **Sí**, y a propósito: te pide una credencial de administrador para crear el usuario de respaldo. **No se guarda** |
+| SSH | **Sí si hace falta**, y **una sola vez** para toda la operación. Funciona con clave o con contraseña |
 | `sudo` | **Sí puede**, en `cron --install` bajo HestiaCP y en `restic`. Se avisa antes |
 
-Si SSH no está configurado por clave:
+!!! info "Una conexión, una contraseña"
+    Un despliegue hace unas ocho conexiones SSH. `backupctl` abre una conexión
+    maestra y todo lo demás viaja por ella, así que la contraseña se pide una
+    vez. No hace falta configurar claves, aunque con `ssh-copy-id admin@servidor`
+    no te la pedirá nunca.
 
-```bash
-ssh-copy-id admin@servidor
-```
+    Sin terminal (cron, scripts) se exige clave y se falla con un mensaje claro
+    en lugar de quedarse esperando.
 
 Para evitar que `sudo` pregunte a mitad, lanza la orden entera con sudo:
 

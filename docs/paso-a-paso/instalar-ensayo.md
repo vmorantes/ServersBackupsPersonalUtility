@@ -61,30 +61,31 @@ backupctl -p MiVPS config --show      # valores efectivos, contraseña oculta
 Esto es lo único que hay que tener **antes** de desplegar. Todo lo demás lo crea
 `deploy`.
 
-### 3.1 Acceso SSH por clave
+### 3.1 Un usuario que pueda entrar por SSH
 
 ```bash
 ssh admin@mivps.example.com 'hostname; bash --version | head -1'
 ```
 
-Si pide contraseña:
+**Vale con contraseña**: `backupctl` abre una conexión maestra y la pide una sola
+vez para toda la operación. Con clave no la pide nunca, que es más cómodo:
 
 ```bash
-ssh-copy-id admin@mivps.example.com
+ssh-copy-id admin@mivps.example.com     # opcional
 ```
 
-!!! warning "En HestiaCP, el usuario puede no tener shell"
-    Los usuarios de HestiaCP se crean a menudo con `nologin`, así que la clave
-    no basta: SSH acepta y cierra al instante.
-
-    Actívalo en el panel: **Usuarios → editar el usuario → SSH Access → bash**.
-    O desde la línea de órdenes:
+!!! tip "Si el usuario propietario no tiene shell, NO hace falta dárselo"
+    Los usuarios de HestiaCP se crean a menudo con `nologin`: SSH acepta y
+    cierra al instante. En vez de cambiarles el acceso, conéctate con uno que sí
+    tenga shell y declara de quién es la instalación:
 
     ```bash
-    sudo v-change-user-shell admin bash
+    export DEPLOY_USER="admin"      # quién se conecta   (necesita shell)
+    export USER_NAME="cliente07"    # de quién es todo   (no la necesita)
     ```
 
-    El usuario `admin` suele tenerlo ya.
+    `deploy` ajusta el propietario con `chown` al terminar. El usuario `admin`
+    suele tener bash ya.
 
 ### 3.2 Paquetes
 
@@ -98,20 +99,30 @@ sudo apt update && sudo apt install -y zip unzip rsync
 `mysql`, `mysqldump`, `gzip`, `find`, `sha256sum` y `flock` ya vienen con
 HestiaCP y con el sistema base.
 
-!!! tip "No hace falta que lo memorices"
-    `deploy` comprueba las dependencias del servidor **antes de copiar nada** y,
-    si falta algo, te da la línea exacta de `apt install` con los nombres de
-    paquete correctos:
+!!! tip "En realidad no hace falta que lo hagas tú"
+    `deploy` comprueba las dependencias **antes de copiar nada** y se ofrece a
+    instalarlas:
 
     ```
-    [ERROR] faltan órdenes en el servidor: rsync zip
-    [ERROR] Instálalas allí y vuelve a intentarlo:
-    [ERROR]     sudo apt update && sudo apt install -y rsync zip
+    [AVISO] faltan órdenes en el servidor: rsync zip
+    ¿Instalarlas ahora en el servidor (apt install rsync zip)? [S/n]
+    [  OK ] paquetes instalados.
     ```
+
+    Si prefieres hacerlo tú, te da la línea exacta con los nombres de paquete
+    correctos.
 
 ### 3.3 Un usuario de MySQL con permisos
 
-Si el VPS ya tenía respaldos, reutiliza el que ya usabas. Para uno nuevo:
+!!! tip "O deja que lo cree el asistente"
+    ```bash
+    backupctl setup
+    ```
+    Te pide una credencial de **administrador** de MySQL, crea el usuario de
+    respaldo con los permisos justos y una contraseña aleatoria, y **descarta la
+    credencial de administrador**: no se guarda en ningún archivo.
+
+Si el VPS ya tenía respaldos, reutiliza el que ya usabas. Para crearlo a mano:
 
 ```sql
 CREATE USER 'admin_general'@'localhost' IDENTIFIED BY 'una-contraseña-larga';
@@ -229,8 +240,8 @@ Antes de pasar a la instalación en serio:
 
 - [ ] `backupctl -p MiVPS config --check` devuelve `0`
 - [ ] `ssh admin@mivps` entra sin pedir contraseña **y da una shell**
-- [ ] `zip`, `unzip` y `rsync` instalados en el VPS
-- [ ] Usuario de MySQL creado y con permisos comprobados
+- [ ] `zip`, `unzip` y `rsync` en el VPS (o dejar que `deploy` los instale)
+- [ ] Usuario de MySQL creado (o dejar que `backupctl setup` lo cree)
 - [ ] `deploy --dry-run` dice que no falta ninguna dependencia
 - [ ] Sé cuánto ocupan las bases de datos y cuánto disco libre hay
 - [ ] Sé qué crons tiene ya el usuario en HestiaCP

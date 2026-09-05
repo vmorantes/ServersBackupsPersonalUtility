@@ -32,13 +32,19 @@ bc_migrate_run() {
   bc_section "Migración hacia $target"
 
   # --- 1. Comprobaciones previas ---------------------------------------------
-  bc_log "Comprobando el destino..."
-  ssh -o BatchMode=yes -o ConnectTimeout=10 "$target" "test -x '$path/bin/backupctl'" 2>/dev/null \
+  # Una sola conexión maestra: la migración hace media docena de consultas más
+  # una restauración por base de datos. Sin esto, con autenticación por
+  # contraseña la pediría en cada una.
+  bc_log "Conectando con el destino (si hace falta contraseña, se pedirá una sola vez)..."
+  bc_ssh_init "$target" || bc_die "no se pudo conectar a $target."
+  trap 'bc_ssh_close' RETURN
+
+  bc_ssh "test -x '$path/bin/backupctl'" 2>/dev/null \
     || bc_die "no hay un backupctl ejecutable en $target:$path. Despliégalo antes: backupctl deploy $target"
   bc_ok "backupctl encontrado en el destino."
 
   local remote_ok
-  remote_ok="$(ssh "$target" "'$path/bin/backupctl' config --check >/dev/null 2>&1 && echo si || echo no")"
+  remote_ok="$(bc_ssh "'$path/bin/backupctl' config --check >/dev/null 2>&1 && echo si || echo no")"
   [[ "$remote_ok" == "si" ]] || bc_die "la configuración del destino no es válida. Ejecuta allí: $path/bin/backupctl doctor"
   bc_ok "la configuración del destino es válida."
 
@@ -92,17 +98,17 @@ bc_migrate_run() {
   local remote_zip="$path/output/mysql_backups/$(basename "$zip_path")"
   bc_section "Transferencia"
   bc_log "Enviando $(bc_human_size "$(stat -c %s "$zip_path")")..."
-  ssh "$target" "mkdir -p '$path/output/mysql_backups'"
+  bc_ssh "mkdir -p '$path/output/mysql_backups'"
   # -P: reanudable y con progreso. Un respaldo de 40 MB por una línea lenta
   # agradece poder continuar donde se cortó.
-  rsync -azP "$zip_path" "$target:$remote_zip" \
+  bc_rsync -azP "$zip_path" "$target:$remote_zip" \
     || bc_die "falló la transferencia."
   bc_ok "Transferido a $target:$remote_zip"
 
   # Verificación del archivo YA EN DESTINO: una transferencia corrupta que se
   # restaura es peor que una que falla.
   bc_log "Verificando el archivo en el destino..."
-  ssh "$target" "'$path/bin/backupctl' verify '$remote_zip' --quick" >/dev/null 2>&1 \
+  bc_ssh "'$path/bin/backupctl' verify '$remote_zip' --quick" >/dev/null 2>&1 \
     || bc_die "el archivo transferido no supera la verificación en el destino."
   bc_ok "El archivo llegó íntegro."
 
@@ -114,7 +120,7 @@ bc_migrate_run() {
     local into="$db"
     [[ -n "${BC_OPT_PREFIX:-}" ]] && into="${BC_OPT_PREFIX}${db}"
     bc_step "  $db → $into"
-    if ssh "$target" "'$path/bin/backupctl' restore '$remote_zip' '$db' --into '$into' --yes" 2>&1 | sed 's/^/        /'; then
+    if bc_ssh "'$path/bin/backupctl' restore '$remote_zip' '$db' --into '$into' --yes" 2>&1 | sed 's/^/        /'; then
       done_n=$(( done_n + 1 ))
     else
       bc_err "  falló la restauración de '$db'"
@@ -135,7 +141,7 @@ bc_migrate_run() {
     local into="$db"
     [[ -n "${BC_OPT_PREFIX:-}" ]] && into="${BC_OPT_PREFIX}${db}"
     local d_tables
-    d_tables="$(ssh "$target" "'$path/bin/backupctl' exec-count '$into'" 2>/dev/null || echo '?')"
+    d_tables="$(bc_ssh "'$path/bin/backupctl' exec-count '$into'" 2>/dev/null || echo '?')"
     local verdict="ok"
     if [[ "$o_tables" != "$d_tables" ]]; then verdict="DIFIERE"; mismatch=$(( mismatch + 1 )); fi
     printf '%s\t%s\t%s\t%s\n' "$db" "$o_tables" "$d_tables" "$verdict" >> "$rows_file"

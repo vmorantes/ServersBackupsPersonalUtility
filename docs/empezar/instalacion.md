@@ -30,17 +30,29 @@ Solo tres cosas. El resto lo crea `deploy`.
 
 | Requisito | Comprobación | Si falta |
 |---|---|---|
-| **Acceso SSH por clave** | `ssh admin@servidor hostname` | `ssh-copy-id admin@servidor` |
-| **`zip`, `unzip`, `rsync`** | `deploy` lo comprueba solo | `sudo apt install -y zip unzip rsync` |
-| **Usuario de MySQL** | `mysql -u X -p -e "SHOW DATABASES;"` | Ver los `GRANT` de abajo |
+| **Un usuario con acceso SSH** | `ssh admin@servidor hostname` | Vale contraseña; se pide una sola vez |
+| **`zip`, `unzip`, `rsync`** | `deploy` lo comprueba solo | **`deploy` se ofrece a instalarlos** |
+| **Usuario de MySQL** | `mysql -u X -p -e "SHOW DATABASES;"` | **`backupctl setup` puede crearlo** |
 
-!!! warning "HestiaCP: el usuario puede no tener shell"
-    Los usuarios de HestiaCP suelen crearse con `nologin`, así que SSH acepta la
-    clave y cierra al instante. Actívalo en **Usuarios → SSH Access → bash**, o:
+!!! tip "O deja que el asistente lo haga todo"
+    ```bash
+    backupctl setup
+    ```
+    Pregunta lo necesario, crea el usuario de MySQL si le das una credencial de
+    administrador —que no se guarda—, escribe el `env.sh` y despliega.
+
+!!! tip "HestiaCP: si el usuario no tiene shell, NO hace falta dárselo"
+    Los usuarios de HestiaCP suelen crearse con `nologin`, así que SSH acepta y
+    cierra al instante. En lugar de cambiarles el acceso, conéctate con uno que
+    sí tenga shell (`admin` o `root`) y declara de quién es la instalación:
 
     ```bash
-    sudo v-change-user-shell admin bash
+    export DEPLOY_USER="admin"      # quién se conecta
+    export USER_NAME="cliente07"    # de quién es la instalación
     ```
+
+    Solo si prefieres darle shell: **Usuarios → SSH Access → bash**, o
+    `sudo v-change-user-shell admin bash`.
 
 **No hace falta** crear `/home/admin/scripts`, ni `logs/`, ni `output/`: los crea
 `deploy`.

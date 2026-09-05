@@ -7,6 +7,25 @@ Tiempo: unos 30 minutos. Los pasos marcados 🛡️ **no tocan nada**.
 
 ---
 
+## La vía rápida: el asistente
+
+Si no quieres pensar en nada, esto hace las partes 1, 2 y 3 de una vez:
+
+```bash
+cd /ruta/al/repositorio
+backupctl setup
+```
+
+Pregunta el servidor, el usuario, la ruta y las credenciales; si no tienes un
+usuario de MySQL para respaldos, te pide **una credencial de administrador** de
+la base de datos, crea el usuario con sus permisos y **descarta la credencial de
+administrador** (no se guarda en ningún sitio). Después escribe el `env.sh` y
+ofrece desplegar.
+
+Si prefieres verlo paso a paso, sigue leyendo.
+
+---
+
 ## Parte 1 · En tu equipo (5 min)
 
 ```bash
@@ -21,16 +40,21 @@ cp config/env.sh.example MiVPS/env.sh
 ${EDITOR:-nano} MiVPS/env.sh
 ```
 
-Rellena estas seis líneas y deja el resto como está:
+Rellena estas líneas y deja el resto como está:
 
 ```bash
-export USER_NAME="admin"                  # usuario de HestiaCP
+export USER_NAME="admin"                  # de quién es la instalación
 export MYSQL_USER="admin_general"
 export MYSQL_PASS="la-contraseña"
 export DEPLOY_HOST="mivps.example.com"
-export DEPLOY_USER="admin"
+export DEPLOY_USER="admin"                # quién se conecta por SSH
 export HEALTHCHECK_URL=""                 # se rellena en la parte 5
 ```
+
+!!! tip "`USER_NAME` y `DEPLOY_USER` pueden ser distintos"
+    En HestiaCP muchos usuarios tienen `nologin` y no pueden entrar por SSH.
+    Conéctate con uno que sí pueda (`DEPLOY_USER`) e instala en el home del otro
+    (`USER_NAME`). `deploy` ajusta el propietario al final.
 
 ```bash
 # 🛡️ ¿Es válida?

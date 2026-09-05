@@ -8,6 +8,7 @@ backupctl [opciones globales] <orden> [opciones]
 
 | Orden | Qué hace |
 |---|---|
+| [`setup`](#setup) | Asistente de alta de un servidor |
 | [`tui`](#tui) | Menú interactivo (por defecto sin argumentos) |
 | [`status`](#status) | ¿Estoy protegido ahora mismo? |
 | [`doctor`](#doctor) | Diagnóstico completo del entorno |
@@ -59,6 +60,25 @@ Ver la tabla completa de [qué escribe cada orden](../paso-a-paso/index.md#que-e
 | `-V`, `--version` | Versión |
 
 ---
+
+## setup
+
+```bash
+backupctl setup [nombre]
+```
+
+Asistente interactivo de alta. Pregunta servidor, usuario SSH, usuario
+propietario, ruta y acceso a MySQL; escribe el `env.sh` y ofrece desplegar.
+
+Si no tienes usuario de MySQL para respaldos, te pide una credencial de
+**administrador** de la base de datos, crea el usuario con los permisos justos y
+una contraseña aleatoria de 28 caracteres, y **descarta la credencial de
+administrador**: no se guarda en ningún archivo.
+
+La credencial viaja a un temporal con permisos 600 en el servidor y se borra al
+terminar, así que nunca aparece en la línea de órdenes ni es visible en `ps`.
+
+Necesita terminal interactivo.
 
 ## tui
 
