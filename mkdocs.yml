@@ -116,5 +116,6 @@ nav:
   - Servidores:
       - TejidoTesting: servidores/tejidotesting.md
   - Desarrollo:
+      - Mantener el repositorio: desarrollo/repositorio.md
       - Arquitectura: desarrollo/arquitectura.md
       - Decisiones de diseño: desarrollo/decisiones.md

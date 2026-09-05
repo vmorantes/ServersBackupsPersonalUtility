@@ -23,11 +23,35 @@ backupctl deploy admin@servidor.example --dry-run
 
 Muestra exactamente qué archivos se copiarían, sin tocar nada.
 
+## Comprobación previa de dependencias
+
+Antes de copiar nada, `deploy` comprueba por SSH que el servidor tiene lo que
+hace falta. Una instalación mínima de Debian/Ubuntu **no trae `zip` ni
+`rsync`**.
+
+```
+[INFO ] Comprobando las dependencias del servidor...
+[  OK ] todas las dependencias están presentes en el servidor.
+```
+
+Si falta algo, te da la línea exacta con los nombres de **paquete**:
+
+```
+[ERROR] faltan órdenes en el servidor: rsync zip find
+[ERROR] Instálalas allí y vuelve a intentarlo:
+[ERROR]     sudo apt update && sudo apt install -y findutils rsync zip
+```
+
+Sin `rsync` se aborta, porque es imprescindible para la propia copia. Con otras
+ausencias avisa y pregunta: el despliegue puede completarse e instalarlas
+después.
+
 ## Qué hace
 
 ```mermaid
 graph TD
-    A[Comprobar SSH] --> B[Crear directorios en el destino]
+    A[Comprobar SSH] --> A2[Comprobar dependencias del destino]
+    A2 --> B[Crear directorios en el destino]
     B --> C[rsync de bin/ y lib/]
     C --> D[Copiar env.sh del perfil]
     D --> E[chmod +x backupctl]

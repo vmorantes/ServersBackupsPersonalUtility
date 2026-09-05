@@ -28,6 +28,23 @@ backupctl [opciones globales] <orden> [opciones]
 | [`notify-test`](#notify-test) | Enviar un aviso de prueba |
 | [`profiles`](#profiles) | Listar perfiles |
 
+## Ensayos
+
+Admiten `--dry-run` (enseñan qué harían, sin hacerlo):
+
+```
+backup · restore · retention · restic · deploy · pull · migrate
+```
+
+Para `cron`, el ensayo es `cron --show`. Para `verify`, la versión más barata es
+`--quick`.
+
+Las demás órdenes o solo leen (`status`, `doctor`, `list`, `inspect`, `logs`,
+`config --show`, `profiles`) o son en sí mismas la comprobación
+(`notify-test`).
+
+Ver la tabla completa de [qué escribe cada orden](../paso-a-paso/index.md#que-escribe-cada-orden).
+
 ## Opciones globales
 
 | Opción | Efecto |
