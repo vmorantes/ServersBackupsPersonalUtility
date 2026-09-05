@@ -1,0 +1,111 @@
+site_name: Respaldo y migración de servidores
+site_description: Documentación operativa de backupctl — respaldo, verificación, restauración y migración de bases de datos en servidores HestiaCP
+site_author: Vicsen Morantes
+docs_dir: docs
+site_dir: site
+use_directory_urls: true
+
+theme:
+  name: material
+  language: es
+  icon:
+    logo: material/database-sync
+    repo: fontawesome/brands/github
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tooltips
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: deep orange
+      toggle:
+        icon: material/weather-night
+        name: Cambiar a modo oscuro
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: deep orange
+      toggle:
+        icon: material/weather-sunny
+        name: Cambiar a modo claro
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.keys
+  - pymdownx.caret
+  - pymdownx.mark
+  - pymdownx.tilde
+
+plugins:
+  - search:
+      lang: es
+
+nav:
+  - Inicio: index.md
+  - Empezar:
+      - Qué es cada cosa: empezar/que-es-cada-cosa.md
+      - Conceptos: empezar/conceptos.md
+      - Instalación: empezar/instalacion.md
+      - Primeros pasos: empezar/primeros-pasos.md
+  - Operación:
+      - Respaldar: operacion/respaldar.md
+      - Verificar: operacion/verificar.md
+      - Restaurar: operacion/restaurar.md
+      - Retención: operacion/retencion.md
+      - Automatización: operacion/automatizacion.md
+      - Avisos: operacion/avisos.md
+      - Claves Restic: operacion/restic.md
+  - Migración:
+      - Subir y descargar: migracion/despliegues.md
+      - Desplegar en otro servidor: migracion/desplegar.md
+      - Migrar bases de datos: migracion/migrar.md
+      - Portabilidad del volcado: migracion/portabilidad.md
+  - Interfaces:
+      - TUI interactiva: interfaces/tui.md
+      - CLI y automatización: interfaces/cli.md
+  - Referencia:
+      - Órdenes: referencia/ordenes.md
+      - Variables de configuración: referencia/variables.md
+      - Formato del respaldo: referencia/formato.md
+      - Códigos de salida: referencia/codigos.md
+  - Guías:
+      - Cuando algo falla: guias/diagnostico.md
+      - Recetas: guias/recetas.md
+      - Recuperación ante desastre: guias/desastre.md
+  - Servidores:
+      - TejidoTesting: servidores/tejidotesting.md
+  - Desarrollo:
+      - Arquitectura: desarrollo/arquitectura.md
+      - Decisiones de diseño: desarrollo/decisiones.md
