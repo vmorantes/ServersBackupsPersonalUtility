@@ -24,6 +24,27 @@ Comprueba todo de una vez:
 backupctl doctor
 ```
 
+## Qué hay que preparar en el servidor
+
+Solo tres cosas. El resto lo crea `deploy`.
+
+| Requisito | Comprobación | Si falta |
+|---|---|---|
+| **Acceso SSH por clave** | `ssh admin@servidor hostname` | `ssh-copy-id admin@servidor` |
+| **`zip`, `unzip`, `rsync`** | `deploy` lo comprueba solo | `sudo apt install -y zip unzip rsync` |
+| **Usuario de MySQL** | `mysql -u X -p -e "SHOW DATABASES;"` | Ver los `GRANT` de abajo |
+
+!!! warning "HestiaCP: el usuario puede no tener shell"
+    Los usuarios de HestiaCP suelen crearse con `nologin`, así que SSH acepta la
+    clave y cierra al instante. Actívalo en **Usuarios → SSH Access → bash**, o:
+
+    ```bash
+    sudo v-change-user-shell admin bash
+    ```
+
+**No hace falta** crear `/home/admin/scripts`, ni `logs/`, ni `output/`: los crea
+`deploy`.
+
 ## Instalar en un servidor
 
 === "Desde otra máquina (recomendado)"

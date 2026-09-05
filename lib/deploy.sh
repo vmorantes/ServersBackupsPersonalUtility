@@ -15,6 +15,23 @@
 [[ -n "${BC_DEPLOY_LOADED:-}" ]] && return 0
 BC_DEPLOY_LOADED=1
 
+# Traduce nombres de orden a nombres de paquete de Debian/Ubuntu. Sugerir
+# "apt install find" sería un consejo inútil: el paquete se llama findutils.
+bc_deploy_packages() {
+  local c pkgs=""
+  for c in $1; do
+    case "$c" in
+      mysql|mysqldump) pkgs="$pkgs mariadb-client" ;;
+      find)            pkgs="$pkgs findutils" ;;
+      sha256sum)       pkgs="$pkgs coreutils" ;;
+      flock)           pkgs="$pkgs util-linux" ;;
+      *)               pkgs="$pkgs $c" ;;   # zip, unzip, rsync, gzip, bash
+    esac
+  done
+  # Sin repetidos: mysql y mysqldump vienen del mismo paquete
+  tr ' ' '\n' <<<"$pkgs" | sed '/^$/d' | sort -u | tr '\n' ' ' | sed 's/ $//'
+}
+
 # bc_deploy_run [destino_ssh]
 #   destino: user@host   (por defecto, DEPLOY_USER@DEPLOY_HOST del perfil)
 bc_deploy_run() {
@@ -41,15 +58,52 @@ bc_deploy_run() {
   bc_ok "conectado a ${remote_info%%|*}"
   bc_log "  ${remote_info#*|}"
 
+  # --- Dependencias en el DESTINO --------------------------------------------
+  # Se comprueban ANTES de copiar nada. Sin esto, un servidor sin rsync fallaba
+  # a mitad de la transferencia con un error poco claro, y uno sin zip no daba
+  # la cara hasta el primer respaldo.
+  bc_log "Comprobando las dependencias del servidor..."
+  local remote_missing
+  remote_missing="$(ssh "$target" '
+    faltan=""
+    for c in bash rsync mysql mysqldump gzip zip unzip find sha256sum flock; do
+      command -v "$c" >/dev/null 2>&1 || faltan="$faltan $c"
+    done
+    echo "$faltan"' 2>/dev/null || echo "?")"
+
+  if [[ "$remote_missing" == "?" ]]; then
+    bc_warn "no se pudieron comprobar las dependencias del destino."
+  elif [[ -n "${remote_missing// /}" ]]; then
+    bc_err "faltan órdenes en el servidor:${remote_missing}"
+    bc_err "Instálalas allí y vuelve a intentarlo:"
+    bc_err "    sudo apt update && sudo apt install -y $(bc_deploy_packages "$remote_missing")"
+    # rsync es imprescindible para la propia copia; el resto puede esperar
+    if [[ "$remote_missing" == *rsync* ]]; then
+      bc_die "sin rsync en el destino no se puede desplegar."
+    fi
+    bc_confirm "¿Desplegar de todas formas? El respaldo no funcionará hasta instalarlas." n \
+      || bc_die "cancelado."
+  else
+    bc_ok "todas las dependencias están presentes en el servidor."
+  fi
+
   # --- Qué se va a copiar ----------------------------------------------------
   local files=(bin lib)
   bc_log "Se copiarán: ${files[*]} + env.sh del perfil '$BC_PROFILE'"
 
   if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
     bc_log "Simulación (--dry-run):"
-    rsync -avn --delete \
+    # La salida se captura en lugar de canalizarse: con set -e y pipefail, un
+    # rsync fallido en una tubería aborta el programa con un "fallo no
+    # controlado" en vez de explicar qué pasó.
+    local preview rc=0
+    preview="$(rsync -avn --delete \
       --exclude '.git' --exclude 'output' --exclude 'logs' \
-      "${files[@]/#/$BC_ROOT/}" "$target:$path/" | sed 's/^/        /'
+      "${files[@]/#/$BC_ROOT/}" "$target:$path/" 2>&1)" || rc=$?
+    sed 's/^/        /' <<<"$preview"
+    if (( rc != 0 )); then
+      bc_die "rsync no pudo hablar con el destino (código $rc). Revisa el acceso SSH y que rsync esté instalado allí."
+    fi
     bc_ok "Nada se ha copiado."
     return 0
   fi
