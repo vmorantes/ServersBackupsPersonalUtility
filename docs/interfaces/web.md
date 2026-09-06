@@ -20,6 +20,30 @@ La tercera fachada sobre la misma lógica. Lo que aporta sobre la TUI es ver
 
 Sin dependencias: solo Python 3, que ya está en cualquier sistema.
 
+## Requisito: acceso SSH por clave
+
+!!! danger "La web no puede usar contraseña de SSH"
+    El servidor lanza `backupctl` sin terminal, así que no hay dónde teclear una
+    contraseña. Se usa `BatchMode` y se rechaza antes de pedirla — colgarse
+    esperando algo que nadie puede escribir sería peor.
+
+    ```bash
+    ssh-copy-id admin@tu-servidor
+    ```
+
+    Una vez, y listo. Desde el **terminal** sí funciona la contraseña
+    (`backupctl -p MiVPS remote status`), pero para la web la clave es
+    obligatoria.
+
+Al abrir un perfil, la interfaz lo comprueba y te lo dice:
+
+```
+✗ Sin acceso por clave a admin@vps-ef720100.vps.ovh.ca
+· Las rutas del perfil no existen en este equipo
+Siguiente paso: La web no puede usar contraseña: no hay terminal donde
+teclearla. Ejecuta una vez  ssh-copy-id admin@vps-ef720100.vps.ovh.ca
+```
+
 ## Qué muestra
 
 **Panel de servidores.** Una tarjeta por perfil, con su estado resumido y un
@@ -28,12 +52,23 @@ que con diez VPS tarda lo mismo que con uno.
 
 **Detalle por servidor**, en cuatro pestañas:
 
-| Pestaña | Contiene |
-|---|---|
-| Revisar | Estado, diagnóstico, configuración, programación, tabla de respaldos |
-| Respaldar | Ensayos, respaldo, verificación, retención, prueba de restauración |
-| Servidor | Ensayos de despliegue, ejecutar órdenes en el servidor, subir y descargar |
-| Registros | Listar, solo errores, último completo |
+| Pestaña | Contiene | Se ejecuta |
+|---|---|---|
+| Revisar | Estado, diagnóstico, configuración, tabla de respaldos | aquí |
+| Respaldar | Respaldo, verificación, prueba de restauración, retención | aquí |
+| Restaurar | Restaurar una base de datos, con `--into` y `--segments` | aquí |
+| Servidor | Instalar allí, traer el estado, operar el servidor | **allí** |
+| Migrar | Trasladar las bases de datos a otra máquina | destino |
+| Programación | Cron, avisos, claves Restic | aquí o allí |
+| Configuración | Editor del `env.sh` | aquí |
+| Registros | Listar, solo errores, último completo | aquí |
+
+Cada pestaña lleva un rótulo que dice **dónde** se ejecuta lo que hay en ella.
+Si el perfil describe otra máquina, las pestañas que actúan en local lo avisan
+en ámbar y te mandan a la pestaña *Servidor*.
+
+La pestaña *Servidor* está numerada como una secuencia —instalar, traer el
+estado, operar— en lugar de ser una lista de órdenes sueltas.
 
 **Consola.** La salida real de `backupctl`, en vivo y coloreada por nivel. No es
 un resumen: es exactamente lo que verías en el terminal.

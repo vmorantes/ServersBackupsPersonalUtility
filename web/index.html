@@ -43,11 +43,20 @@
       <button class="btn btn-sec" id="btn-cerrar">Cerrar</button>
     </div>
 
+    <div id="estado-perfil" class="estado-perfil">
+      <div class="estado-fila"><span class="ico-estado" id="e-ssh">?</span>
+        <span id="t-ssh">Comprobando el servidor…</span></div>
+      <div class="estado-fila"><span class="ico-estado" id="e-ctl">?</span>
+        <span id="t-ctl"></span></div>
+      <div class="siguiente" id="t-siguiente"></div>
+    </div>
+
     <nav class="pestanas" id="pestanas">
       <button class="pestana activa" data-tab="revisar">Revisar</button>
       <button class="pestana" data-tab="respaldar">Respaldar</button>
       <button class="pestana" data-tab="restaurar">Restaurar</button>
       <button class="pestana" data-tab="servidor">Servidor</button>
+      <button class="pestana" data-tab="migrar">Migrar</button>
       <button class="pestana" data-tab="programacion">Programación</button>
       <button class="pestana" data-tab="config">Configuración</button>
       <button class="pestana" data-tab="registros">Registros</button>
@@ -73,6 +82,8 @@
 
     <!-- RESPALDAR ----------------------------------------------------------->
     <div class="tab" data-tab="respaldar" hidden>
+      <p class="rotulo" id="rotulo-local">Estas acciones se ejecutan
+         <strong>en este equipo</strong>, sobre las rutas del perfil.</p>
       <h3>Respaldar</h3>
       <div class="campos" id="form-backup">
         <label>Solo estas bases <span class="pista">separadas por comas, opcional</span>
@@ -152,9 +163,12 @@
 
     <!-- SERVIDOR ------------------------------------------------------------>
     <div class="tab" data-tab="servidor" hidden>
-      <p class="ayuda">Requiere <code>DEPLOY_HOST</code> en el perfil, o indicar el destino.</p>
+      <p class="rotulo">Instalar y operar backupctl <strong>en el servidor</strong>.
+         Requiere <code>DEPLOY_HOST</code> en el perfil.</p>
 
-      <h3>Subir y descargar</h3>
+      <h3>1 · Instalar o actualizar allí</h3>
+      <p class="ayuda">Copia <code>bin/</code>, <code>lib/</code> y el <code>env.sh</code>
+         al servidor. Los respaldos y logs que ya haya allí no se tocan.</p>
       <div class="campos" id="form-deploy">
         <label>Destino <span class="pista">vacío = el del perfil</span>
           <input type="text" data-opt="target" placeholder="admin@servidor" autocomplete="off"></label>
@@ -162,16 +176,24 @@
           <input type="text" data-opt="path" placeholder="/home/admin/scripts" autocomplete="off"></label>
       </div>
       <div class="botones">
-        <button class="btn" data-act="deploy-dry" data-form="#form-deploy">Ensayo de subida</button>
-        <button class="btn" data-act="pull-dry" data-form="#form-deploy">Ensayo de descarga</button>
+        <button class="btn" data-act="deploy-dry" data-form="#form-deploy">Ensayo: qué copiaría</button>
         <button class="btn btn-escribe" data-act="deploy" data-form="#form-deploy"
-                data-confirmar="Se copiarán bin/, lib/ y env.sh AL servidor.">Subir (deploy)</button>
-        <button class="btn btn-escribe" data-act="pull" data-form="#form-deploy"
-                data-confirmar="Se escribirá ESTADO.md y podría actualizarse el env.sh local.">
-          Descargar estado (pull)</button>
+                data-confirmar="Se copiarán bin/, lib/ y env.sh AL servidor.">Instalar en el servidor</button>
       </div>
 
-      <h3>Ejecutar en el servidor</h3>
+      <h3>2 · Traer el estado al repositorio</h3>
+      <p class="ayuda">Escribe <code>ESTADO.md</code> con lo que hay realmente allí:
+         versión, crontab, respaldos y diagnóstico.</p>
+      <div class="botones">
+        <button class="btn" data-act="pull-dry" data-form="#form-deploy">Ensayo: qué diferencias hay</button>
+        <button class="btn btn-escribe" data-act="pull" data-form="#form-deploy"
+                data-confirmar="Se escribirá ESTADO.md y podría actualizarse el env.sh local.">
+          Traer el estado</button>
+      </div>
+
+      <h3>3 · Operar el servidor desde aquí</h3>
+      <p class="ayuda">Cada botón ejecuta la orden <strong>en el servidor</strong>,
+         con la salida en vivo. Es lo mismo que entrar por SSH.</p>
       <div class="botones">
         <button class="btn" data-act="remote-status">Estado</button>
         <button class="btn" data-act="remote-doctor">Diagnóstico</button>
@@ -186,6 +208,12 @@
                 data-confirmar="Se BORRARÁN respaldos antiguos EN el servidor.">Retención allí</button>
       </div>
 
+    </div>
+
+    <!-- MIGRAR ------------------------------------------------------------->
+    <div class="tab" data-tab="migrar" hidden>
+      <p class="rotulo">Copiar las bases de datos a <strong>OTRA</strong> máquina.
+         Esto no es un respaldo: es un traslado.</p>
       <h3>Migrar a otro servidor</h3>
       <p class="ayuda">Copia las bases de datos a OTRA máquina, que debe tener
          backupctl desplegado. Compara los recuentos al terminar.</p>

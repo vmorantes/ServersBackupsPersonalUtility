@@ -50,3 +50,6 @@ export HEALTHCHECK_URL=""
 
 # --- HestiaCP ----------------------------------------------------------------
 export HESTIA_DIR="/usr/local/hestia"
+export DEPLOY_HOST="vps-ef720100.vps.ovh.ca"
+export DEPLOY_USER="admin"
+export DEPLOY_PATH="/home/admin/scripts"

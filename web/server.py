@@ -268,6 +268,69 @@ def quick_status(name):
     }
 
 
+def probe(name):
+    """¿En qué punto está este servidor? Responde en un par de segundos y sin
+    escribir nada, para poder decirle al usuario cuál es el siguiente paso en
+    lugar de dejarle adivinando entre una pared de botones."""
+    meta = profile_meta(name)
+    host = meta.get("DEPLOY_HOST", "")
+    if host.startswith("("):
+        host = ""
+    # DEPLOY_USER cae a USER_NAME si no está declarado, igual que en el propio
+    # backupctl: sin esto el destino saldría como "@servidor" y ssh fallaría con
+    # su mensaje de uso, que no dice nada útil.
+    user = meta.get("DEPLOY_USER", "") or meta.get("USER_NAME", "")
+    path = meta.get("DEPLOY_PATH", "/home/admin/scripts")
+    salida = meta.get("BACKUP_OUTPUT_DIR", "")
+    local = bool(salida) and os.path.isdir(salida)
+
+    r = {"destino": (f"{user}@{host}" if host else ""), "ruta": path,
+         "local": local, "ssh": "sin-destino", "backupctl": "?",
+         "siguiente": "", "detalle": ""}
+
+    if not host:
+        r["siguiente"] = ("Falta DEPLOY_HOST en la configuración. Sin él no se "
+                          "puede hablar con el servidor.")
+        return r
+    if not user:
+        r["ssh"] = "sin-destino"
+        r["siguiente"] = "Falta DEPLOY_USER en la configuración."
+        return r
+
+    destino = r["destino"]
+    try:
+        c = subprocess.run(
+            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
+             "-o", "StrictHostKeyChecking=accept-new", destino,
+             f"test -x '{path}/bin/backupctl' && echo SI || echo NO"],
+            capture_output=True, text=True, timeout=20)
+    except Exception as e:
+        r["ssh"] = "error"; r["detalle"] = str(e)
+        r["siguiente"] = "No se pudo intentar la conexión."
+        return r
+
+    if c.returncode != 0:
+        err = (c.stderr or "").strip()
+        r["detalle"] = err.splitlines()[-1] if err else "sin detalle"
+        if "Permission denied" in err or "publickey" in err:
+            r["ssh"] = "sin-clave"
+            r["siguiente"] = (f"La web no puede usar contraseña: no hay terminal donde "
+                              f"teclearla. Ejecuta una vez  ssh-copy-id {destino}")
+        else:
+            r["ssh"] = "error"
+            r["siguiente"] = "No se llega al servidor. Comprueba DEPLOY_HOST y la red."
+        return r
+
+    r["ssh"] = "ok"
+    r["backupctl"] = "si" if c.stdout.strip() == "SI" else "no"
+    if r["backupctl"] == "no":
+        r["siguiente"] = ("El servidor responde pero no tiene backupctl. "
+                          "Empieza por «Instalar en el servidor».")
+    else:
+        r["siguiente"] = "Todo listo: puedes operar el servidor desde aquí."
+    return r
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "backupctl-web"
 
@@ -352,6 +415,12 @@ class Handler(BaseHTTPRequestHandler):
                                       "edad": c[4],
                                       "bd": c[5] if len(c) > 5 else "?"})
             return self._json({"respaldos": filas})
+
+        if u.path == "/api/probe":
+            name = parse_qs(u.query).get("profile", [""])[0]
+            if not SAFE_NAME.match(name or ""):
+                return self._json({"error": "perfil no válido"}, 400)
+            return self._json(probe(name))
 
         if u.path == "/api/config-raw":
             name = parse_qs(u.query).get("profile", [""])[0]

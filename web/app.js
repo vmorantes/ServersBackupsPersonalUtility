@@ -138,7 +138,7 @@ async function ejecutar(accion, opts, endpoint) {
   } finally {
     ejecutando = false;
     $$('.btn').forEach(b => b.disabled = false);
-    if (perfilActual) cargarRespaldos(perfilActual);
+    if (perfilActual) { cargarRespaldos(perfilActual); sondear(perfilActual); }
     cargarPanel();
   }
 }
@@ -267,11 +267,61 @@ async function cargarPanel() {
   }
 }
 
+// --- Estado del despliegue ---------------------------------------------------
+// Responde a "¿en qué punto estoy?" antes de que el usuario tenga que
+// deducirlo de una pared de botones.
+async function sondear(nombre) {
+  const ico = (el, s) => { const e = $(el); e.textContent = s;
+    e.className = 'ico-estado ' + (s === '✓' ? 'i-ok' : s === '✗' ? 'i-mal' : 'i-duda'); };
+  ico('#e-ssh', '·'); ico('#e-ctl', '·');
+  $('#t-ssh').textContent = 'Comprobando el servidor…';
+  $('#t-ctl').textContent = '';
+  $('#t-siguiente').textContent = '';
+
+  let d;
+  try {
+    d = await (await api('/api/probe?profile=' + encodeURIComponent(nombre))).json();
+  } catch (e) { $('#t-ssh').textContent = e.message; return; }
+
+  const mapa = {
+    'ok':          ['✓', 'Conectado a ' + d.destino],
+    'sin-clave':   ['✗', 'Sin acceso por clave a ' + d.destino],
+    'error':       ['✗', 'No se llega a ' + d.destino + (d.detalle ? ' — ' + d.detalle : '')],
+    'sin-destino': ['✗', 'Sin DEPLOY_HOST: este perfil no sabe a qué servidor conectarse'],
+  };
+  const [i, t] = mapa[d.ssh] || ['?', 'Estado desconocido'];
+  ico('#e-ssh', i); $('#t-ssh').textContent = t;
+
+  if (d.ssh === 'ok') {
+    ico('#e-ctl', d.backupctl === 'si' ? '✓' : '✗');
+    $('#t-ctl').textContent = d.backupctl === 'si'
+      ? 'backupctl instalado en ' + d.ruta
+      : 'backupctl NO está en ' + d.ruta;
+  } else {
+    ico('#e-ctl', '·');
+    $('#t-ctl').textContent = d.local
+      ? 'Las rutas del perfil sí existen en este equipo'
+      : 'Las rutas del perfil no existen en este equipo';
+  }
+  $('#t-siguiente').textContent = d.siguiente ? 'Siguiente paso: ' + d.siguiente : '';
+
+  // Si el perfil es de otra máquina, avisar en las pestañas que actúan aquí
+  const rot = $('#rotulo-local');
+  if (rot) {
+    rot.classList.toggle('rotulo-aviso', !d.local);
+    rot.innerHTML = d.local
+      ? 'Estas acciones se ejecutan <strong>en este equipo</strong>, sobre las rutas del perfil.'
+      : 'Ojo: estas acciones se ejecutan <strong>en este equipo</strong>, pero las rutas ' +
+        'de este perfil están en el servidor. Lo que buscas está en la pestaña <strong>Servidor</strong>.';
+  }
+}
+
 // --- Detalle de un perfil ----------------------------------------------------
 function seleccionar(nombre) {
   perfilActual = nombre;
   $('#titulo-perfil').textContent = nombre;
   $('#panel-detalle').hidden = false;
+  sondear(nombre);
   $$('.tarjeta').forEach(t => t.classList.toggle(
     'sel', t.querySelector('.tarjeta-nombre').textContent === nombre));
   cargarRespaldos(nombre);

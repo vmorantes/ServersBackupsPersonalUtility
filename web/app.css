@@ -245,3 +245,30 @@ input[type=password] {
   background: var(--consola-fondo); color: var(--consola-texto);
 }
 .editor:focus { outline: 2px solid var(--acento); outline-offset: -1px; }
+
+/* --- Estado del despliegue ----------------------------------------------- */
+.estado-perfil {
+  margin: 12px 0 4px; padding: 12px 14px;
+  border: 1px solid var(--borde); border-radius: 8px; background: var(--fondo);
+  display: flex; flex-direction: column; gap: 5px; font-size: 13px;
+}
+.estado-fila { display: flex; align-items: flex-start; gap: 9px; }
+.ico-estado { flex: 0 0 auto; width: 14px; font-weight: 700; text-align: center; }
+.i-ok   { color: var(--ok); }
+.i-mal  { color: var(--error); }
+.i-duda { color: var(--suave); }
+.siguiente {
+  margin-top: 4px; padding-top: 8px; border-top: 1px dashed var(--borde);
+  color: var(--acento); font-size: 13px;
+}
+.siguiente:empty { display: none; }
+
+/* --- Rótulo de "dónde se ejecuta esto" ----------------------------------- */
+.rotulo {
+  margin: 0 0 16px; padding: 9px 12px; font-size: 13px;
+  border-left: 3px solid var(--acento); background: var(--fondo);
+  border-radius: 0 6px 6px 0; color: var(--suave);
+}
+.rotulo strong { color: var(--texto); }
+.rotulo-aviso { border-left-color: var(--aviso); color: var(--aviso); }
+.rotulo-aviso strong { color: var(--aviso); }

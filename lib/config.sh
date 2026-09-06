@@ -210,6 +210,7 @@ bc_config_show() {
     printf '\t\n'
     printf 'HESTIA_DIR\t%s\n' "$HESTIA_DIR"
     printf 'DEPLOY_HOST\t%s\n' "${DEPLOY_HOST:-(sin configurar)}"
+    printf 'DEPLOY_USER\t%s\n' "$DEPLOY_USER"
     printf 'DEPLOY_PATH\t%s\n' "$DEPLOY_PATH"
   } | bc_table
 }
