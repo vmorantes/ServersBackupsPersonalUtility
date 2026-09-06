@@ -19,11 +19,15 @@ Si solo te llevas tres cosas de esta documentación, que sean estas.
 === "¿Estoy protegido?"
 
     ```bash
-    backupctl status
+    backupctl shield
     ```
 
-    Responde en dos segundos y devuelve un código de salida distinto de cero si
-    algo no está bien. Sirve tal cual dentro de una comprobación automática.
+    ¿Qué perderías si mañana desapareciera el servidor? Cruza las tres capas:
+    bases de datos, cuenta completa vía Restic, y las claves sin las cuales lo
+    demás es papel mojado. Incluso te nombra las bases de datos que existen y
+    **nadie está respaldando**.
+
+    Para el estado del respaldo de bases de datos a secas, `backupctl status`.
 
 === "Algo va mal"
 

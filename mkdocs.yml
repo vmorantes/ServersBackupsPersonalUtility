@@ -89,7 +89,7 @@ nav:
       - 5. Migrar — ensayo: paso-a-paso/migrar-ensayo.md
       - 6. Migrar en serio: paso-a-paso/migrar.md
   - HestiaCP:
-      - Respaldos incrementales (Restic): hestiacp/respaldos-incrementales.md
+      - Blindar un HestiaCP: hestiacp/respaldos-incrementales.md
   - Operación:
       - Respaldar: operacion/respaldar.md
       - Verificar: operacion/verificar.md

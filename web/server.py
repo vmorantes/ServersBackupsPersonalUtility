@@ -68,6 +68,20 @@ def _v_segments(v):
 #   forma "--x"        -> se añade como "--x VALOR"
 #   forma "flag:--x"   -> se añade "--x" si el valor es verdadero
 A = {
+    # --- blindaje ----------------------------------------------------------
+    "shield":        (["shield"], [], False),
+    "hestia-status": (["hestia", "status"], [], False),
+    "hestia-verify": (["hestia", "verify"], [], False),
+    "hestia-keys":   (["hestia", "keys"], [], True),
+    "hestia-cron":   (["hestia", "cron"], [("hour", "--hour", lambda v: v.isdigit()),
+                                           ("minute", "--minute", lambda v: v.isdigit())], True),
+    "hestia-restic": (["hestia", "restic"], [("repo", "--repo", lambda v: bool(re.match(r"^rclone:[A-Za-z0-9._-]+:[A-Za-z0-9._\-/]*$", v)))], True),
+    "remote-shield": (["remote", "shield"], [], False),
+    "remote-hestia-status": (["remote", "hestia", "status"], [], False),
+    "remote-hestia-verify": (["remote", "hestia", "verify"], [], False),
+    "remote-hestia-keys":   (["remote", "hestia", "keys"], [], True),
+    "remote-hestia-cron":   (["remote", "hestia", "cron"], [], True),
+
     # --- solo lectura ------------------------------------------------------
     "status":        (["status"], [], False),
     "doctor":        (["doctor"], [], False),
@@ -446,7 +460,8 @@ class Handler(BaseHTTPRequestHandler):
     # --- POST: ejecutar una acción, retransmitiendo la salida ---------------
     def do_POST(self):
         ruta = urlparse(self.path).path
-        if ruta not in ("/api/run", "/api/setup", "/api/config-save", "/api/sshkey"):
+        if ruta not in ("/api/run", "/api/setup", "/api/config-save",
+                        "/api/sshkey", "/api/rclone"):
             return self._send(404, "no encontrado", "text/plain; charset=utf-8")
         if not self._auth_ok():
             return self._json({"error": "no autorizado"}, 403)
@@ -463,6 +478,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._alta(payload)
         if ruta == "/api/sshkey":
             return self._instalar_clave(payload)
+        if ruta == "/api/rclone":
+            return self._rclone(payload)
 
         argv, err = build_argv(payload.get("profile"),
                                payload.get("action"),
@@ -579,6 +596,46 @@ class Handler(BaseHTTPRequestHandler):
                 os.unlink(tmp)
             except OSError:
                 pass
+
+    # --- Configurar el remoto de rclone ------------------------------------
+    def _rclone(self, payload):
+        name = payload.get("profile") or ""
+        if not SAFE_NAME.match(name):
+            return self._json({"error": "perfil no válido"}, 400)
+        remoto = (payload.get("name") or "").strip()
+        if not re.match(r"^[A-Za-z0-9._-]{1,64}$", remoto):
+            return self._json({"error": "nombre de remoto no válido"}, 400)
+        tipo = payload.get("type") or "s3"
+        if tipo not in ("s3", "local"):
+            return self._json({"error": "tipo no válido"}, 400)
+
+        # Las credenciales viajan por el entorno del proceso hijo, nunca por
+        # argv: en argv serían visibles en `ps` para toda la máquina.
+        env = dict(os.environ, BC_NO_COLOR="1",
+                   BC_OPT_RC_NAME=remoto, BC_OPT_RC_TYPE=tipo,
+                   BC_OPT_RC_KEY=payload.get("key", "") or "",
+                   BC_OPT_RC_SECRET=payload.get("secret", "") or "",
+                   BC_OPT_RC_ENDPOINT=payload.get("endpoint", "") or "",
+                   BC_OPT_RC_REGION=payload.get("region", "") or "")
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        try:
+            p = subprocess.Popen(
+                [str(BACKUPCTL), "--no-color", "-y", "-p", name, "hestia", "rclone"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL, text=True, bufsize=1, env=env)
+            for line in p.stdout:
+                self.wfile.write(line.encode("utf-8", "replace")); self.wfile.flush()
+            p.wait()
+            self.wfile.write(f"\n__FIN__{p.returncode}\n".encode())
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception as e:
+            try: self.wfile.write(f"[ERROR] {e}\n".encode())
+            except Exception: pass
 
     # --- Alta de un perfil, retransmitiendo la salida -----------------------
     def _alta(self, payload):

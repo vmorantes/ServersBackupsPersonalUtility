@@ -1,269 +1,234 @@
-# Respaldos incrementales con Restic
+# Blindar un HestiaCP
 
-HestiaCP puede sustituir sus respaldos tradicionales en `.tar` —que consumen
-mucho espacio y CPU— por respaldos incrementales con **Restic**, con
-deduplicación y cifrado.
-
-Esta página unifica la configuración completa: disco local, NAS y **S3
-(Mega S4)**, que es lo que usa TejidoTesting.
-
-!!! info "Esto es de HestiaCP, no de backupctl"
-    Restic respalda **la cuenta entera**: archivos web, correo, DNS, configuración.
-    `backupctl` respalda **las bases de datos** con verificación y formato
-    portable. Son capas complementarias, y las dos hacen falta.
-
-    ```
-    MySQL ──backupctl──► output/mysql_backups/ ─┐
-    Cuenta ─────────────────────────────────────┴─Restic──► repositorio remoto
-    ```
-
----
-
-## 1. Elegir dónde se guarda
-
-=== "S3 / Mega S4 (fuera del servidor)"
-
-    La única que protege ante la pérdida del VPS entero. Es lo que usa
-    TejidoTesting.
-
-    **Ventaja:** los datos salen de la máquina.
-    **A tener en cuenta:** depende de la red y del proveedor.
-
-=== "Disco externo o NAS"
-
-    Un segundo disco físico montado (por ejemplo en `/mnt/backup_incremental`),
-    un NAS o un NFS.
-
-    **Ventaja:** rápido y protege ante el fallo del disco principal.
-    **A tener en cuenta:** no protege si se pierde el servidor entero.
-
-=== "Mismo disco"
-
-    Una carpeta en el disco actual, por ejemplo `/backup_incremental`.
-
-    **Ventaja:** cero infraestructura, y aun así ganas deduplicación y
-    velocidad (ahorros de hasta 25:1).
-    **A tener en cuenta:** **no es un respaldo real.** Si el disco muere, se van
-    los datos y sus copias a la vez. Válido solo como primera capa.
-
----
-
-## 2. Configurar rclone
-
-Restic habla S3 de forma nativa, pero en HestiaCP el puente por **rclone** es
-el método estable, y además permite cambiar de destino sin tocar HestiaCP.
+Montar los respaldos incrementales de HestiaCP con Restic —remoto de rclone,
+host de respaldo, cron y rescate de claves— **sin tocar nada a mano**.
 
 ```bash
-rclone config
+backupctl hestia setup
 ```
 
-=== "Remoto S3 (Mega S4)"
+Un asistente que pregunta lo necesario y lo deja todo montado. Si prefieres ir
+por partes, cada paso tiene su orden.
 
+!!! info "Dos capas complementarias"
     ```
-    n                          nuevo remoto
-    name> megas3-vicsen        el nombre que quieras
-    Storage> s3                (Amazon S3 Compliant Storage Providers)
-    provider> Other            Mega S4 es compatible con S3, no es un proveedor listado
-    env_auth> false            las credenciales se escriben aquí
-    access_key_id> ...         tu clave de acceso de Mega S4
-    secret_access_key> ...     tu clave secreta
-    region>                    (vacío, salvo que Mega indique otra cosa)
-    endpoint> ...              el endpoint S3 que te da Mega S4
-    location_constraint>       (vacío)
-    acl> private
-    Edit advanced config? n
-    Keep this remote? y
-    q                          salir
+    MySQL ────backupctl backup────► respaldos verificables y portables
+    Cuenta ───Restic vía HestiaCP─► archivos, correo, DNS, configuración
     ```
+    `backupctl` respalda las bases de datos con verificación y formato abierto.
+    Restic respalda la cuenta entera. **Las dos hacen falta**, y el informe de
+    blindaje comprueba que ambas están.
 
-    !!! warning "El endpoint es obligatorio"
-        Mega S4 no es AWS: sin `endpoint`, rclone intentaría hablar con Amazon.
-        Lo encuentras en el panel de Mega, en la sección de S4/S3.
+---
 
-    Comprueba que funciona **antes** de seguir:
+## ¿Estoy protegido?
+
+```bash
+backupctl shield
+```
+
+Es la orden que responde a la pregunta que importa: **¿qué perdería si mañana
+desapareciera este servidor?**
+
+```
+1 · Bases de datos
+  ✓ último respaldo de hace 0 días, 76 bases
+  ✗ hay 77 bases en MySQL pero solo 76 en el último respaldo
+        SIN RESPALDAR:
+          - cliente_nuevo
+
+2 · Cuenta completa (archivos, correo, DNS)
+  ✓ Restic configurado: rclone:megas3-vicsen:tejido-testing/hestiacp/
+  ✓ el repositorio está fuera del servidor
+  ✗ el cron de Restic NO está activo: configurado pero nunca se ejecuta
+
+3 · Claves de recuperación
+  ✓ claves Restic rescatadas (hace 0 días)
+  ✗ rclone.conf NO rescatado: no se podría LLEGAR al repositorio
+
+BLINDAJE INCOMPLETO: 3 fallos y 1 avisos.
+```
+
+!!! success "Lo que ninguna otra herramienta te dice"
+    Que has creado una base de datos que **nadie está respaldando**. HestiaCP no
+    lo sabe y el cron tampoco: simplemente respalda lo que ve. `shield` compara
+    lo que hay en MySQL con lo que hay dentro de tu último respaldo y **nombra
+    las que faltan**.
+
+Devuelve código `1` si hay fallos, así que sirve en una comprobación automática.
+
+---
+
+## Montarlo desde cero
+
+=== "Todo de una vez"
 
     ```bash
-    rclone lsd megas3-vicsen:
-    rclone mkdir megas3-vicsen:tejido-testing
+    backupctl hestia setup
     ```
 
-=== "Remoto local"
+    Encadena los cuatro pasos preguntando lo necesario.
 
-    ```
-    n
-    name> almacenamiento_local
-    Storage> local
-    Edit advanced config? n
-    Keep this remote? y
-    q
-    ```
-
-### Dónde vive esa configuración
-
-```
-/root/.config/rclone/rclone.conf
-```
-
-!!! danger "Ese archivo lleva tus claves de S3 en claro"
-    Y no lo respalda nadie: Restic respalda las cuentas de usuario, no la
-    configuración de root. Si pierdes el servidor, pierdes las claves para
-    llegar a tus propios respaldos.
-
-    Guárdalo fuera del servidor, junto a los `restic.conf`. Ver
-    [Claves Restic](../operacion/restic.md).
-
----
-
-## 3. Vincular con HestiaCP
-
-```bash
-v-add-backup-host-restic 'rclone:REMOTO:RUTA/' SNAPSHOTS DIARIAS SEMANALES MENSUALES ANUALES
-```
-
-=== "Mega S4"
+=== "Desde la interfaz web"
 
     ```bash
-    v-add-backup-host-restic 'rclone:megas3-vicsen:tejido-testing/hestiacp/' 30 8 5 3 -1
+    backupctl web --open
     ```
 
-=== "Disco externo"
+    Pestaña **Blindaje**: los cuatro pasos con sus formularios, y el informe
+    arriba del todo.
+
+=== "Paso a paso"
 
     ```bash
-    v-add-backup-host-restic 'rclone:almacenamiento_local:/mnt/backup_incremental/' 30 8 5 3 -1
+    backupctl hestia rclone     # 1 · dónde se guarda
+    backupctl hestia restic     # 2 · host de respaldo y retención
+    backupctl hestia cron       # 3 · que se ejecute solo
+    backupctl hestia keys       # 4 · rescatar las claves
     ```
 
-=== "Mismo disco"
-
-    ```bash
-    mkdir -p /backup_incremental
-    v-add-backup-host-restic 'rclone:almacenamiento_local:/backup_incremental/' 30 8 5 3 -1
-    ```
-
-### Qué significan esos cinco números
-
-!!! danger "Cuidado con el orden: es fácil equivocarse"
-    No son «días, semanas, meses, años, total». El **primero** es el total de
-    instantáneas. Compruébalo tú mismo en
-    `/usr/local/hestia/data/users/conf/restic.conf`:
-
-    | Posición | Variable | Con `30 8 5 3 -1` | Significa |
-    |---|---|---|---|
-    | 1ª | `SNAPSHOTS` | `30` | Guardar 30 instantáneas en total |
-    | 2ª | `KEEP_DAILY` | `8` | 8 diarias |
-    | 3ª | `KEEP_WEEKLY` | `5` | 5 semanales |
-    | 4ª | `KEEP_MONTHLY` | `3` | 3 mensuales |
-    | 5ª | `KEEP_YEARLY` | `-1` | anuales **ilimitadas** |
-
-    Con `-1` en la última posición, las anuales no se purgan nunca. Si esperabas
-    «3 años», lo que tienes es «3 mensuales y anuales para siempre».
-
-Comprobación:
-
-```bash
-cat /usr/local/hestia/data/users/conf/restic.conf
-```
-
-### Si falla porque el repositorio no existe
-
-Solo la primera vez:
-
-```bash
-restic init -r rclone:megas3-vicsen:tejido-testing/hestiacp/
-```
-
 ---
 
-## 4. Programar el cron
-
-!!! warning "HestiaCP no activa el cron de Restic al añadir el host"
-    Es el paso que más se olvida, y sin él no se respalda nunca.
-
-**a) Habilitar en el paquete.** *Packages* → editar el paquete de tus usuarios
-(`default`) y asegurarse de que los respaldos están activos.
-
-**b) Añadir el cron.** En *Cron* del panel, como `admin`:
-
-```
-Comando:  v-backup-users-restic
-Horario:  30 05 * * *
-```
-
-A una hora distinta de los respaldos tradicionales, para no solaparlos.
-
-!!! tip "Ojo con el porcentaje"
-    Igual que con `backupctl`: en crontab un `%` sin escapar se convierte en
-    salto de línea y parte la orden. No pongas fechas en esa línea.
-
-**c) Probar a mano** antes de fiarte:
+## 1 · Dónde se guarda
 
 ```bash
-v-backup-user-restic admin
+backupctl hestia rclone
 ```
 
----
+Pregunta el nombre del remoto, el tipo y las credenciales, y escribe la sección
+en el `rclone.conf` del servidor. Guarda copia de la versión anterior.
 
-## 5. Los `.tar` que no se pueden eliminar del todo
-
-HestiaCP exige que `Backups` en el paquete sea **al menos 1** para que el
-proceso capture datos reales. Con `0`, los respaldos de Restic salen en
-carpetas vacías. Y si se desactiva el respaldo local globalmente
-(`local = no`), la pestaña *Backups* desaparece de la interfaz.
-
-**Recomendación:** `Backups = 1` en el paquete y aceptar un único `.tar`
-residual. Es el precio de mantener la gestión desde el panel.
-
----
-
-## 6. Lo que hay que guardar fuera del servidor
-
-!!! danger "La dependencia circular de todo sistema de respaldos"
-    Las claves para leer tus respaldos están en la máquina que puedes perder.
-
-| Archivo | Qué pasa si lo pierdes |
+| Destino | Protege ante… |
 |---|---|
-| `/usr/local/hestia/data/users/*/restic.conf` | El repositorio queda **ilegible** |
+| **S3 / Mega S4** | La pérdida del servidor entero |
+| **Disco externo o NAS** | El fallo del disco principal |
+| **Mismo disco** | Nada. Solo da deduplicación y velocidad |
+
+!!! danger "Para Mega S4, el endpoint es obligatorio"
+    Mega S4 es compatible con S3, pero **no es Amazon**. Sin `endpoint`, rclone
+    intentaría hablar con AWS y fallaría. Lo encuentras en el panel de Mega, en
+    la sección S4.
+
+    `backupctl` se niega a continuar sin él en lugar de dejarte una
+    configuración que no funciona.
+
+Las credenciales **nunca pasan por la línea de órdenes**: viajan por la entrada
+estándar hasta el archivo de destino, que queda con permisos `600`. En `ps` no
+aparecen.
+
+---
+
+## 2 · Host de respaldo y retención
+
+```bash
+backupctl hestia restic
+```
+
+Registra el repositorio en HestiaCP y, si hace falta, **lo inicializa**
+(`restic init`), que es el paso que HestiaCP no hace y que provoca el clásico
+«el repositorio no existe».
+
+!!! danger "El error de retención más común"
+    `v-add-backup-host-restic REPO 30 8 5 3 -1` **no** significa
+    «días, semanas, meses, años, total».
+
+    | Posición | Variable | Con `30 8 5 3 -1` |
+    |---|---|---|
+    | 1ª | `SNAPSHOTS` | 30 instantáneas **en total** |
+    | 2ª | `KEEP_DAILY` | 8 diarias |
+    | 3ª | `KEEP_WEEKLY` | 5 semanales |
+    | 4ª | `KEEP_MONTHLY` | 3 mensuales |
+    | 5ª | `KEEP_YEARLY` | anuales **ilimitadas** |
+
+    Es fácil creer que tienes «3 años» cuando lo que tienes es «3 mensuales y
+    anuales para siempre». `backupctl hestia status` te lo muestra ya
+    interpretado, con las etiquetas correctas.
+
+---
+
+## 3 · Que se ejecute solo
+
+```bash
+backupctl hestia cron
+```
+
+!!! warning "HestiaCP no activa este cron al añadir el host"
+    Es el paso que más se olvida. Sin él, Restic queda perfectamente configurado
+    y **no se ejecuta nunca**. `shield` lo marca como fallo.
+
+Registra `v-backup-users-restic` con `v-add-cron-job`, de modo que aparece en el
+panel y sobrevive a los rebuilds de HestiaCP. Por defecto a las 05:30, para no
+solaparse con los respaldos tradicionales.
+
+---
+
+## 4 · Rescatar las claves
+
+```bash
+backupctl hestia keys
+```
+
+Trae al repositorio los **dos** archivos sin los cuales tus respaldos son
+irrecuperables aunque estén intactos:
+
+| Archivo | Sin él |
+|---|---|
+| `data/users/*/restic.conf` | El repositorio queda **ilegible** |
 | `/root/.config/rclone/rclone.conf` | No puedes **llegar** al repositorio |
 
-`backupctl` recoge los primeros:
+!!! danger "El segundo no lo respalda nadie"
+    Restic guarda las cuentas de usuario, no la configuración de root. El
+    `rclone.conf`, donde están tus claves de S3, queda fuera de todos los
+    respaldos. Es la dependencia circular clásica: la llave para abrir la caja
+    está dentro de la caja.
 
-```bash
-sudo backupctl restic
-```
-
-El `rclone.conf` hay que copiarlo a mano. Guarda ambos en un gestor de
-contraseñas o en otra máquina — **no solo en el propio servidor**.
-
----
-
-## 7. Comprobaciones periódicas
-
-```bash
-# ¿Hay instantáneas y de cuándo?
-restic -r rclone:megas3-vicsen:tejido-testing/hestiacp/ snapshots
-
-# ¿El repositorio está sano?
-restic -r rclone:megas3-vicsen:tejido-testing/hestiacp/ check
-
-# ¿Cuánto ocupa de verdad, tras deduplicar?
-restic -r rclone:megas3-vicsen:tejido-testing/hestiacp/ stats
-
-# HestiaCP: respaldos de un usuario
-v-list-user-backups admin
-```
-
-!!! quote "Un respaldo que nunca se ha restaurado no es un respaldo"
-    Vale igual para Restic. Una vez al año, restaura un usuario completo en una
-    máquina desechable y mide cuánto tardas. Ver
-    [Recuperación ante desastre](../guias/desastre.md).
+**Guárdalos también fuera de este repositorio** — en un gestor de contraseñas o
+en otra máquina. `shield` te lo recuerda.
 
 ---
 
-## 8. Espacio de caché
-
-Restic usa `/root/.cache/restic`. Con repositorios grandes crece bastante, y si
-el disco principal se llena, las purgas fallan.
+## Comprobar
 
 ```bash
-du -sh /root/.cache/restic
-df -h /
+backupctl hestia status     # configuración, remotos, cron, claves
+backupctl hestia verify     # instantáneas, integridad y espacio real
 ```
+
+`verify` ejecuta `restic snapshots`, `check` y `stats` contra el repositorio de
+verdad.
+
+---
+
+## Desde tu equipo o desde el servidor
+
+Todas estas órdenes funcionan igual desde los dos sitios:
+
+```bash
+backupctl -p MiVPS hestia status          # va por SSH si hace falta
+ssh admin@servidor '.../backupctl hestia status'
+```
+
+Si el perfil tiene `DEPLOY_HOST` y HestiaCP no está en tu equipo, `backupctl`
+abre la conexión y trabaja sobre el servidor. Una sola implementación para los
+dos casos.
+
+---
+
+## Los `.tar` que no se pueden quitar del todo
+
+HestiaCP exige que `Backups` en el paquete sea **al menos 1**. Con `0`, los
+respaldos de Restic salen en carpetas vacías; y si se desactiva el respaldo
+local globalmente, la pestaña *Backups* desaparece del panel.
+
+**Recomendación:** `Backups = 1` y aceptar un único `.tar` residual.
+
+---
+
+## Rutina recomendada
+
+| Cada | Qué |
+|---|---|
+| Semana | `backupctl shield` — debe salir sin fallos |
+| Mes | `backupctl hestia verify` y una prueba de restauración de BD |
+| Trimestre | Comprobar que las claves rescatadas siguen fuera del servidor |
+| Año | Restaurar un usuario completo en una máquina desechable y medir el tiempo |

@@ -56,6 +56,7 @@
 
     <nav class="pestanas" id="pestanas">
       <button class="pestana activa" data-tab="revisar">Revisar</button>
+      <button class="pestana" data-tab="blindaje">Blindaje</button>
       <button class="pestana" data-tab="respaldar">Respaldar</button>
       <button class="pestana" data-tab="restaurar">Restaurar</button>
       <button class="pestana" data-tab="servidor">Servidor</button>
@@ -80,6 +81,95 @@
       <h3>Respaldos guardados</h3>
       <div id="tabla-respaldos" class="tabla-envoltorio">
         <p class="ayuda">Selecciona un perfil para verlos.</p>
+      </div>
+    </div>
+
+    <!-- BLINDAJE ------------------------------------------------------------>
+    <div class="tab" data-tab="blindaje" hidden>
+      <p class="rotulo"><strong>¿Qué perderías si mañana desapareciera el servidor?</strong>
+         Cruza las tres capas: bases de datos, cuenta completa (Restic) y las
+         claves sin las cuales lo demás es papel mojado.</p>
+
+      <div class="botones">
+        <button class="btn" data-act="shield">Informe de blindaje (aquí)</button>
+        <button class="btn" data-act="remote-shield">Informe en el servidor</button>
+      </div>
+
+      <h3>Estado de los respaldos de HestiaCP</h3>
+      <div class="botones">
+        <button class="btn" data-act="hestia-status">Estado (aquí)</button>
+        <button class="btn" data-act="remote-hestia-status">Estado en el servidor</button>
+        <button class="btn" data-act="remote-hestia-verify">Verificar el repositorio Restic</button>
+      </div>
+
+      <h3>1 · Remoto de rclone</h3>
+      <p class="ayuda">Dónde se guardarán los respaldos incrementales. Para
+         Mega S4 y cualquier S3 compatible, el <strong>endpoint es obligatorio</strong>:
+         sin él, rclone hablaría con Amazon.</p>
+      <div class="campos">
+        <label>Nombre del remoto
+          <input type="text" id="rc-name" placeholder="megas3-vicsen" autocomplete="off"></label>
+        <label>Tipo
+          <select id="rc-type"><option value="s3">S3 (Mega S4, compatible)</option>
+                               <option value="local">Disco local o NAS montado</option></select></label>
+        <label>Access key ID
+          <input type="text" id="rc-key" autocomplete="off"></label>
+        <label>Secret access key
+          <input type="password" id="rc-secret" autocomplete="new-password"></label>
+        <label>Endpoint S3 <span class="pista">obligatorio para Mega S4</span>
+          <input type="text" id="rc-endpoint" placeholder="https://…" autocomplete="off"></label>
+        <label>Región <span class="pista">opcional</span>
+          <input type="text" id="rc-region" autocomplete="off"></label>
+      </div>
+      <p class="ayuda">Las claves se escriben en <code>rclone.conf</code> del servidor
+         (permisos 600) y se guarda copia de la versión anterior. No pasan por la
+         línea de órdenes, así que no son visibles en <code>ps</code>.</p>
+      <div class="botones">
+        <button class="btn btn-escribe" id="btn-rclone">Configurar el remoto</button>
+      </div>
+
+      <h3>2 · Host de respaldo y retención</h3>
+      <p class="ayuda">El <strong>primer</strong> número es el total de instantáneas,
+         no los días. Es el error más común al configurarlo a mano.</p>
+      <div class="campos" id="form-hrestic">
+        <label>Repositorio
+          <input type="text" data-opt="repo" placeholder="rclone:megas3-vicsen:tejido-testing/hestiacp/"
+                 autocomplete="off"></label>
+      </div>
+      <div class="botones">
+        <button class="btn btn-escribe" data-act="hestia-restic" data-form="#form-hrestic"
+                data-confirmar="Se registrará el host de respaldo Restic en HestiaCP.">
+          Registrar en HestiaCP</button>
+      </div>
+
+      <h3>3 · Cron de Restic</h3>
+      <p class="ayuda">HestiaCP <strong>no</strong> lo activa solo al añadir el host.
+         Sin esto, Restic queda configurado pero no se ejecuta nunca.</p>
+      <div class="campos" id="form-hcron">
+        <label>Hora <span class="pista">distinta de la del respaldo tradicional</span>
+          <input type="text" data-opt="hour" placeholder="5" autocomplete="off"></label>
+        <label>Minuto
+          <input type="text" data-opt="minute" placeholder="30" autocomplete="off"></label>
+      </div>
+      <div class="botones">
+        <button class="btn btn-escribe" data-act="hestia-cron" data-form="#form-hcron"
+                data-confirmar="Se registrará el cron v-backup-users-restic en HestiaCP.">
+          Activar el cron</button>
+        <button class="btn btn-escribe" data-act="remote-hestia-cron"
+                data-confirmar="Se activará el cron de Restic EN el servidor.">Activarlo en el servidor</button>
+      </div>
+
+      <h3>4 · Rescatar las claves</h3>
+      <p class="ayuda">Sin <code>restic.conf</code> el repositorio es <strong>ilegible</strong>;
+         sin <code>rclone.conf</code> no se puede <strong>llegar</strong> a él. El segundo no
+         lo respalda nadie: Restic guarda las cuentas de usuario, no la configuración de root.</p>
+      <div class="botones">
+        <button class="btn btn-escribe" data-act="hestia-keys"
+                data-confirmar="Se rescatarán restic.conf y rclone.conf al repositorio.">
+          Rescatar (aquí)</button>
+        <button class="btn btn-escribe" data-act="remote-hestia-keys"
+                data-confirmar="Se rescatarán las claves DEL servidor a este repositorio.">
+          Rescatar del servidor</button>
       </div>
     </div>
 

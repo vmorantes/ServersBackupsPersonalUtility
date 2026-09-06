@@ -419,6 +419,30 @@ async function instalarClave() {
   if (perfilActual) sondear(perfilActual);
 }
 
+// --- Remoto de rclone --------------------------------------------------------
+async function configurarRclone() {
+  const datos = {
+    profile: perfilActual,
+    name:     $('#rc-name').value.trim(),
+    type:     $('#rc-type').value,
+    key:      $('#rc-key').value.trim(),
+    secret:   $('#rc-secret').value,
+    endpoint: $('#rc-endpoint').value.trim(),
+    region:   $('#rc-region').value.trim(),
+  };
+  if (!perfilActual) { limpiarConsola('Elige un servidor primero.'); return; }
+  if (!datos.name) { alert('Falta el nombre del remoto.'); return; }
+  if (datos.type === 's3' && (!datos.key || !datos.secret || !datos.endpoint)) {
+    alert('Para S3 hacen falta access key, secret y endpoint.\n\n' +
+          'El endpoint es obligatorio: Mega S4 no es Amazon.');
+    return;
+  }
+  if (!(await confirmar('Se escribirá el remoto «' + datos.name + '» en el rclone.conf ' +
+                        'del servidor. Se guardará copia de la versión anterior.'))) return;
+  $('#rc-secret').value = '';        // no se queda en el formulario
+  await ejecutar('hestia rclone', datos, '/api/rclone');
+}
+
 // --- Alta de un servidor -----------------------------------------------------
 function abrirAlta()  { $('#alta').hidden = false; $('#f-name').focus(); }
 function cerrarAlta() { $('#alta').hidden = true; }
@@ -486,6 +510,12 @@ $('#clave').addEventListener('click', (ev) => {
 });
 $('#alta-no').addEventListener('click', cerrarAlta);
 $('#alta-si').addEventListener('click', crearPerfil);
+$('#btn-rclone').addEventListener('click', configurarRclone);
+$('#rc-type').addEventListener('change', () => {
+  const s3 = $('#rc-type').value === 's3';
+  ['rc-key','rc-secret','rc-endpoint','rc-region'].forEach(
+    id => { $('#'+id).closest('label').hidden = !s3; });
+});
 $('#btn-cargar-config').addEventListener('click', cargarConfig);
 $('#btn-guardar-config').addEventListener('click', guardarConfig);
 $$('input[name=db]').forEach(r => r.addEventListener('change', () => {
