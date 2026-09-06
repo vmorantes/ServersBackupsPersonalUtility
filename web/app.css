@@ -293,3 +293,13 @@ input[type=password] {
 @media (max-width: 700px) {
   .accion { grid-template-columns: 1fr; gap: 4px; }
 }
+
+/* --- Plan de blindaje ---------------------------------------------------- */
+.plan { margin: 8px 0 0; padding: 0 0 0 2px; list-style: none;
+        display: flex; flex-direction: column; gap: 3px; }
+.plan:empty { display: none; }
+.plan li { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; font-size: 12.5px; }
+.paso-titulo { font-family: var(--mono); }
+.paso-ok .paso-titulo { color: var(--ok); }
+.paso-falta .paso-titulo { color: var(--aviso); }
+.paso-hacer { color: var(--suave); }

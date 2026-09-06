@@ -12,6 +12,19 @@ let ejecutando = false;
 const $  = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 
+// Enganchar un manejador SIN romperse si el elemento no existe.
+//
+// Con addEventListener directo, un solo id que desaparezca del HTML lanza un
+// TypeError que aborta el resto del script: los manejadores siguientes no se
+// registran y el arranque nunca llega a ejecutarse. El síntoma es una interfaz
+// en blanco sin ninguna pista de la causa. Ya pasó una vez.
+function on(sel, ev, fn) {
+  const el = $(sel);
+  if (!el) { console.warn('backupctl: no existe ' + sel); return false; }
+  el.addEventListener(ev, fn);
+  return true;
+}
+
 // --- API ---------------------------------------------------------------------
 async function api(ruta, opciones = {}) {
   const r = await fetch(ruta, {
@@ -286,6 +299,7 @@ async function sondear(nombre) {
   const mapa = {
     'ok':          ['✓', 'Conectado a ' + d.destino],
     'sin-clave':   ['✗', 'Sin acceso por clave a ' + d.destino],
+    'usuario-malo':['✗', 'El usuario «' + (d.destino || '').split('@')[0] + '» no puede entrar por SSH'],
     'error':       ['✗', 'No se llega a ' + d.destino + (d.detalle ? ' — ' + d.detalle : '')],
     'sin-destino': ['✗', 'Sin DEPLOY_HOST: este perfil no sabe a qué servidor conectarse'],
   };
@@ -305,8 +319,28 @@ async function sondear(nombre) {
   }
   $('#t-siguiente').textContent = d.siguiente ? 'Siguiente paso: ' + d.siguiente : '';
 
+  // Plan ordenado: qué falta y en qué orden
+  const ol = $('#plan');
+  ol.innerHTML = '';
+  for (const paso of (d.plan || [])) {
+    const li = document.createElement('li');
+    li.className = paso.hecho ? 'paso-ok' : 'paso-falta';
+    const t = document.createElement('span');
+    t.className = 'paso-titulo';
+    t.textContent = (paso.hecho ? '✓ ' : '○ ') + paso.titulo;
+    li.appendChild(t);
+    if (!paso.hecho) {
+      const h = document.createElement('span');
+      h.className = 'paso-hacer'; h.textContent = paso.hacer;
+      li.appendChild(h);
+    }
+    ol.appendChild(li);
+  }
+
   // El botón solo aparece cuando de verdad resuelve algo
   const acc = $('#acciones-estado');
+  // El botón de instalar la clave solo tiene sentido si el usuario SÍ puede
+  // entrar; con un usuario sin consola, instalarle una clave no arregla nada.
   acc.hidden = d.ssh !== 'sin-clave';
   if (d.ssh === 'sin-clave') $('#k-target').value = d.destino || '';
 
@@ -452,8 +486,8 @@ async function crearPerfil() {
   const datos = {
     name:        $('#f-name').value.trim(),
     host:        $('#f-host').value.trim(),
-    ssh_user:    $('#f-ssh').value.trim() || 'admin',
-    owner:       $('#f-owner').value.trim() || $('#f-ssh').value.trim() || 'admin',
+    ssh_user:    $('#f-ssh').value.trim() || 'root',
+    owner:       $('#f-owner').value.trim() || 'admin',
     path:        $('#f-path').value.trim(),
     healthcheck: $('#f-hc').value.trim(),
     crear_db:    crear,
@@ -463,6 +497,25 @@ async function crearPerfil() {
     admin_pass:  crear ? $('#f-adminpass').value : '',
     desplegar:   $('#f-deploy').checked,
   };
+
+  // Respaldos incrementales, si se han pedido en el mismo alta
+  if ($('#f-restic').checked) {
+    const tipo = $('#f-rctype').value;
+    datos.rc_name     = $('#f-rcname').value.trim();
+    datos.rc_type     = tipo;
+    datos.rc_key      = $('#f-rckey').value.trim();
+    datos.rc_secret   = $('#f-rcsecret').value;
+    datos.rc_endpoint = $('#f-rcendpoint').value.trim();
+    datos.rc_region   = $('#f-rcregion').value.trim();
+    const ruta = $('#f-repo').value.trim();
+    datos.repo = ruta ? ('rclone:' + datos.rc_name + ':' + ruta) : '';
+    if (!datos.rc_name) { alert('Falta el nombre del remoto de rclone.'); return; }
+    if (tipo === 's3' && (!datos.rc_key || !datos.rc_secret || !datos.rc_endpoint)) {
+      alert('Para S3 hacen falta access key, secret y endpoint.\n\n' +
+            'El endpoint es obligatorio: Mega S4 no es Amazon.');
+      return;
+    }
+  }
   if (!datos.name || !datos.host) {
     alert('Hacen falta al menos el nombre del perfil y el servidor.');
     return;
@@ -470,7 +523,7 @@ async function crearPerfil() {
   if (!datos.path) datos.path = '/home/' + datos.owner + '/scripts';
   cerrarAlta();
   // Las contraseñas se limpian del formulario en cuanto se envían
-  $('#f-dbpass').value = ''; $('#f-adminpass').value = '';
+  $('#f-dbpass').value = ''; $('#f-adminpass').value = ''; $('#f-rcsecret').value = '';
   await ejecutar('setup', datos, '/api/setup');
   perfilActual = datos.name;
   cargarPanel();
@@ -491,51 +544,51 @@ document.addEventListener('click', async (ev) => {
   ejecutar(b.dataset.act, opts);
 });
 
-$('#pestanas').addEventListener('click', (ev) => {
+on('#pestanas', 'click', (ev) => {
   const p = ev.target.closest('.pestana');
   if (!p) return;
   $$('.pestana').forEach(x => x.classList.toggle('activa', x === p));
   $$('.tab').forEach(t => t.hidden = t.dataset.tab !== p.dataset.tab);
 });
 
-$('#btn-refrescar').addEventListener('click', cargarPanel);
-$('#btn-nuevo').addEventListener('click', abrirAlta);
-$('#btn-sshkey').addEventListener('click', () => {
+on('#btn-refrescar', 'click', cargarPanel);
+on('#btn-nuevo', 'click', abrirAlta);
+on('#btn-sshkey', 'click', () => {
   $('#clave').hidden = false; $('#k-pass').focus();
 });
-$('#clave-no').addEventListener('click', () => { $('#clave').hidden = true; $('#k-pass').value = ''; });
-$('#clave-si').addEventListener('click', instalarClave);
-$('#clave').addEventListener('click', (ev) => {
+on('#clave-no', 'click', () => { $('#clave').hidden = true; $('#k-pass').value = ''; });
+on('#clave-si', 'click', instalarClave);
+on('#clave', 'click', (ev) => {
   if (ev.target === $('#clave')) { $('#clave').hidden = true; $('#k-pass').value = ''; }
 });
-$('#alta-no').addEventListener('click', cerrarAlta);
-$('#alta-si').addEventListener('click', crearPerfil);
-$('#btn-rclone').addEventListener('click', configurarRclone);
-$('#btn-rclone-repo').addEventListener('click', async () => {
+on('#alta-no', 'click', cerrarAlta);
+on('#alta-si', 'click', crearPerfil);
+on('#f-restic', 'change', () => { $('#bloque-restic').hidden = !$('#f-restic').checked; });
+on('#btn-rclone', 'click', configurarRclone);
+on('#btn-rclone-repo', 'click', async () => {
   if (!(await confirmar('Se instalará en el servidor el rclone.conf que ya está ' +
                         'rescatado en este repositorio, con tus claves guardadas. ' +
                         'Se guardará copia de lo que hubiera antes.'))) return;
   ejecutar('hestia-rclone-repo', {});
 });
-$('#btn-ver-claves').addEventListener('click', () => ejecutar('hestia-donde', {}));
-$('#btn-sshkey2').addEventListener('click', () => {
+on('#btn-sshkey2', 'click', () => {
   $('#clave').hidden = false; $('#k-pass').focus();
 });
-$('#rc-type').addEventListener('change', () => {
+on('#rc-type', 'change', () => {
   const s3 = $('#rc-type').value === 's3';
   ['rc-key','rc-secret','rc-endpoint','rc-region'].forEach(
     id => { $('#'+id).closest('label').hidden = !s3; });
 });
-$('#btn-cargar-config').addEventListener('click', cargarConfig);
-$('#btn-guardar-config').addEventListener('click', guardarConfig);
+on('#btn-cargar-config', 'click', cargarConfig);
+on('#btn-guardar-config', 'click', guardarConfig);
 $$('input[name=db]').forEach(r => r.addEventListener('change', () => {
   const crear = document.querySelector('input[name=db]:checked').value === 'crear';
   $('#db-existente').hidden = crear;
   $('#db-crear').hidden = !crear;
 }));
-$('#alta').addEventListener('click', (ev) => { if (ev.target === $('#alta')) cerrarAlta(); });
-$('#btn-limpiar').addEventListener('click', () => { limpiarConsola(''); marcarEstado('', ''); });
-$('#btn-cerrar').addEventListener('click', () => {
+on('#alta', 'click', (ev) => { if (ev.target === $('#alta')) cerrarAlta(); });
+on('#btn-limpiar', 'click', () => { limpiarConsola(''); marcarEstado('', ''); });
+on('#btn-cerrar', 'click', () => {
   $('#panel-detalle').hidden = true;
   perfilActual = null;
   $$('.tarjeta').forEach(t => t.classList.remove('sel'));

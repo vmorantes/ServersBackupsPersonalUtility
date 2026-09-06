@@ -86,6 +86,8 @@ ${BC_BLD}BLINDAJE (HestiaCP)${BC_RST}
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia cron${BC_RST}            activar el cron de Restic
   ${BC_GRN}·${BC_RST} ${BC_CYA}hestia verify${BC_RST}          instantáneas, integridad y espacio real
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia keys${BC_RST}            rescatar restic.conf Y rclone.conf
+  ${BC_GRN}·${BC_RST} ${BC_CYA}hestia dbs${BC_RST}             qué bases conoce HestiaCP y cuáles no (clave al migrar)
+  ${BC_GRN}·${BC_RST} ${BC_CYA}hestia users${BC_RST}           usuarios del panel, con sus dominios y bases
   ${BC_GRN}·${BC_RST} ${BC_CYA}hestia donde${BC_RST}           ¿dónde están mis claves? rutas concretas
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia rclone --desde-repo${BC_RST}  reinstalar las claves guardadas en otro servidor
 
@@ -468,11 +470,13 @@ case "$BC_CMD" in
       rclone) if [[ "${BC_OPT_RC_REPO:-0}" == "1" ]]; then bc_hestia_rclone_desde_repo
               else bc_hestia_rclone; fi ;;
       donde|claves) bc_hestia_donde ;;
+      users|usuarios) bc_hestia_users ;;
+      dbs|bases) bc_hestia_dbs ;;
       restic) bc_hestia_restic ;;
       cron)   bc_hestia_cron ;;
       verify) bc_hestia_verify ;;
       keys)   bc_hestia_keys ;;
-      *) bc_die "subórdenes de 'hestia': status setup rclone restic cron verify keys donde" ;;
+      *) bc_die "subórdenes de 'hestia': status setup rclone restic cron verify keys donde users dbs" ;;
     esac
     ;;
 

@@ -434,6 +434,159 @@ bc_hestia_keys() {
 }
 
 # =============================================================================
+# Usuarios de HestiaCP
+# =============================================================================
+# Sin saber qué usuarios hay no se puede razonar sobre los respaldos: Restic
+# respalda CUENTAS, y cada una tiene sus dominios, su correo y sus bases.
+bc_hestia_users() {
+  bc_hestia_conectar
+  trap 'bc_hestia_cerrar' RETURN
+
+  bc_section "Usuarios de HestiaCP"
+
+  local lista
+  lista="$(bc_hestia_read "$HESTIA_DIR/bin/v-list-users plain" || true)"
+  if [[ -z "$lista" ]]; then
+    bc_warn "no se pudieron listar (hace falta root: conéctate como root)."
+    return 1
+  fi
+
+  local filas; filas="$(mktemp)"
+  printf 'USUARIO	DOMINIOS	BASES	CORREO	RESPALDO RESTIC
+' > "$filas"
+  local u
+  while IFS= read -r u; do
+    u="$(awk '{print $1}' <<<"$u")"
+    [[ -z "$u" || "$u" == "USER" ]] && continue
+    local dom bd mail rst
+    dom="$( { bc_hestia_read "$HESTIA_DIR/bin/v-list-web-domains $u plain" || true; } | grep -c . )"
+    bd="$(  { bc_hestia_read "$HESTIA_DIR/bin/v-list-databases $u plain"   || true; } | grep -c . )"
+    mail="$({ bc_hestia_read "$HESTIA_DIR/bin/v-list-mail-domains $u plain" || true; } | grep -c . )"
+    # La presencia de su restic.conf indica que ese usuario tiene clave propia
+    if bc_hestia_read "test -f '$HESTIA_DIR/data/users/$u/restic.conf'"; then rst="sí"; else rst="NO"; fi
+    printf '%s	%s	%s	%s	%s
+' "$u" "$dom" "$bd" "$mail" "$rst" >> "$filas"
+  done <<<"$lista"
+
+  bc_table < "$filas"; rm -f "$filas"
+  echo
+  bc_log "v-backup-users-restic respalda TODOS los usuarios de esta lista."
+  bc_log "Los que aparezcan con RESPALDO RESTIC = NO todavía no tienen clave:"
+  bc_log "se les crea sola en su primer respaldo."
+}
+
+# =============================================================================
+# Bases de datos: las que HestiaCP conoce y las que no
+# =============================================================================
+# Distinción que determina si una migración se replica bien.
+#
+#   Conocidas por HestiaCP   se dieron de alta con v-add-database. Tienen
+#                            entrada en el panel, su usuario gestionado, y
+#                            viajan dentro de v-backup-user.
+#   Desconocidas             se crearon a mano en MySQL. HestiaCP no las ve,
+#                            así que NO están en sus respaldos ni se recrean al
+#                            restaurar una cuenta. Solo las salva backupctl.
+#
+# Al migrar, las desconocidas llegan con los datos pero SIN entrada en el panel
+# ni usuario gestionado: hay que darlas de alta a mano en el destino. Sin esta
+# lista, eso se descubre semanas después, cuando algo no conecta.
+# =============================================================================
+bc_hestia_dbs() {
+  bc_hestia_conectar
+  trap 'bc_hestia_cerrar' RETURN
+
+  bc_section "Bases de datos: cobertura real"
+
+  # --- Las que HestiaCP conoce ----------------------------------------------
+  local usuarios conocidas=""
+  usuarios="$( { bc_hestia_read "$HESTIA_DIR/bin/v-list-users plain" || true; } | awk '{print $1}' )"
+  local u
+  while IFS= read -r u; do
+    [[ -z "$u" || "$u" == "USER" ]] && continue
+    local l
+    l="$( { bc_hestia_read "$HESTIA_DIR/bin/v-list-databases $u plain" || true; } | awk 'NF{print $1}' )"
+    [[ -n "$l" ]] && conocidas+="$l"$'
+'
+  done <<<"$usuarios"
+  conocidas="$(sed '/^$/d' <<<"$conocidas" | sort -u)"
+
+  # --- Las que hay de verdad en MySQL ---------------------------------------
+  local en_mysql=""
+  if bc_mysql_check >/dev/null 2>&1; then
+    en_mysql="$(bc_mysql_databases 2>/dev/null | sort -u || true)"
+  else
+    bc_warn "no se pudo consultar MySQL: la comparación queda incompleta."
+  fi
+
+  # --- Las que están en el último respaldo ----------------------------------
+  local en_respaldo="" zip
+  zip="$(bc_backup_latest || true)"
+  if [[ -n "$zip" ]]; then
+    en_respaldo="$(unzip -Z1 "$zip" 2>/dev/null | awk -F/ 'NF>1{print $1}' | sort -u || true)"
+  fi
+
+  local n_con n_my
+  n_con="$(grep -c . <<<"$conocidas" || true)"
+  n_my="$(grep -c . <<<"$en_mysql" || true)"
+  bc_log "HestiaCP conoce $n_con · en MySQL hay $n_my · en el último respaldo $(grep -c . <<<"$en_respaldo" || echo 0)"
+  echo
+
+  # --- Cruce ----------------------------------------------------------------
+  local filas; filas="$(mktemp)"
+  printf 'BASE DE DATOS	HESTIACP	RESPALDO	SITUACIÓN
+' > "$filas"
+  local todas d hes res sit
+  todas="$(printf '%s
+%s
+' "$conocidas" "$en_mysql" | sed '/^$/d' | sort -u)"
+  local n_solo_bctl=0 n_sin=0 n_huerfana=0
+
+  while IFS= read -r d; do
+    [[ -z "$d" ]] && continue
+    grep -qxF "$d" <<<"$conocidas"   && hes="sí" || hes="NO"
+    grep -qxF "$d" <<<"$en_respaldo" && res="sí" || res="NO"
+
+    if   [[ "$hes" == "NO" ]] && ! grep -qxF "$d" <<<"$en_mysql"; then
+      sit="registro huérfano"; n_huerfana=$(( n_huerfana + 1 ))
+    elif ! grep -qxF "$d" <<<"$en_mysql"; then
+      sit="ya no existe en MySQL"; n_huerfana=$(( n_huerfana + 1 ))
+    elif [[ "$res" == "NO" ]]; then
+      sit="SIN RESPALDO"; n_sin=$(( n_sin + 1 ))
+    elif [[ "$hes" == "NO" ]]; then
+      sit="solo backupctl"; n_solo_bctl=$(( n_solo_bctl + 1 ))
+    else
+      sit="doble cobertura"
+    fi
+    printf '%s	%s	%s	%s
+' "$d" "$hes" "$res" "$sit" >> "$filas"
+  done <<<"$todas"
+
+  bc_table < "$filas"; rm -f "$filas"
+  echo
+
+  # --- Qué significa cada cosa ----------------------------------------------
+  bc_step "Cómo leer esto"
+  bc_log "  doble cobertura   HestiaCP la respalda dentro de la cuenta Y backupctl aparte."
+  bc_log "  solo backupctl    Se creó a mano en MySQL. HestiaCP NO la conoce, así que"
+  bc_log "                    NO está en sus respaldos ni se recrea al restaurar la cuenta."
+  bc_log "  SIN RESPALDO      Existe en MySQL y no está en el último respaldo. Grave."
+  bc_log "  huérfana          Registrada o respaldada, pero ya no está en MySQL."
+  echo
+
+  if (( n_sin > 0 )); then
+    bc_err "$n_sin bases SIN RESPALDO. Revisa EXCLUDE_DBS y lanza un respaldo."
+  fi
+  if (( n_solo_bctl > 0 )); then
+    bc_warn "$n_solo_bctl bases que HestiaCP no conoce."
+    bc_warn "AL MIGRAR: sus datos llegarán con backupctl, pero en el destino no"
+    bc_warn "tendrán entrada en el panel ni usuario gestionado. Hay que darlas de"
+    bc_warn "alta allí con  v-add-database  antes de apuntar la aplicación."
+  fi
+  (( n_sin == 0 && n_solo_bctl == 0 && n_huerfana == 0 )) && bc_ok "Todo cuadra."
+  return 0
+}
+
+# =============================================================================
 # ¿Dónde están mis claves?
 # =============================================================================
 # La pregunta que más importa y peor respondida suele estar. Se contesta con

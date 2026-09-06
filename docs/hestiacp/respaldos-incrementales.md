@@ -7,7 +7,12 @@ host de respaldo, cron y rescate de claves— **sin tocar nada a mano**.
 backupctl hestia setup
 ```
 
-Un asistente que pregunta lo necesario y lo deja todo montado. Si prefieres ir
+Un asistente que pregunta lo necesario y lo deja todo montado.
+
+!!! tip "¿Quieres entender qué está haciendo por debajo?"
+    [El protocolo a mano](protocolo-manual.md) tiene los mismos pasos con las
+    órdenes de HestiaCP, rclone y Restic. Útil para entenderlo, para auditarlo,
+    y para arreglarlo si algún día la herramienta no está. Si prefieres ir
 por partes, cada paso tiene su orden.
 
 !!! info "Dos capas complementarias"

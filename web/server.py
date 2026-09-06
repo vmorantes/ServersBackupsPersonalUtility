@@ -74,6 +74,9 @@ A = {
     "hestia-verify": (["hestia", "verify"], [], False),
     "hestia-keys":   (["hestia", "keys"], [], True),
     "hestia-donde":  (["hestia", "donde"], [], False),
+    "hestia-users":  (["hestia", "users"], [], False),
+    "hestia-dbs":    (["hestia", "dbs"], [], False),
+    "remote-hestia-dbs": (["remote", "hestia", "dbs"], [], False),
     "hestia-rclone-repo": (["hestia", "rclone", "--desde-repo"], [], True),
     "remote-hestia-donde": (["remote", "hestia", "donde"], [], False),
     "hestia-cron":   (["hestia", "cron"], [("hour", "--hour", lambda v: v.isdigit()),
@@ -304,11 +307,11 @@ def probe(name):
 
     r = {"destino": (f"{user}@{host}" if host else ""), "ruta": path,
          "local": local, "ssh": "sin-destino", "backupctl": "?",
-         "siguiente": "", "detalle": ""}
+         "siguiente": "", "detalle": "", "plan": []}
 
     if not host:
-        r["siguiente"] = ("Falta DEPLOY_HOST en la configuración. Sin él no se "
-                          "puede hablar con el servidor.")
+        r["siguiente"] = ("Falta el servidor en la configuración. Ponlo en la "
+                          "pestaña Configuración: DEPLOY_HOST.")
         return r
     if not user:
         r["ssh"] = "sin-destino"
@@ -332,21 +335,87 @@ def probe(name):
         r["detalle"] = err.splitlines()[-1] if err else "sin detalle"
         if "Permission denied" in err or "publickey" in err:
             r["ssh"] = "sin-clave"
-            r["siguiente"] = (f"La web no puede usar contraseña: no hay terminal donde "
-                              f"teclearla. Ejecuta una vez  ssh-copy-id {destino}")
+            # En HestiaCP los usuarios del panel tienen shell 'nologin': por SSH
+            # no se puede entrar como ellos por mucha clave que se instale. Si
+            # el usuario configurado no es root, ese suele ser el problema real.
+            if user not in ("root",):
+                r["ssh"] = "usuario-malo"
+                r["siguiente"] = (
+                    f"Estás intentando entrar como «{user}», que parece un usuario "
+                    f"del panel de HestiaCP. Esos usuarios NO tienen consola. "
+                    f"Cambia DEPLOY_USER a «root» en la pestaña Configuración y "
+                    f"vuelve a comprobar.")
+                return r
+            # Nada de mandar al terminal: el botón que lo resuelve está justo
+            # debajo de este mensaje.
+            r["siguiente"] = ("Pulsa «Configurar acceso por clave» aquí abajo. "
+                              "Te pedirá la contraseña del servidor UNA vez y "
+                              "dejará el acceso resuelto para siempre.")
         else:
             r["ssh"] = "error"
-            r["siguiente"] = "No se llega al servidor. Comprueba DEPLOY_HOST y la red."
+            r["siguiente"] = ("No se llega al servidor. Revisa el nombre en la "
+                              "pestaña Configuración y que el servidor esté encendido.")
         return r
 
     r["ssh"] = "ok"
     r["backupctl"] = "si" if c.stdout.strip() == "SI" else "no"
-    if r["backupctl"] == "no":
-        r["siguiente"] = ("El servidor responde pero no tiene backupctl. "
-                          "Empieza por «Instalar en el servidor».")
-    else:
-        r["siguiente"] = "Todo listo: puedes operar el servidor desde aquí."
+
+    # Plan ordenado: qué falta y en qué orden. Es la diferencia entre "aquí
+    # tienes cincuenta botones" y "haz esto ahora".
+    r["plan"] = plan_pasos(name, destino, path, r["backupctl"] == "si")
+    pend = [x for x in r["plan"] if not x["hecho"]]
+    r["siguiente"] = pend[0]["hacer"] if pend else "Todo listo: este servidor está blindado."
     return r
+
+
+def plan_pasos(name, destino, path, hay_ctl):
+    """Estado de cada pieza del blindaje, en el orden en que hay que montarlas."""
+    pasos = [
+        {"titulo": "backupctl instalado en el servidor", "hecho": hay_ctl,
+         "hacer": "Pestaña Servidor → «Instalar en el servidor»."},
+    ]
+    if not hay_ctl:
+        for t, h in [("Respaldo de bases de datos programado", "Pestaña Programación."),
+                     ("Respaldos incrementales (Restic) configurados", "Pestaña HestiaCP."),
+                     ("Claves de recuperación rescatadas", "Pestaña HestiaCP.")]:
+            pasos.append({"titulo": t, "hecho": False, "hacer": h})
+        return pasos
+
+    def remoto(*args):
+        try:
+            return subprocess.run(
+                ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", destino, *args],
+                capture_output=True, text=True, timeout=25)
+        except Exception:
+            return None
+
+    # ¿Cron del respaldo de bases de datos?
+    c = remoto(f"crontab -l 2>/dev/null | grep -c backupctl || true")
+    cron_bd = bool(c and c.stdout.strip() not in ("", "0"))
+    pasos.append({"titulo": "Respaldo de bases de datos programado", "hecho": cron_bd,
+                  "hacer": "Pestaña Programación → «Programar en el servidor»."})
+
+    # ¿Restic configurado y con cron?
+    c = remoto("cat /usr/local/hestia/data/users/conf/restic.conf 2>/dev/null || true")
+    restic = bool(c and "REPO=" in (c.stdout or ""))
+    pasos.append({"titulo": "Respaldos incrementales (Restic) configurados", "hecho": restic,
+                  "hacer": "Pestaña HestiaCP → configurar el remoto y registrar el host."})
+
+    c = remoto("crontab -l 2>/dev/null | grep -c v-backup-users-restic || true")
+    cron_restic = bool(c and c.stdout.strip() not in ("", "0"))
+    pasos.append({"titulo": "Cron de Restic activo", "hecho": cron_restic,
+                  "hacer": "Pestaña HestiaCP → «Activar su cron». HestiaCP no lo hace solo."})
+
+    # ¿Claves rescatadas en el repositorio?
+    meta = profile_meta(name)
+    salida = meta.get("HESTIA_OUTPUT_DIR", "")
+    tiene = False
+    if salida and os.path.isdir(salida):
+        f = os.listdir(salida)
+        tiene = any(x.startswith("Restic_Configs_") for x in f) and any(x.startswith("rclone_") for x in f)
+    pasos.append({"titulo": "Claves de recuperación rescatadas", "hecho": tiene,
+                  "hacer": "Pestaña HestiaCP → «Traer las claves del servidor»."})
+    return pasos
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -655,6 +724,15 @@ class Handler(BaseHTTPRequestHandler):
             "BC_SETUP_ADMIN_USER":  payload.get("admin_user", ""),
             "BC_SETUP_ADMIN_PASS":  payload.get("admin_pass", ""),
             "BC_SETUP_DEPLOY":      "si" if payload.get("desplegar") else "no",
+            # Respaldos incrementales: opcional, y si viene se monta en el
+            # mismo flujo del alta en lugar de dejarlo para otra pantalla.
+            "BC_SETUP_RC_NAME":     payload.get("rc_name", ""),
+            "BC_SETUP_RC_TYPE":     payload.get("rc_type", "s3"),
+            "BC_SETUP_RC_KEY":      payload.get("rc_key", ""),
+            "BC_SETUP_RC_SECRET":   payload.get("rc_secret", ""),
+            "BC_SETUP_RC_ENDPOINT": payload.get("rc_endpoint", ""),
+            "BC_SETUP_RC_REGION":   payload.get("rc_region", ""),
+            "BC_SETUP_REPO":        payload.get("repo", ""),
         }
         if not SAFE_NAME.match(campos["BC_SETUP_NAME"]):
             return self._json({"error": "nombre de perfil no válido"}, 400)

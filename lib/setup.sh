@@ -83,6 +83,33 @@ bc_setup_auto() {
     BC_ASSUME_YES=1 bc_deploy_run "$target"
   fi
 
+  # --- Respaldos incrementales, si se pidieron en el alta --------------------
+  # Se hace DESPUÉS del despliegue para que el perfil ya esté cargado y la
+  # conexión sea la definitiva. Todo en el mismo flujo: quien da de alta un
+  # servidor no debería tener que volver luego a otra pantalla.
+  if [[ -n "${BC_SETUP_RC_NAME:-}" ]]; then
+    echo
+    bc_section "Respaldos incrementales (Restic)"
+    bc_config_load "$dir/env.sh"
+
+    BC_OPT_RC_NAME="$BC_SETUP_RC_NAME"
+    BC_OPT_RC_TYPE="${BC_SETUP_RC_TYPE:-s3}"
+    BC_OPT_RC_KEY="${BC_SETUP_RC_KEY:-}"
+    BC_OPT_RC_SECRET="${BC_SETUP_RC_SECRET:-}"
+    BC_OPT_RC_ENDPOINT="${BC_SETUP_RC_ENDPOINT:-}"
+    BC_OPT_RC_REGION="${BC_SETUP_RC_REGION:-}"
+    BC_ASSUME_YES=1 bc_hestia_rclone || bc_warn "no se pudo configurar el remoto; hazlo desde la pestaña HestiaCP."
+
+    if [[ -n "${BC_SETUP_REPO:-}" ]]; then
+      BC_OPT_REPO="$BC_SETUP_REPO"
+      BC_ASSUME_YES=1 bc_hestia_restic || bc_warn "no se pudo registrar el host de respaldo."
+      BC_ASSUME_YES=1 bc_hestia_cron   || bc_warn "no se pudo activar el cron de Restic."
+    fi
+
+    # El paso que nadie recuerda: sin estas claves, todo lo anterior es inútil
+    bc_hestia_keys || bc_warn "no se pudieron rescatar las claves."
+  fi
+
   bc_ok "Perfil '$name' listo."
 }
 

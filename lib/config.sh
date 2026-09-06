@@ -133,8 +133,14 @@ bc_config_apply_defaults() {
 
   # Destino para `backupctl deploy` y `backupctl migrate`
   DEPLOY_HOST="${DEPLOY_HOST:-}"
-  DEPLOY_USER="${DEPLOY_USER:-$USER_NAME}"
+  # Quien abre la sesión SSH. Por defecto root: en HestiaCP los usuarios del
+  # panel NO tienen consola —su shell es nologin—, así que no se puede entrar
+  # como ellos. Además las órdenes v-* exigen root.
+  # USER_NAME es otra cosa: el usuario de HestiaCP dueño de la instalación.
+  DEPLOY_USER="${DEPLOY_USER:-root}"
   DEPLOY_PATH="${DEPLOY_PATH:-/home/$USER_NAME/scripts}"
+  # Usuarios de HestiaCP cuyos respaldos nos interesan. Vacío = todos.
+  HESTIA_USERS="${HESTIA_USERS:-}"
 }
 
 # -----------------------------------------------------------------------------

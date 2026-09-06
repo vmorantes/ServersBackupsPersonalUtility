@@ -49,6 +49,7 @@
       <div class="estado-fila"><span class="ico-estado" id="e-ctl">?</span>
         <span id="t-ctl"></span></div>
       <div class="siguiente" id="t-siguiente"></div>
+      <ol class="plan" id="plan"></ol>
       <div id="acciones-estado" class="botones" style="margin-top:8px" hidden>
         <button class="btn btn-escribe" id="btn-sshkey">Configurar acceso por clave</button>
       </div>
@@ -421,16 +422,20 @@
     <h3>Añadir un servidor</h3>
     <p class="ayuda">Se comprueba la conexión, se escribe el <code>env.sh</code>
        y, si lo pides, se despliega.</p>
+    <p class="ayuda"><strong>Usuario SSH</strong> es quien abre la sesión: en HestiaCP
+       casi siempre <code>root</code>, porque los usuarios del panel no tienen consola.
+       <strong>Usuario de HestiaCP</strong> es de quién son los respaldos (<code>admin</code>
+       normalmente). Son distintos a propósito.</p>
 
     <div class="campos">
       <label>Nombre del perfil
         <input type="text" id="f-name" placeholder="MiVPS" autocomplete="off"></label>
       <label>Servidor
         <input type="text" id="f-host" placeholder="mivps.example.com" autocomplete="off"></label>
-      <label>Usuario SSH <span class="pista">necesita shell</span>
-        <input type="text" id="f-ssh" value="admin" autocomplete="off"></label>
-      <label>Usuario propietario <span class="pista">no necesita shell</span>
-        <input type="text" id="f-owner" placeholder="igual que el de SSH" autocomplete="off"></label>
+      <label>Usuario SSH <span class="pista">normalmente root</span>
+        <input type="text" id="f-ssh" value="root" autocomplete="off"></label>
+      <label>Usuario de HestiaCP <span class="pista">dueño de los respaldos</span>
+        <input type="text" id="f-owner" placeholder="admin" autocomplete="off"></label>
       <label>Ruta en el servidor
         <input type="text" id="f-path" placeholder="/home/admin/scripts" autocomplete="off"></label>
       <label>URL de healthcheck <span class="pista">opcional</span>
@@ -462,6 +467,31 @@
       <p class="ayuda">La contraseña del usuario nuevo se genera aquí (28 caracteres)
          y se guarda en el <code>env.sh</code>. La de administrador se usa una vez
          y se descarta.</p>
+    </div>
+
+    <h4>Respaldos incrementales de HestiaCP <span class="pista">opcional, se puede hacer luego</span></h4>
+    <p class="ayuda">La capa que cubre archivos web, correo, DNS y configuración.
+       Si rellenas esto, se monta entero en el mismo proceso: remoto, host de
+       respaldo, cron y rescate de claves.</p>
+    <div class="opcion">
+      <label class="radio"><input type="checkbox" id="f-restic"> Configurar Restic ahora</label>
+    </div>
+    <div class="campos" id="bloque-restic" hidden>
+      <label>Nombre del remoto
+        <input type="text" id="f-rcname" placeholder="megas3-vicsen" autocomplete="off"></label>
+      <label>Tipo
+        <select id="f-rctype"><option value="s3">S3 (Mega S4, compatible)</option>
+                              <option value="local">Disco local o NAS</option></select></label>
+      <label>Access key ID
+        <input type="text" id="f-rckey" autocomplete="off"></label>
+      <label>Secret access key
+        <input type="password" id="f-rcsecret" autocomplete="new-password"></label>
+      <label>Endpoint S3 <span class="pista">obligatorio: Mega S4 no es Amazon</span>
+        <input type="text" id="f-rcendpoint" placeholder="https://…" autocomplete="off"></label>
+      <label>Región <span class="pista">opcional</span>
+        <input type="text" id="f-rcregion" autocomplete="off"></label>
+      <label>Ruta del repositorio <span class="pista">dentro del remoto</span>
+        <input type="text" id="f-repo" placeholder="mi-servidor/hestiacp/" autocomplete="off"></label>
     </div>
 
     <label class="radio" style="margin-top:12px">
