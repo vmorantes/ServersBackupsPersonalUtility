@@ -32,7 +32,7 @@ export BC_ROOT BC_VERSION
 
 # --- Carga de la biblioteca --------------------------------------------------
 for _m in core config mysql notify retention backup verify restore archive \
-          restic doctor cron logs ssh deploy pull remote migrate setup web install tui; do
+          restic doctor cron logs ssh sshkey deploy pull remote migrate setup web install tui; do
   # shellcheck source=/dev/null
   source "$BC_ROOT/lib/$_m.sh" || { echo "ERROR: no se pudo cargar lib/$_m.sh" >&2; exit 2; }
 done
@@ -89,6 +89,7 @@ ${BC_BLD}ORDENES PRINCIPALES${BC_RST}
 
 ${BC_BLD}MIGRACIÓN${BC_RST}
   ${BC_YEL}~${BC_RST} ${BC_CYA}deploy${BC_RST} [usuario@host]  SUBIR backupctl y la config a un servidor
+  ${BC_YEL}~${BC_RST} ${BC_CYA}sshkey${BC_RST} [usuario@host]  instalar tu clave SSH allí (pide la contraseña una vez)
   ${BC_YEL}~${BC_RST} ${BC_CYA}pull${BC_RST}   [usuario@host]  DESCARGAR el estado real de un servidor al repo
   ${BC_CYA}remote <orden>${BC_RST}         ejecutar cualquier orden EN el servidor, desde aquí
   ${BC_RED}!${BC_RST} ${BC_CYA}migrate${BC_RST} --to <destino> migrar bases de datos a otro servidor
@@ -383,6 +384,10 @@ case "$BC_CMD" in
       esac
     done
     bc_deploy_run "$_target"
+    ;;
+
+  sshkey)
+    bc_sshkey_run "${1:-}"
     ;;
 
   pull)

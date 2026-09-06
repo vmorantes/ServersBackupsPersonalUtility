@@ -20,6 +20,7 @@ backupctl [opciones globales] <orden> [opciones]
 | [`list`](#list) | Respaldos disponibles |
 | [`inspect`](#inspect) | Metadatos e inventario de un respaldo |
 | [`deploy`](#deploy) | **Subir** backupctl y la config a un servidor |
+| [`sshkey`](#sshkey) | Instalar tu clave SSH en el servidor |
 | [`pull`](#pull) | **Descargar** al repo el estado real de un servidor |
 | [`remote`](#remote) | Ejecutar cualquier orden **en** el servidor, desde tu equipo |
 | [`migrate`](#migrate) | Migrar bases de datos a otro servidor |
@@ -217,6 +218,22 @@ backupctl deploy [usuario@host] [--path <ruta>] [--dry-run]
 
 Copia `bin/` y `lib/` más el `env.sh` del perfil, y ejecuta `doctor` en el
 destino. Sin argumento usa `DEPLOY_USER@DEPLOY_HOST`.
+
+## sshkey
+
+```bash
+backupctl sshkey [usuario@servidor]
+```
+
+Instala tu clave pública en el servidor usando la contraseña **una sola vez**.
+Si no tienes clave, genera una ed25519 sin frase.
+
+La contraseña se pide oculta y viaja a un archivo `0600` que lee el ayudante de
+`ssh`: nunca aparece en la línea de órdenes. Al terminar comprueba de verdad que
+el servidor ya acepta la clave.
+
+Sin destino usa `DEPLOY_USER@DEPLOY_HOST`. Es lo que hace el botón
+*«Configurar acceso por clave»* de la interfaz web.
 
 ## pull
 

@@ -16,6 +16,12 @@ backupctl --help                # ayuda, con la leyenda de qué escribe cada ord
 backupctl profiles              # servidores que conoce el repositorio
 ```
 
+### Acceso al servidor
+
+```bash
+backupctl -p MiVPS sshkey       # instala tu clave, pide la contraseña una vez
+```
+
 ### Poder llamarlo sin `./bin/`
 
 ```bash

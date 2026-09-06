@@ -1,5 +1,10 @@
 # Claves Restic de HestiaCP
 
+!!! tip "¿Buscas cómo configurar Restic en HestiaCP?"
+    Esta página trata de **volcar las claves** que ya existen. Para montar los
+    respaldos incrementales desde cero —rclone, S3/Mega S4, retención, cron—
+    ve a [Respaldos incrementales con Restic](../hestiacp/respaldos-incrementales.md).
+
 HestiaCP guarda la clave de cada repositorio Restic en un `restic.conf` dentro
 de su árbol de instalación. Esta orden los recopila en un único archivo.
 

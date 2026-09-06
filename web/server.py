@@ -21,6 +21,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
@@ -445,7 +446,7 @@ class Handler(BaseHTTPRequestHandler):
     # --- POST: ejecutar una acción, retransmitiendo la salida ---------------
     def do_POST(self):
         ruta = urlparse(self.path).path
-        if ruta not in ("/api/run", "/api/setup", "/api/config-save"):
+        if ruta not in ("/api/run", "/api/setup", "/api/config-save", "/api/sshkey"):
             return self._send(404, "no encontrado", "text/plain; charset=utf-8")
         if not self._auth_ok():
             return self._json({"error": "no autorizado"}, 403)
@@ -460,6 +461,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._guardar_config(payload)
         if ruta == "/api/setup":
             return self._alta(payload)
+        if ruta == "/api/sshkey":
+            return self._instalar_clave(payload)
 
         argv, err = build_argv(payload.get("profile"),
                                payload.get("action"),
@@ -524,6 +527,58 @@ class Handler(BaseHTTPRequestHandler):
         shutil.copy2(ruta, ruta.with_suffix(".sh.anterior"))
         tmp.replace(ruta)
         return self._json({"ok": True, "ruta": str(ruta)})
+
+    # --- Instalar la clave SSH en el servidor -------------------------------
+    def _instalar_clave(self, payload):
+        name = payload.get("profile") or ""
+        destino = (payload.get("target") or "").strip()
+        clave = payload.get("password")
+        if not SAFE_NAME.match(name):
+            return self._json({"error": "perfil no válido"}, 400)
+        if destino and not re.match(r"^[A-Za-z0-9._\-]+@[A-Za-z0-9._\-]+$", destino):
+            return self._json({"error": "destino no válido"}, 400)
+        if not isinstance(clave, str) or not clave:
+            return self._json({"error": "falta la contraseña"}, 400)
+
+        # La contraseña va a un archivo 0600 que solo lee el ayudante de ssh.
+        # Pasarla por la línea de órdenes la haría visible en `ps`; por el
+        # entorno, en /proc/PID/environ.
+        fd, tmp = tempfile.mkstemp()
+        try:
+            os.chmod(tmp, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(clave)
+            clave = None
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+
+            argv = [str(BACKUPCTL), "--no-color", "-p", name, "sshkey"]
+            if destino:
+                argv.append(destino)
+            env = dict(os.environ, BC_NO_COLOR="1", BC_SSH_PASSWORD_FILE=tmp)
+            p = subprocess.Popen(argv, stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT,
+                                 stdin=subprocess.DEVNULL, text=True,
+                                 bufsize=1, env=env)
+            for line in p.stdout:
+                self.wfile.write(line.encode("utf-8", "replace")); self.wfile.flush()
+            p.wait()
+            self.wfile.write(f"\n__FIN__{p.returncode}\n".encode())
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception as e:
+            try:
+                self.wfile.write(f"[ERROR] {e}\n".encode())
+            except Exception:
+                pass
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
     # --- Alta de un perfil, retransmitiendo la salida -----------------------
     def _alta(self, payload):

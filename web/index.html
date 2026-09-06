@@ -49,6 +49,9 @@
       <div class="estado-fila"><span class="ico-estado" id="e-ctl">?</span>
         <span id="t-ctl"></span></div>
       <div class="siguiente" id="t-siguiente"></div>
+      <div id="acciones-estado" class="botones" style="margin-top:8px" hidden>
+        <button class="btn btn-escribe" id="btn-sshkey">Configurar acceso por clave</button>
+      </div>
     </div>
 
     <nav class="pestanas" id="pestanas">
@@ -373,6 +376,27 @@
     <div class="modal-botones">
       <button class="btn btn-sec" id="alta-no">Cancelar</button>
       <button class="btn btn-escribe" id="alta-si">Crear</button>
+    </div>
+  </div>
+</div>
+
+<div id="clave" class="modal" hidden>
+  <div class="modal-caja">
+    <h3>Acceso por clave SSH</h3>
+    <p class="ayuda">Se usará tu contraseña <strong>una sola vez</strong> para dejar
+       instalada tu clave pública en el servidor. A partir de ahí no se vuelve a
+       pedir: ni aquí, ni en el cron, ni en los guiones.</p>
+    <p class="ayuda">Si no tienes clave, se genera una (ed25519).
+       La contraseña no se guarda en ningún sitio.</p>
+    <div class="campos">
+      <label>Servidor
+        <input type="text" id="k-target" autocomplete="off"></label>
+      <label>Contraseña SSH
+        <input type="password" id="k-pass" autocomplete="new-password"></label>
+    </div>
+    <div class="modal-botones">
+      <button class="btn btn-sec" id="clave-no">Cancelar</button>
+      <button class="btn btn-escribe" id="clave-si">Instalar la clave</button>
     </div>
   </div>
 </div>

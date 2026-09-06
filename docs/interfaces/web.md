@@ -20,22 +20,32 @@ La tercera fachada sobre la misma lógica. Lo que aporta sobre la TUI es ver
 
 Sin dependencias: solo Python 3, que ya está en cualquier sistema.
 
-## Requisito: acceso SSH por clave
+## El acceso SSH se resuelve desde la propia web
 
-!!! danger "La web no puede usar contraseña de SSH"
-    El servidor lanza `backupctl` sin terminal, así que no hay dónde teclear una
-    contraseña. Se usa `BatchMode` y se rechaza antes de pedirla — colgarse
-    esperando algo que nadie puede escribir sería peor.
+Si el servidor solo acepta contraseña, la interfaz **te la pide y deja el acceso
+resuelto**: botón **«Configurar acceso por clave»** en la cabecera del perfil.
 
-    ```bash
-    ssh-copy-id admin@tu-servidor
-    ```
+Usa tu contraseña **una sola vez** para instalar tu clave pública en el
+servidor. A partir de ahí no se vuelve a pedir: ni en la web, ni en el cron, ni
+en los guiones. Si no tienes clave, se genera una (ed25519).
 
-    Una vez, y listo. Desde el **terminal** sí funciona la contraseña
-    (`backupctl -p MiVPS remote status`), pero para la web la clave es
-    obligatoria.
+La contraseña no se guarda: viaja a un archivo `0600` que solo lee el ayudante
+de `ssh` y se borra al terminar. Nunca aparece en la línea de órdenes ni en el
+entorno de `ssh`, así que no es visible en `ps`.
 
-Al abrir un perfil, la interfaz lo comprueba y te lo dice:
+También desde el terminal:
+
+```bash
+backupctl -p MiVPS sshkey
+```
+
+??? question "¿Por qué no usar la contraseña en cada operación?"
+    Un despliegue abre varias conexiones y el cron ninguna interactiva. Arrastrar
+    la contraseña por todas sería frágil e imposible bajo cron. Instalarla una
+    vez resuelve el problema para siempre y es lo que haría cualquiera a mano
+    con `ssh-copy-id`.
+
+Al abrir un perfil, la interfaz comprueba el estado y te lo dice:
 
 ```
 ✗ Sin acceso por clave a admin@vps-ef720100.vps.ovh.ca

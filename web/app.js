@@ -305,6 +305,11 @@ async function sondear(nombre) {
   }
   $('#t-siguiente').textContent = d.siguiente ? 'Siguiente paso: ' + d.siguiente : '';
 
+  // El botón solo aparece cuando de verdad resuelve algo
+  const acc = $('#acciones-estado');
+  acc.hidden = d.ssh !== 'sin-clave';
+  if (d.ssh === 'sin-clave') $('#k-target').value = d.destino || '';
+
   // Si el perfil es de otra máquina, avisar en las pestañas que actúan aquí
   const rot = $('#rotulo-local');
   if (rot) {
@@ -403,6 +408,17 @@ async function guardarConfig() {
   } catch (e) { limpiarConsola('[ERROR] ' + e.message); }
 }
 
+// --- Instalar la clave SSH ---------------------------------------------------
+async function instalarClave() {
+  const target = $('#k-target').value.trim();
+  const password = $('#k-pass').value;
+  if (!target || !password) { alert('Hacen falta el servidor y la contraseña.'); return; }
+  $('#clave').hidden = true;
+  $('#k-pass').value = '';          // no se queda en el formulario
+  await ejecutar('sshkey', { profile: perfilActual, target, password }, '/api/sshkey');
+  if (perfilActual) sondear(perfilActual);
+}
+
 // --- Alta de un servidor -----------------------------------------------------
 function abrirAlta()  { $('#alta').hidden = false; $('#f-name').focus(); }
 function cerrarAlta() { $('#alta').hidden = true; }
@@ -460,6 +476,14 @@ $('#pestanas').addEventListener('click', (ev) => {
 
 $('#btn-refrescar').addEventListener('click', cargarPanel);
 $('#btn-nuevo').addEventListener('click', abrirAlta);
+$('#btn-sshkey').addEventListener('click', () => {
+  $('#clave').hidden = false; $('#k-pass').focus();
+});
+$('#clave-no').addEventListener('click', () => { $('#clave').hidden = true; $('#k-pass').value = ''; });
+$('#clave-si').addEventListener('click', instalarClave);
+$('#clave').addEventListener('click', (ev) => {
+  if (ev.target === $('#clave')) { $('#clave').hidden = true; $('#k-pass').value = ''; }
+});
 $('#alta-no').addEventListener('click', cerrarAlta);
 $('#alta-si').addEventListener('click', crearPerfil);
 $('#btn-cargar-config').addEventListener('click', cargarConfig);
@@ -482,6 +506,7 @@ $('#btn-cerrar').addEventListener('click', () => {
   // Por si alguna regla de estilo volviera a anular el atributo `hidden`
   $('#modal').hidden = true;
   $('#alta').hidden = true;
+  $('#clave').hidden = true;
   if (!TOKEN) {
     limpiarConsola('Falta la credencial de sesión.\n\nAbre la dirección completa que imprimió el servidor, la que lleva ?t=…');
     return;
