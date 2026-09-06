@@ -434,6 +434,95 @@ bc_hestia_keys() {
 }
 
 # =============================================================================
+# ¿Dónde están mis claves?
+# =============================================================================
+# La pregunta que más importa y peor respondida suele estar. Se contesta con
+# rutas concretas, no con explicaciones.
+bc_hestia_donde() {
+  bc_section "Dónde están tus claves"
+
+  bc_log "backupctl NO inventa credenciales: guarda las que rescata del servidor."
+  echo
+
+  bc_step "1 · En el servidor (el original)"
+  bc_log "        $HESTIA_DIR/data/users/*/restic.conf   descifra el repositorio"
+  bc_log "        $BC_HESTIA_RCLONE_CONF   permite llegar a él"
+  echo
+
+  bc_step "2 · Rescatadas en este repositorio"
+  local hay=0 f
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    hay=1
+    bc_ok "        $f   ($(bc_age_days "$f") días)"
+  done < <( { find "$HESTIA_OUTPUT_DIR" -maxdepth 1 \( -name 'Restic_Configs_*.txt' -o -name 'rclone_*.conf' \)               -printf '%T@ %p
+' 2>/dev/null || true; } | sort -rn | cut -d' ' -f2- )
+  if (( ! hay )); then
+    bc_err "        NINGUNA. Rescátalas:  backupctl -p $BC_PROFILE hestia keys"
+  fi
+  echo
+
+  bc_step "3 · Fuera de aquí"
+  bc_warn "        Este repositorio vive en tu equipo. Si lo pierdes, pierdes las"
+  bc_warn "        claves con él. Copia esos archivos a un gestor de contraseñas"
+  bc_warn "        o a otra máquina."
+  echo
+
+  bc_step "Al desplegar en un servidor NUEVO"
+  bc_log "        Si va a usar el MISMO destino S3, no hay que teclear nada:"
+  bc_log "            backupctl -p <perfil> hestia rclone --desde-repo"
+  bc_log "        instala allí el rclone.conf ya rescatado."
+  bc_log ""
+  bc_log "        Si va a un destino NUEVO, las claves salen del panel de tu"
+  bc_log "        proveedor (Mega S4 → sección S4) y se introducen una vez con:"
+  bc_log "            backupctl -p <perfil> hestia rclone"
+}
+
+# =============================================================================
+# Reinstalar en un servidor el rclone.conf ya rescatado
+# =============================================================================
+# Cierra el ciclo: rescatar → repositorio → volver a poner en otra máquina.
+# Sin esto, montar un servidor nuevo obligaría a ir a buscar las credenciales al
+# panel del proveedor aunque ya las tuvieras guardadas.
+bc_hestia_rclone_desde_repo() {
+  local origen
+  origen="$( { find "$HESTIA_OUTPUT_DIR" -maxdepth 1 -name 'rclone_*.conf' -printf '%T@ %p
+' 2>/dev/null || true; }              | sort -rn | head -1 | cut -d' ' -f2- )"
+  [[ -n "$origen" ]] || bc_die "no hay ningún rclone.conf rescatado en $HESTIA_OUTPUT_DIR. Rescátalo antes desde un servidor que ya lo tenga: backupctl hestia keys"
+
+  bc_hestia_conectar
+  trap 'bc_hestia_cerrar' RETURN
+
+  bc_section "Reinstalar la configuración de rclone guardada"
+  bc_log "Origen: $origen  ($(bc_age_days "$origen") días)"
+  bc_log "Remotos que contiene:"
+  grep -oP '^\[\K[^]]+' "$origen" | sed 's/^/        /'
+  bc_warn "Este archivo lleva tus claves de S3. Se instalará en el servidor con"
+  bc_warn "permisos 600, guardando copia de lo que hubiera antes."
+
+  if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
+    bc_ok "Simulación (--dry-run): no se ha escrito nada."
+    return 0
+  fi
+  bc_confirm "¿Instalarlo en $BC_HESTIA_RCLONE_CONF del servidor?" n     || { bc_log "Cancelado."; return 0; }
+
+  # El directorio se calcula aquí, no en el servidor: anidar $( ) dentro de la
+  # cadena entrecomillada que viaja por SSH obliga a un escapado frágil.
+  local destino_dir; destino_dir="$(dirname "$BC_HESTIA_RCLONE_CONF")"
+
+  bc_hestia_root_stdin "
+    umask 077
+    mkdir -p '$destino_dir'
+    [ -f '$BC_HESTIA_RCLONE_CONF' ] && cp -a '$BC_HESTIA_RCLONE_CONF' '$BC_HESTIA_RCLONE_CONF.anterior'
+    cat > '$BC_HESTIA_RCLONE_CONF'
+    chmod 600 '$BC_HESTIA_RCLONE_CONF'
+  " < "$origen" || bc_die "no se pudo escribir la configuración en el servidor."
+
+  bc_ok "Instalado. Los remotos guardados ya funcionan en este servidor."
+  bc_log "Comprueba uno con:  rclone lsd <remoto>:"
+}
+
+# =============================================================================
 # Asistente completo
 # =============================================================================
 bc_hestia_setup() {

@@ -55,77 +55,231 @@
     </div>
 
     <nav class="pestanas" id="pestanas">
-      <button class="pestana activa" data-tab="revisar">Revisar</button>
-      <button class="pestana" data-tab="blindaje">Blindaje</button>
+      <button class="pestana activa" data-tab="blindaje">Blindaje</button>
+      <button class="pestana" data-tab="estado">Estado</button>
       <button class="pestana" data-tab="respaldar">Respaldar</button>
+      <button class="pestana" data-tab="verificar">Verificar</button>
       <button class="pestana" data-tab="restaurar">Restaurar</button>
+      <button class="pestana" data-tab="retencion">Retención</button>
       <button class="pestana" data-tab="servidor">Servidor</button>
-      <button class="pestana" data-tab="migrar">Migrar</button>
+      <button class="pestana" data-tab="hestia">HestiaCP</button>
       <button class="pestana" data-tab="programacion">Programación</button>
+      <button class="pestana" data-tab="migrar">Migrar</button>
       <button class="pestana" data-tab="config">Configuración</button>
       <button class="pestana" data-tab="registros">Registros</button>
     </nav>
 
-    <!-- REVISAR ------------------------------------------------------------->
-    <div class="tab" data-tab="revisar">
-      <p class="ayuda">Ninguna de estas acciones escribe nada.</p>
-      <div class="botones">
-        <button class="btn" data-act="status">Estado</button>
-        <button class="btn" data-act="doctor">Diagnóstico</button>
-        <button class="btn" data-act="config">Configuración efectiva</button>
-        <button class="btn" data-act="config-check">Validar configuración</button>
-        <button class="btn" data-act="list">Listar respaldos</button>
-        <button class="btn" data-act="list-databases">Bases del último respaldo</button>
+    <div class="tab" data-tab="blindaje">
+      <p class="rotulo">¿Qué perderías si mañana desapareciera el servidor?
+         <strong>Solo lectura.</strong></p>
+      <div class="acciones">
+        <div class="accion"><button class="btn" data-act="shield">Informe de blindaje</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Cruza las tres capas —bases de datos, cuenta completa y claves— y dice qué perderías si mañana desapareciera el servidor. Nombra las bases que existen y <strong>nadie respalda</strong>.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="remote-shield">Blindaje del servidor</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> El mismo informe ejecutado <strong>en el servidor</strong>, donde están las rutas de verdad.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="hestia-status">Configuración de Restic</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Configuración de Restic ya interpretada: repositorio, retención real y si el cron está activo.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="remote-hestia-status">La del servidor</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Lo mismo, leído <strong>del servidor</strong>.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="remote-hestia-verify">Verificar el repositorio Restic</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Ejecuta <code>restic snapshots</code>, <code>check</code> y <code>stats</code> contra el repositorio real. Puede tardar.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="hestia-donde">¿Dónde están mis claves?</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Rutas concretas: dónde están las claves en el servidor, cuáles hay rescatadas aquí, y de dónde salen al montar un servidor nuevo.</div>
+        </div>
       </div>
+    </div>
 
+    <div class="tab" data-tab="estado" hidden>
+      <p class="rotulo">Cómo está el respaldo de bases de datos. <strong>Solo lectura.</strong></p>
+      <div class="acciones">
+        <div class="accion"><button class="btn" data-act="status">Estado</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Último respaldo, cuántos hay, disco, conexión a MySQL y avisos configurados.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="doctor">Diagnóstico</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Órdenes del sistema, permisos, disco, privilegios de MySQL y capacidades de mysqldump.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="remote-status">Estado del servidor</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> El estado <strong>en el servidor</strong>. Para un perfil remoto, este es el que cuenta.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="remote-doctor">Diagnóstico del servidor</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> El diagnóstico <strong>en el servidor</strong>.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="list">Listar respaldos</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Los respaldos guardados con tamaño, fecha, edad y número de bases.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="list-databases">Bases del último respaldo</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Qué bases de datos contiene el respaldo más reciente.</div>
+        </div>
+      </div>
       <h3>Respaldos guardados</h3>
       <div id="tabla-respaldos" class="tabla-envoltorio">
         <p class="ayuda">Selecciona un perfil para verlos.</p>
       </div>
     </div>
 
-    <!-- BLINDAJE ------------------------------------------------------------>
-    <div class="tab" data-tab="blindaje" hidden>
-      <p class="rotulo"><strong>¿Qué perderías si mañana desapareciera el servidor?</strong>
-         Cruza las tres capas: bases de datos, cuenta completa (Restic) y las
-         claves sin las cuales lo demás es papel mojado.</p>
-
-      <div class="botones">
-        <button class="btn" data-act="shield">Informe de blindaje (aquí)</button>
-        <button class="btn" data-act="remote-shield">Informe en el servidor</button>
+    <div class="tab" data-tab="respaldar" hidden>
+      <p class="rotulo">Crear respaldos de bases de datos.</p>
+      <div class="campos" id="form-backup">
+        <label>Solo estas bases <span class="pista">opcional</span>
+          <input type="text" data-opt="only" placeholder="tienda,blog" autocomplete="off"></label>
+        <label>Excluir estas <span class="pista">opcional</span>
+          <input type="text" data-opt="exclude" placeholder="cache" autocomplete="off"></label>
       </div>
-
-      <h3>Estado de los respaldos de HestiaCP</h3>
-      <div class="botones">
-        <button class="btn" data-act="hestia-status">Estado (aquí)</button>
-        <button class="btn" data-act="remote-hestia-status">Estado en el servidor</button>
-        <button class="btn" data-act="remote-hestia-verify">Verificar el repositorio Restic</button>
+      <label class="radio" style="margin:10px 0">
+        <input type="checkbox" data-opt="_nodata" data-form="#form-backup"> Solo estructura, sin datos</label>
+      <div class="acciones">
+        <div class="accion"><button class="btn" data-act="backup-dry" data-form="#form-backup">Ensayo</button>
+          <div class="accion-desc"><span class="no-toca">No escribe nada.</span> Lista qué bases respaldaría y cuánto espacio haría falta.</div>
+        </div>
+        <div class="accion"><button class="btn btn-escribe" data-act="backup" data-form="#form-backup"
+                  data-confirmar="Se creará un respaldo y se aplicará la retención.">Respaldar aquí</button>
+          <div class="accion-desc"><span class="escribe">Crea un respaldo en ESTE equipo.</span> Y aplica la retención. Para un perfil que describe otro servidor, casi nunca es lo que quieres.</div>
+        </div>
+        <div class="accion"><button class="btn btn-escribe" data-act="remote-backup"
+                  data-confirmar="Se lanzará un respaldo EN el servidor.">Respaldar en el servidor</button>
+          <div class="accion-desc"><span class="escribe">Crea un respaldo EN EL SERVIDOR.</span> Lo normal en un perfil remoto. Aplica también la retención allí.</div>
+        </div>
       </div>
+    </div>
 
-      <h3>1 · Remoto de rclone</h3>
-      <p class="ayuda">Dónde se guardarán los respaldos incrementales. Para
-         Mega S4 y cualquier S3 compatible, el <strong>endpoint es obligatorio</strong>:
-         sin él, rclone hablaría con Amazon.</p>
+    <div class="tab" data-tab="verificar" hidden>
+      <p class="rotulo">Comprobar que un respaldo <strong>sirve</strong>.</p>
+      <div class="campos" id="form-verify">
+        <label>Respaldo <span class="pista">vacío = el más reciente</span>
+          <select data-opt="zip" class="sel-respaldo"><option value="">el más reciente</option></select></label>
+      </div>
+      <div class="acciones">
+        <div class="accion"><button class="btn" data-act="verify-quick" data-form="#form-verify">Rápida</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Solo el CRC del zip. Segundos. Detecta un archivo truncado.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="verify" data-form="#form-verify">Completa</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Zip, cada .gz, las sumas SHA-256 del manifiesto y el contenido base a base.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="inspect" data-form="#form-verify">Ver contenido</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Lee el manifiesto sin extraer el zip: origen, fecha, versión de MySQL e inventario.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="remote-verify">Verificar en el servidor</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Verifica el último respaldo <strong>del servidor</strong>.</div>
+        </div>
+      </div>
+      <h3>Prueba de restauración</h3>
+      <div class="campos" id="form-rtest">
+        <label>Respaldo
+          <select data-opt="zip" class="sel-respaldo"><option value="">el más reciente</option></select></label>
+        <label>Base de datos <input type="text" data-opt="db" placeholder="tienda" autocomplete="off"></label>
+      </div>
+      <label class="radio" style="margin:10px 0">
+        <input type="checkbox" data-opt="_withdata" data-form="#form-rtest" checked> Incluir los datos</label>
+      <div class="acciones">
+        <div class="accion"><button class="btn btn-escribe" data-act="verify-restore-test" data-form="#form-rtest"
+                  data-confirmar="Se creará una base temporal, se restaurará dentro y se eliminará al terminar.">Probar restauración</button>
+          <div class="accion-desc"><span class="escribe">Crea una base temporal y la borra.</span> Restaura dentro para demostrar que el respaldo sirve. <strong>Tu producción no se toca.</strong> Es la única prueba concluyente.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab" data-tab="restaurar" hidden>
+      <p class="rotulo rotulo-aviso"><strong>Escribe en la base de datos.</strong>
+         Lo más seguro es restaurar <em>al lado</em>, con otro nombre, y comparar.</p>
+      <div class="campos" id="form-restore">
+        <label>Respaldo <span class="pista">vacío = el más reciente</span>
+          <select data-opt="zip" class="sel-respaldo"><option value="">el más reciente</option></select></label>
+        <label>Base de datos a restaurar
+          <input type="text" data-opt="db" placeholder="tienda" autocomplete="off"></label>
+        <label>Restaurar como <span class="pista">recomendado</span>
+          <input type="text" data-opt="into" placeholder="tienda_recuperada" autocomplete="off"></label>
+        <label>Solo estos segmentos <span class="pista">opcional</span>
+          <input type="text" data-opt="segments" placeholder="tables,views" autocomplete="off"></label>
+      </div>
+      <p class="ayuda">Segmentos: <code>database</code> <code>tables</code> <code>data</code>
+         <code>views</code> <code>functions</code> <code>others</code></p>
+      <div class="acciones">
+        <div class="accion"><button class="btn" data-act="restore-dry" data-form="#form-restore">Ensayo</button>
+          <div class="accion-desc"><span class="no-toca">No ejecuta ningún SQL.</span> Enseña qué segmentos aplicaría y avisa si la base de destino ya existe.</div>
+        </div>
+        <div class="accion"><button class="btn btn-peligro" data-act="restore" data-form="#form-restore"
+                  data-confirmar="Se ESCRIBIRÁ en la base de datos de destino.">Restaurar</button>
+          <div class="accion-desc"><span class="destruye">ESCRIBE en la base de datos de destino.</span> Si ya existe, sus tablas pueden sobrescribirse. Rellena «Restaurar como» para dejar la original intacta.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab" data-tab="retencion" hidden>
+      <p class="rotulo rotulo-aviso">Borrar respaldos antiguos. <strong>Ensaya primero.</strong></p>
+      <div class="acciones">
+        <div class="accion"><button class="btn" data-act="retention-dry">Ensayo: qué se borraría</button>
+          <div class="accion-desc"><span class="no-toca">No borra nada.</span> Enseña exactamente qué respaldos eliminaría.</div>
+        </div>
+        <div class="accion"><button class="btn btn-peligro" data-act="retention"
+                  data-confirmar="Se BORRARÁN los respaldos que superen la antigüedad configurada.">Aplicar aquí</button>
+          <div class="accion-desc"><span class="destruye">BORRA respaldos antiguos de este equipo.</span> Conserva siempre los más recientes según <code>BACKUP_KEEP_MIN</code>.</div>
+        </div>
+        <div class="accion"><button class="btn btn-peligro" data-act="remote-retention"
+                  data-confirmar="Se BORRARÁN respaldos antiguos EN el servidor.">Aplicar en el servidor</button>
+          <div class="accion-desc"><span class="destruye">BORRA respaldos antiguos DEL SERVIDOR.</span> Con la misma red de seguridad.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab" data-tab="servidor" hidden>
+      <p class="rotulo">Acceso e instalación de backupctl <strong>en el servidor</strong>.</p>
+      <div class="campos" id="form-deploy">
+        <label>Destino <span class="pista">vacío = el del perfil</span>
+          <input type="text" data-opt="target" placeholder="admin@servidor" autocomplete="off"></label>
+        <label>Ruta remota <span class="pista">opcional</span>
+          <input type="text" data-opt="path" placeholder="/home/admin/scripts" autocomplete="off"></label>
+      </div>
+      <div class="acciones">
+        <div class="accion"><button class="btn btn-escribe" id="btn-sshkey2">Configurar acceso por clave</button>
+          <div class="accion-desc"><span class="escribe">Escribe en el servidor.</span> Pide tu contraseña SSH <strong>una sola vez</strong> e instala tu clave pública. A partir de ahí nada vuelve a pedirla.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="deploy-dry" data-form="#form-deploy">Ensayo: qué copiaría</button>
+          <div class="accion-desc"><span class="no-toca">No copia nada.</span> Se conecta, comprueba las dependencias del servidor y lista qué copiaría.</div>
+        </div>
+        <div class="accion"><button class="btn btn-escribe" data-act="deploy" data-form="#form-deploy"
+                  data-confirmar="Se copiarán bin/, lib/ y env.sh AL servidor.">Instalar en el servidor</button>
+          <div class="accion-desc"><span class="escribe">Escribe en el servidor.</span> Copia <code>bin/</code>, <code>lib/</code> y el <code>env.sh</code>. <strong>No toca respaldos ni registros</strong>. Si el env.sh del servidor difiere, avisa antes de sobrescribir.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="pull-dry" data-form="#form-deploy">Ensayo: qué diferencias hay</button>
+          <div class="accion-desc"><span class="no-toca">No escribe nada.</span> Enseña las diferencias entre el env.sh del servidor y el del repositorio.</div>
+        </div>
+        <div class="accion"><button class="btn btn-escribe" data-act="pull" data-form="#form-deploy"
+                  data-confirmar="Se escribirá ESTADO.md y podría actualizarse el env.sh local.">Traer el estado al repositorio</button>
+          <div class="accion-desc"><span class="escribe">Escribe en este repositorio.</span> Crea <code>ESTADO.md</code> con lo que hay en el servidor. Puede actualizar el env.sh local solo si lo confirmas.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab" data-tab="hestia" hidden>
+      <p class="rotulo">Respaldos incrementales de HestiaCP con Restic: la capa que
+         cubre <strong>archivos, correo, DNS y configuración</strong>.</p>
+
+      <h3>1 · Dónde se guarda (remoto de rclone)</h3>
       <div class="campos">
         <label>Nombre del remoto
           <input type="text" id="rc-name" placeholder="megas3-vicsen" autocomplete="off"></label>
         <label>Tipo
           <select id="rc-type"><option value="s3">S3 (Mega S4, compatible)</option>
-                               <option value="local">Disco local o NAS montado</option></select></label>
-        <label>Access key ID
-          <input type="text" id="rc-key" autocomplete="off"></label>
-        <label>Secret access key
-          <input type="password" id="rc-secret" autocomplete="new-password"></label>
-        <label>Endpoint S3 <span class="pista">obligatorio para Mega S4</span>
+                               <option value="local">Disco local o NAS</option></select></label>
+        <label>Access key ID <input type="text" id="rc-key" autocomplete="off"></label>
+        <label>Secret access key <input type="password" id="rc-secret" autocomplete="new-password"></label>
+        <label>Endpoint S3 <span class="pista">obligatorio: Mega S4 no es Amazon</span>
           <input type="text" id="rc-endpoint" placeholder="https://…" autocomplete="off"></label>
         <label>Región <span class="pista">opcional</span>
           <input type="text" id="rc-region" autocomplete="off"></label>
       </div>
-      <p class="ayuda">Las claves se escriben en <code>rclone.conf</code> del servidor
-         (permisos 600) y se guarda copia de la versión anterior. No pasan por la
-         línea de órdenes, así que no son visibles en <code>ps</code>.</p>
-      <div class="botones">
-        <button class="btn btn-escribe" id="btn-rclone">Configurar el remoto</button>
+      <div class="acciones">
+        <div class="accion"><button class="btn btn-escribe" id="btn-rclone">Configurar el remoto</button>
+          <div class="accion-desc"><span class="escribe">Escribe el rclone.conf del servidor.</span> Deja configurado dónde se guardan los respaldos incrementales. Guarda copia de la versión anterior.</div>
+        </div>
+        <div class="accion"><button class="btn btn-escribe" id="btn-rclone-repo">Reusar las claves guardadas</button>
+          <div class="accion-desc"><span class="escribe">Escribe el rclone.conf del servidor.</span> Reinstala las claves que <strong>ya rescataste</strong> aquí. Para montar otro servidor con el mismo destino S3 sin volver a teclearlas.</div>
+        </div>
       </div>
 
       <h3>2 · Host de respaldo y retención</h3>
@@ -133,186 +287,62 @@
          no los días. Es el error más común al configurarlo a mano.</p>
       <div class="campos" id="form-hrestic">
         <label>Repositorio
-          <input type="text" data-opt="repo" placeholder="rclone:megas3-vicsen:tejido-testing/hestiacp/"
-                 autocomplete="off"></label>
+          <input type="text" data-opt="repo" placeholder="rclone:megas3-vicsen:mi-servidor/hestiacp/" autocomplete="off"></label>
       </div>
-      <div class="botones">
-        <button class="btn btn-escribe" data-act="hestia-restic" data-form="#form-hrestic"
-                data-confirmar="Se registrará el host de respaldo Restic en HestiaCP.">
-          Registrar en HestiaCP</button>
-      </div>
-
-      <h3>3 · Cron de Restic</h3>
-      <p class="ayuda">HestiaCP <strong>no</strong> lo activa solo al añadir el host.
-         Sin esto, Restic queda configurado pero no se ejecuta nunca.</p>
-      <div class="campos" id="form-hcron">
-        <label>Hora <span class="pista">distinta de la del respaldo tradicional</span>
-          <input type="text" data-opt="hour" placeholder="5" autocomplete="off"></label>
-        <label>Minuto
-          <input type="text" data-opt="minute" placeholder="30" autocomplete="off"></label>
-      </div>
-      <div class="botones">
-        <button class="btn btn-escribe" data-act="hestia-cron" data-form="#form-hcron"
-                data-confirmar="Se registrará el cron v-backup-users-restic en HestiaCP.">
-          Activar el cron</button>
-        <button class="btn btn-escribe" data-act="remote-hestia-cron"
-                data-confirmar="Se activará el cron de Restic EN el servidor.">Activarlo en el servidor</button>
+      <div class="acciones">
+        <div class="accion"><button class="btn btn-escribe" data-act="hestia-restic" data-form="#form-hrestic"
+                  data-confirmar="Se registrará el host de respaldo Restic en HestiaCP.">Registrar en HestiaCP</button>
+          <div class="accion-desc"><span class="escribe">Escribe en HestiaCP.</span> Registra el repositorio Restic con su retención y, si hace falta, lo inicializa.</div>
+        </div>
+        <div class="accion"><button class="btn btn-escribe" data-act="remote-hestia-cron"
+                  data-confirmar="Se activará el cron de Restic EN el servidor.">Activar su cron</button>
+          <div class="accion-desc"><span class="escribe">Modifica el cron del servidor.</span> Activa <code>v-backup-users-restic</code>. <strong>HestiaCP no lo activa solo</strong>: sin esto Restic no se ejecuta nunca.</div>
+        </div>
       </div>
 
-      <h3>4 · Rescatar las claves</h3>
-      <p class="ayuda">Sin <code>restic.conf</code> el repositorio es <strong>ilegible</strong>;
-         sin <code>rclone.conf</code> no se puede <strong>llegar</strong> a él. El segundo no
-         lo respalda nadie: Restic guarda las cuentas de usuario, no la configuración de root.</p>
-      <div class="botones">
-        <button class="btn btn-escribe" data-act="hestia-keys"
-                data-confirmar="Se rescatarán restic.conf y rclone.conf al repositorio.">
-          Rescatar (aquí)</button>
-        <button class="btn btn-escribe" data-act="remote-hestia-keys"
-                data-confirmar="Se rescatarán las claves DEL servidor a este repositorio.">
-          Rescatar del servidor</button>
+      <h3>3 · Claves de recuperación <span class="etq etq-error">crítico</span></h3>
+      <div class="acciones">
+        <div class="accion"><button class="btn btn-escribe" data-act="remote-hestia-keys"
+                  data-confirmar="Se traerán al repositorio las claves DEL servidor.">Traer las claves del servidor</button>
+          <div class="accion-desc"><span class="escribe">Escribe en este repositorio.</span> Trae del servidor el <code>restic.conf</code> de cada usuario y el <code>rclone.conf</code> de root.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="hestia-donde">¿Dónde están mis claves?</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Rutas concretas: dónde están las claves en el servidor, cuáles hay rescatadas aquí, y de dónde salen al montar un servidor nuevo.</div>
+        </div>
       </div>
     </div>
 
-    <!-- RESPALDAR ----------------------------------------------------------->
-    <div class="tab" data-tab="respaldar" hidden>
-      <p class="rotulo" id="rotulo-local">Estas acciones se ejecutan
-         <strong>en este equipo</strong>, sobre las rutas del perfil.</p>
-      <h3>Respaldar</h3>
-      <div class="campos" id="form-backup">
-        <label>Solo estas bases <span class="pista">separadas por comas, opcional</span>
-          <input type="text" data-opt="only" placeholder="tienda,blog" autocomplete="off"></label>
-        <label>Excluir estas <span class="pista">opcional</span>
-          <input type="text" data-opt="exclude" placeholder="cache_temporal" autocomplete="off"></label>
+    <div class="tab" data-tab="programacion" hidden>
+      <p class="rotulo">Que el respaldo de bases de datos se ejecute solo, y que
+         un fallo te llegue.</p>
+      <div class="campos" id="form-cron">
+        <label>Hora <input type="text" data-opt="hour" placeholder="3" autocomplete="off"></label>
+        <label>Minuto <input type="text" data-opt="minute" placeholder="30" autocomplete="off"></label>
       </div>
-      <label class="radio" style="margin:10px 0">
-        <input type="checkbox" data-opt="_nodata" data-form="#form-backup"> Solo estructura, sin datos</label>
-      <div class="botones">
-        <button class="btn" data-act="backup-dry" data-form="#form-backup">Ensayo</button>
-        <button class="btn btn-escribe" data-act="backup" data-form="#form-backup"
-                data-confirmar="Se creará un respaldo y se aplicará la retención.">Respaldar ahora</button>
-      </div>
-
-      <h3>Verificar</h3>
-      <div class="campos" id="form-verify">
-        <label>Respaldo <span class="pista">vacío = el más reciente</span>
-          <select data-opt="zip" class="sel-respaldo"><option value="">el más reciente</option></select></label>
-      </div>
-      <div class="botones">
-        <button class="btn" data-act="verify-quick" data-form="#form-verify">Rápida (solo el zip)</button>
-        <button class="btn" data-act="verify" data-form="#form-verify">Completa</button>
-        <button class="btn" data-act="inspect" data-form="#form-verify">Inspeccionar</button>
-      </div>
-
-      <h3>Prueba de restauración</h3>
-      <p class="ayuda">Crea una base de datos desechable, restaura ahí y la elimina.
-         Tu producción no se toca. Es la única prueba concluyente.</p>
-      <div class="campos" id="form-rtest">
-        <label>Respaldo
-          <select data-opt="zip" class="sel-respaldo"><option value="">el más reciente</option></select></label>
-        <label>Base de datos
-          <input type="text" data-opt="db" placeholder="tienda" autocomplete="off"></label>
-      </div>
-      <label class="radio" style="margin:10px 0">
-        <input type="checkbox" data-opt="_withdata" data-form="#form-rtest" checked> Incluir los datos</label>
-      <div class="botones">
-        <button class="btn btn-escribe" data-act="verify-restore-test" data-form="#form-rtest"
-                data-confirmar="Se creará una base de datos temporal, se restaurará dentro y se eliminará al terminar.">
-          Probar restauración</button>
-      </div>
-
-      <h3>Retención</h3>
-      <div class="botones">
-        <button class="btn" data-act="retention-dry">Ensayo: qué se borraría</button>
-        <button class="btn btn-peligro" data-act="retention"
-                data-confirmar="Se BORRARÁN los respaldos que superen la antigüedad configurada.">
-          Aplicar retención</button>
+      <div class="acciones">
+        <div class="accion"><button class="btn" data-act="cron-show">Ver la programación</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> La programación propuesta y la que ya existe.</div>
+        </div>
+        <div class="accion"><button class="btn btn-escribe" data-act="remote-cron-install"
+                  data-confirmar="Se instalará la programación EN el servidor.">Programar en el servidor</button>
+          <div class="accion-desc"><span class="escribe">Modifica el cron del servidor.</span> Programa el respaldo diario. En HestiaCP usa <code>v-add-cron-job</code>: se ve en el panel y sobrevive a sus reconstrucciones.</div>
+        </div>
+        <div class="accion"><button class="btn btn-peligro" data-act="remote-cron-remove"
+                  data-confirmar="Se quitará la programación DEL servidor.">Quitarla del servidor</button>
+          <div class="accion-desc"><span class="destruye">Quita la programación del servidor.</span> Solo las entradas de backupctl; el resto del cron no se toca.</div>
+        </div>
+        <div class="accion"><button class="btn btn-escribe" data-act="remote-notify"
+                  data-confirmar="Se enviará un aviso de prueba desde el servidor.">Probar los avisos</button>
+          <div class="accion-desc"><span class="escribe">Envía un aviso real.</span> Comprueba que un fallo te llegaría por correo, healthcheck o la orden configurada.</div>
+        </div>
       </div>
     </div>
 
-    <!-- RESTAURAR ----------------------------------------------------------->
-    <div class="tab" data-tab="restaurar" hidden>
-      <p class="ayuda"><strong>Esto escribe en la base de datos.</strong>
-         Haz siempre el ensayo primero. Lo más seguro es restaurar
-         <em>al lado</em>, con otro nombre, y comparar.</p>
-      <div class="campos" id="form-restore">
-        <label>Respaldo <span class="pista">vacío = el más reciente</span>
-          <select data-opt="zip" class="sel-respaldo"><option value="">el más reciente</option></select></label>
-        <label>Base de datos a restaurar
-          <input type="text" data-opt="db" placeholder="tienda" autocomplete="off"></label>
-        <label>Restaurar como <span class="pista">recomendado: otro nombre</span>
-          <input type="text" data-opt="into" placeholder="tienda_recuperada" autocomplete="off"></label>
-        <label>Solo estos segmentos <span class="pista">opcional</span>
-          <input type="text" data-opt="segments" placeholder="tables,views" autocomplete="off"></label>
-      </div>
-      <p class="ayuda">Segmentos válidos: <code>database</code> <code>tables</code>
-         <code>data</code> <code>views</code> <code>functions</code> <code>others</code></p>
-      <div class="botones">
-        <button class="btn" data-act="restore-dry" data-form="#form-restore">Ensayo</button>
-        <button class="btn btn-peligro" data-act="restore" data-form="#form-restore"
-                data-confirmar="Se ESCRIBIRÁ en la base de datos de destino. Si ya existe, sus tablas pueden sobrescribirse.">
-          Restaurar</button>
-      </div>
-    </div>
-
-    <!-- SERVIDOR ------------------------------------------------------------>
-    <div class="tab" data-tab="servidor" hidden>
-      <p class="rotulo">Instalar y operar backupctl <strong>en el servidor</strong>.
-         Requiere <code>DEPLOY_HOST</code> en el perfil.</p>
-
-      <h3>1 · Instalar o actualizar allí</h3>
-      <p class="ayuda">Copia <code>bin/</code>, <code>lib/</code> y el <code>env.sh</code>
-         al servidor. Los respaldos y logs que ya haya allí no se tocan.</p>
-      <div class="campos" id="form-deploy">
-        <label>Destino <span class="pista">vacío = el del perfil</span>
-          <input type="text" data-opt="target" placeholder="admin@servidor" autocomplete="off"></label>
-        <label>Ruta remota <span class="pista">opcional</span>
-          <input type="text" data-opt="path" placeholder="/home/admin/scripts" autocomplete="off"></label>
-      </div>
-      <div class="botones">
-        <button class="btn" data-act="deploy-dry" data-form="#form-deploy">Ensayo: qué copiaría</button>
-        <button class="btn btn-escribe" data-act="deploy" data-form="#form-deploy"
-                data-confirmar="Se copiarán bin/, lib/ y env.sh AL servidor.">Instalar en el servidor</button>
-      </div>
-
-      <h3>2 · Traer el estado al repositorio</h3>
-      <p class="ayuda">Escribe <code>ESTADO.md</code> con lo que hay realmente allí:
-         versión, crontab, respaldos y diagnóstico.</p>
-      <div class="botones">
-        <button class="btn" data-act="pull-dry" data-form="#form-deploy">Ensayo: qué diferencias hay</button>
-        <button class="btn btn-escribe" data-act="pull" data-form="#form-deploy"
-                data-confirmar="Se escribirá ESTADO.md y podría actualizarse el env.sh local.">
-          Traer el estado</button>
-      </div>
-
-      <h3>3 · Operar el servidor desde aquí</h3>
-      <p class="ayuda">Cada botón ejecuta la orden <strong>en el servidor</strong>,
-         con la salida en vivo. Es lo mismo que entrar por SSH.</p>
-      <div class="botones">
-        <button class="btn" data-act="remote-status">Estado</button>
-        <button class="btn" data-act="remote-doctor">Diagnóstico</button>
-        <button class="btn" data-act="remote-list">Respaldos</button>
-        <button class="btn" data-act="remote-config">Configuración</button>
-        <button class="btn" data-act="remote-cron">Programación</button>
-        <button class="btn" data-act="remote-logs">Errores</button>
-        <button class="btn" data-act="remote-verify">Verificar</button>
-        <button class="btn btn-escribe" data-act="remote-backup"
-                data-confirmar="Se lanzará un respaldo EN el servidor.">Respaldar allí</button>
-        <button class="btn btn-peligro" data-act="remote-retention"
-                data-confirmar="Se BORRARÁN respaldos antiguos EN el servidor.">Retención allí</button>
-      </div>
-
-    </div>
-
-    <!-- MIGRAR ------------------------------------------------------------->
     <div class="tab" data-tab="migrar" hidden>
-      <p class="rotulo">Copiar las bases de datos a <strong>OTRA</strong> máquina.
-         Esto no es un respaldo: es un traslado.</p>
-      <h3>Migrar a otro servidor</h3>
-      <p class="ayuda">Copia las bases de datos a OTRA máquina, que debe tener
-         backupctl desplegado. Compara los recuentos al terminar.</p>
+      <p class="rotulo rotulo-aviso">Trasladar las bases a <strong>OTRA</strong> máquina,
+         que debe tener backupctl desplegado. <strong>No es un respaldo.</strong></p>
       <div class="campos" id="form-migrate">
-        <label>Destino
-          <input type="text" data-opt="to" placeholder="admin@nuevo.example" autocomplete="off"></label>
+        <label>Destino <input type="text" data-opt="to" placeholder="admin@nuevo.example" autocomplete="off"></label>
         <label>Solo estas bases <span class="pista">opcional</span>
           <input type="text" data-opt="databases" placeholder="tienda,blog" autocomplete="off"></label>
         <label>Prefijo en el destino <span class="pista">opcional</span>
@@ -321,79 +351,53 @@
       <label class="radio" style="margin:10px 0">
         <input type="checkbox" data-opt="_fresh" data-form="#form-migrate" checked>
         Generar un respaldo nuevo antes de migrar</label>
-      <div class="botones">
-        <button class="btn" data-act="migrate-dry" data-form="#form-migrate">Ensayo</button>
-        <button class="btn btn-peligro" data-act="migrate" data-form="#form-migrate"
-                data-confirmar="Se ESCRIBIRÁ en las bases de datos del servidor destino.">
-          Migrar</button>
+      <div class="acciones">
+        <div class="accion"><button class="btn" data-act="migrate-dry" data-form="#form-migrate">Ensayo</button>
+          <div class="accion-desc"><span class="no-toca">No escribe nada.</span> Comprueba el destino y lista qué bases se migrarían.</div>
+        </div>
+        <div class="accion"><button class="btn btn-peligro" data-act="migrate" data-form="#form-migrate"
+                  data-confirmar="Se ESCRIBIRÁ en las bases de datos del servidor destino.">Migrar</button>
+          <div class="accion-desc"><span class="destruye">ESCRIBE en las bases del servidor DESTINO.</span> El origen solo se lee. Compara los recuentos al terminar.</div>
+        </div>
       </div>
     </div>
 
-    <!-- PROGRAMACIÓN -------------------------------------------------------->
-    <div class="tab" data-tab="programacion" hidden>
-      <h3>Cron</h3>
-      <div class="campos" id="form-cron">
-        <label>Hora <span class="pista">por defecto 3</span>
-          <input type="text" data-opt="hour" placeholder="3" autocomplete="off"></label>
-        <label>Minuto <span class="pista">por defecto 30</span>
-          <input type="text" data-opt="minute" placeholder="30" autocomplete="off"></label>
-      </div>
-      <div class="botones">
-        <button class="btn" data-act="cron-show">Ver la programación</button>
-        <button class="btn btn-escribe" data-act="cron-install" data-form="#form-cron"
-                data-confirmar="Se modificará la programación de este perfil.">Instalar aquí</button>
-        <button class="btn btn-peligro" data-act="cron-remove"
-                data-confirmar="Se quitarán las entradas de backupctl de este perfil.">Quitar aquí</button>
-        <button class="btn btn-escribe" data-act="remote-cron-install"
-                data-confirmar="Se instalará la programación EN el servidor.">Instalar en el servidor</button>
-        <button class="btn btn-peligro" data-act="remote-cron-remove"
-                data-confirmar="Se quitará la programación EN el servidor.">Quitar del servidor</button>
-      </div>
-      <p class="ayuda">En HestiaCP, instalar el cron necesita <code>sudo</code>.
-         Sin terminal donde teclear la contraseña, esto solo funciona si
-         <code>sudo</code> no la pide. Si falla, hazlo desde el terminal.</p>
-
-      <h3>Avisos</h3>
-      <div class="botones">
-        <button class="btn btn-escribe" data-act="notify-test"
-                data-confirmar="Se enviará un aviso de prueba.">Probar avisos aquí</button>
-        <button class="btn btn-escribe" data-act="remote-notify"
-                data-confirmar="Se enviará un aviso de prueba desde el servidor.">Probar en el servidor</button>
-      </div>
-
-      <h3>Claves Restic de HestiaCP</h3>
-      <div class="botones">
-        <button class="btn" data-act="restic-list">Ver repositorios</button>
-        <button class="btn" data-act="restic-dry">Ensayo del volcado</button>
-        <button class="btn btn-escribe" data-act="restic"
-                data-confirmar="Se volcarán las claves Restic. Necesita root.">Volcar aquí</button>
-        <button class="btn btn-escribe" data-act="remote-restic"
-                data-confirmar="Se volcarán las claves Restic EN el servidor. Necesita root allí.">
-          Volcar en el servidor</button>
-      </div>
-    </div>
-
-    <!-- CONFIGURACIÓN ------------------------------------------------------->
     <div class="tab" data-tab="config" hidden>
-      <p class="ayuda">Es el <code>env.sh</code> del perfil. Se valida la sintaxis
-         antes de guardar, y la versión anterior queda como <code>env.sh.anterior</code>.</p>
-      <p class="ayuda"><strong>Contiene la contraseña de MySQL en claro.</strong>
-         Es tu archivo, en tu equipo, pero tenlo en cuenta si hay alguien mirando.</p>
-      <div class="botones">
-        <button class="btn" id="btn-cargar-config">Cargar</button>
-        <button class="btn btn-escribe" id="btn-guardar-config">Guardar</button>
-        <span class="etq" id="ruta-config"></span>
+      <p class="rotulo">El <code>env.sh</code> del perfil.</p>
+      <div class="acciones">
+        <div class="accion"><button class="btn" data-act="config">Ver la efectiva</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Valores efectivos del perfil, con los defectos aplicados y la contraseña oculta.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="config-check">Validar</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Comprueba que la configuración es utilizable.</div>
+        </div>
+        <div class="accion"><button class="btn" id="btn-cargar-config">Cargar para editar</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Trae el <code>env.sh</code> del perfil al editor de abajo.</div>
+        </div>
+        <div class="accion"><button class="btn btn-escribe" id="btn-guardar-config">Guardar</button>
+          <div class="accion-desc"><span class="escribe">Sobrescribe el env.sh del perfil.</span> Valida la sintaxis antes de tocar el archivo bueno y guarda la versión previa.</div>
+        </div>
       </div>
+      <span class="etq" id="ruta-config"></span>
       <textarea id="editor-config" class="editor" spellcheck="false"
-                placeholder="Pulsa «Cargar» para editar el env.sh de este perfil."></textarea>
+                placeholder="Pulsa «Cargar para editar»."></textarea>
     </div>
 
-    <!-- REGISTROS ----------------------------------------------------------->
     <div class="tab" data-tab="registros" hidden>
-      <div class="botones">
-        <button class="btn" data-act="logs">Listar registros</button>
-        <button class="btn" data-act="logs-errors">Solo errores</button>
-        <button class="btn" data-act="logs-full">Último completo</button>
+      <p class="rotulo">Qué pasó en las últimas ejecuciones. <strong>Solo lectura.</strong></p>
+      <div class="acciones">
+        <div class="accion"><button class="btn" data-act="logs">Listar</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Todos los registros con su recuento de errores y avisos.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="logs-errors">Solo errores</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Solo los errores y avisos del último registro.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="logs-full">Último completo</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> El último registro entero.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="remote-logs">Errores del servidor</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Errores del último registro <strong>del servidor</strong>.</div>
+        </div>
       </div>
     </div>
   </section>

@@ -1,285 +1,217 @@
-# Hacerlo todo de una vez
+# Hacerlo todo desde la interfaz
 
-**Una sola página, de cero a funcionando.** Sin saltar a ninguna otra. Los
-enlaces son opcionales: solo para profundizar si algo no sale.
+**Una sola página, de cero a blindado, sin tocar el terminal** salvo la primera
+línea.
 
-Tiempo: unos 30 minutos. Los pasos marcados 🛡️ **no tocan nada**.
+```bash
+backupctl web --open
+```
+
+Se abre el navegador en `http://127.0.0.1:8787`. Todo lo demás se hace ahí.
+
+!!! info "Por qué existe también una CLI"
+    La línea de órdenes está para **los servidores**: el cron la usa cada noche
+    y no hay nadie mirando. Para ti está esta interfaz. Cualquier cosa que se
+    pueda hacer con una, se puede hacer con la otra.
 
 ---
 
-## La vía rápida: el asistente
+## Antes de empezar
 
-Si no quieres pensar en nada, esto hace las partes 1, 2 y 3 de una vez:
+Solo dos cosas, y las dos en el servidor:
 
-```bash
-cd /ruta/al/repositorio
-./bin/backupctl install      # para poder llamarlo sin ./bin/ a partir de ahora
-backupctl setup
-```
+1. **Un usuario que pueda entrar por SSH.** Vale con contraseña: la interfaz te
+   la pedirá una vez y dejará instalada tu clave.
+2. **Un usuario de MySQL**, o su credencial de administrador para que la
+   interfaz cree uno.
 
-Pregunta el servidor, el usuario, la ruta y las credenciales; si no tienes un
-usuario de MySQL para respaldos, te pide **una credencial de administrador** de
-la base de datos, crea el usuario con sus permisos y **descarta la credencial de
-administrador** (no se guarda en ningún sitio). Después escribe el `env.sh` y
-ofrece desplegar.
-
-Si prefieres verlo paso a paso, sigue leyendo.
+**No hace falta** nada más: ni crear directorios, ni instalar paquetes, ni
+configurar rclone a mano. De eso se encarga la herramienta.
 
 ---
 
-## Parte 1 · En tu equipo (5 min)
+## 1 · Añadir el servidor
 
-```bash
-cd /ruta/al/repositorio
+Botón **+ Añadir servidor**, arriba del panel.
 
-# 🛡️ ¿Qué servidores conoce ya?
-backupctl profiles
+| Campo | Qué poner |
+|---|---|
+| Nombre del perfil | `MiVPS` |
+| Servidor | El nombre o la IP que te da tu proveedor. En OVH, algo como `vps-xxxxxxx.vps.ovh.net` |
+| Usuario SSH | `admin` — necesita shell |
+| Usuario propietario | Vacío = el mismo |
+| Ruta en el servidor | Vacío = `/home/admin/scripts` |
+| URL de healthcheck | Opcional, pero ponla |
 
-# Crear el perfil del servidor (si no existe)
-mkdir MiVPS
-cp config/env.sh.example MiVPS/env.sh
-${EDITOR:-nano} MiVPS/env.sh
-```
+Para MySQL, dos caminos:
 
-Rellena estas líneas y deja el resto como está:
+- **«Ya tengo un usuario»** → sus credenciales, que se comprueban antes de guardar.
+- **«Créalo tú»** → una credencial de **administrador** de MySQL. Se usa una vez
+  para crear el usuario de respaldo y **se descarta**: no se guarda en ningún
+  archivo y el formulario la borra al enviar.
 
-```bash
-export USER_NAME="admin"                  # de quién es la instalación
-export MYSQL_USER="admin_general"
-export MYSQL_PASS="la-contraseña"
-export DEPLOY_HOST="mivps.example.com"
-export DEPLOY_USER="admin"                # quién se conecta por SSH
-export HEALTHCHECK_URL=""                 # se rellena en la parte 5
-```
-
-!!! tip "`USER_NAME` y `DEPLOY_USER` pueden ser distintos"
-    En HestiaCP muchos usuarios tienen `nologin` y no pueden entrar por SSH.
-    Conéctate con uno que sí pueda (`DEPLOY_USER`) e instala en el home del otro
-    (`USER_NAME`). `deploy` ajusta el propietario al final.
-
-```bash
-# 🛡️ ¿Es válida?
-backupctl -p MiVPS config --check
-```
+Deja marcado **«Desplegar al terminar»**. Verás en vivo cómo conecta, comprueba
+dependencias, crea el usuario, escribe la configuración y copia la herramienta.
 
 ---
 
-## Parte 2 · Preparar el VPS (10 min)
+## 2 · Estado
 
-Tres cosas, y solo tres.
+Al abrir el perfil, la cabecera te dice en qué punto estás:
 
-```bash
-# 1. Un usuario con acceso SSH. Vale contraseña; no hace falta clave.
-ssh admin@mivps.example.com 'hostname'
+```
+✓ Conectado a admin@vps-xxxxxxx.vps.ovh.net
+✓ backupctl instalado en /home/admin/scripts
+Siguiente paso: Todo listo: puedes operar el servidor desde aquí.
 ```
 
-!!! tip "Con clave es más cómodo, pero no obligatorio"
-    `backupctl` abre una conexión maestra y pide la contraseña **una sola vez**
-    para todo el despliegue. Si prefieres no escribirla nunca:
-    `ssh-copy-id admin@mivps.example.com`
+Si sale **«Sin acceso por clave»**, aparece el botón **Configurar acceso por
+clave**: te pide la contraseña **una vez** y deja el acceso resuelto para
+siempre. Si no tienes clave, la genera.
 
-!!! warning "Si entra y cierra al instante"
-    Ese usuario tiene `nologin`, habitual en HestiaCP. **No hace falta darle
-    shell**: conéctate con uno que sí la tenga (`admin` o `root`) y pon en
-    `env.sh`:
+!!! tip "Esa es la única vez que la interfaz pide una contraseña de SSH"
+    A partir de ahí no vuelve a pedirla: ni aquí, ni en el cron, ni en nada.
 
-    ```bash
-    export DEPLOY_USER="admin"      # quién se conecta
-    export USER_NAME="cliente07"    # de quién es la instalación
+---
+
+## 3 · Las cinco pestañas
+
+| Pestaña | Para qué | ¿Escribe? |
+|---|---|---|
+| **Estado** | ¿Cómo está todo? Blindaje, diagnóstico, registros, respaldos guardados | No |
+| **Desplegar y validar** | Poner el servidor a punto: acceso, herramienta, cron, Restic, claves | Sí |
+| **Respaldar** | Correr y comprobar respaldos de bases de datos | Sí |
+| **Restaurar** | Recuperar una base de datos | **En la BD** |
+| **Migrar** | Trasladar las bases a otra máquina | **En la BD destino** |
+
+Cada acción destructiva pide confirmación explicando qué va a pasar, y las que
+tienen ensayo lo ofrecen justo al lado.
+
+---
+
+## 4 · Blindar el servidor
+
+Pestaña **Desplegar y validar**, apartados 3 a 5. Es lo que convierte un
+servidor «con respaldos» en un servidor del que **no se pierde nada**.
+
+### 3 · Programación
+
+**Programar en el servidor.** Instala el cron del respaldo de bases de datos.
+En HestiaCP lo registra con `v-add-cron-job`, así que aparece en el panel y
+sobrevive a sus reconstrucciones.
+
+Después, **Probar los avisos** para confirmar que un fallo te llegaría.
+
+### 4 · Respaldos incrementales de HestiaCP
+
+Aquí se configura Restic, que respalda **la cuenta entera**: archivos web,
+correo, DNS y configuración. Es la capa que `backupctl` no cubre.
+
+Rellena el remoto:
+
+| Campo | Para Mega S4 |
+|---|---|
+| Nombre del remoto | `megas3-vicsen` — el que tú quieras |
+| Tipo | S3 |
+| Access key ID | Del panel de Mega, sección **S4** |
+| Secret access key | Del mismo sitio |
+| **Endpoint** | **Obligatorio.** Del panel de Mega |
+
+!!! danger "El endpoint no es opcional"
+    Mega S4 es compatible con S3, pero **no es Amazon**. Sin `endpoint`, rclone
+    intentaría hablar con AWS. La interfaz se niega a continuar sin él en vez de
+    dejarte una configuración que no funciona.
+
+Botón **Configurar el remoto**. Las claves se escriben en el `rclone.conf` del
+servidor con permisos `600`; no pasan por la línea de órdenes, así que no son
+visibles para otros usuarios de la máquina.
+
+Después, **Registrar en HestiaCP** con el repositorio
+(`rclone:megas3-vicsen:mi-servidor/hestiacp/`) y **Activar su cron**.
+
+!!! warning "HestiaCP no activa ese cron por su cuenta"
+    Sin él, Restic queda perfectamente configurado y **no se ejecuta nunca**. El
+    informe de blindaje lo marca en rojo.
+
+### 5 · Rescatar las claves
+
+Botón **Traer las claves del servidor**. Trae al repositorio los **dos**
+archivos sin los cuales tus respaldos son irrecuperables aunque estén intactos.
+
+Y el botón **¿Dónde están mis claves?** te responde con rutas concretas.
+
+---
+
+## 5 · ¿De dónde salen las claves en un servidor nuevo?
+
+La pregunta importa, y tiene dos respuestas según el caso:
+
+=== "Mismo destino S3"
+
+    Si el servidor nuevo va a guardar en el **mismo** Mega S4 que ya usas, no
+    hay que teclear nada. Botón **Reusar las claves guardadas**: instala allí el
+    `rclone.conf` que ya rescataste antes.
+
+    ```
+    Origen: MiVPS/output/HestiaCP/rclone_20260905.conf  (2 días)
+    Remotos que contiene:
+            megas3-vicsen
     ```
 
-    `deploy` ajusta el propietario al final.
+=== "Destino nuevo"
 
-```bash
-# 2. Paquetes: NO hace falta hacerlo a mano.
-#    deploy detecta lo que falta y se ofrece a instalarlo.
+    Si va a otro sitio, las claves salen del **panel de tu proveedor**
+    (Mega → sección S4) y se introducen una vez en el formulario.
 
-# 3. Usuario de MySQL con permisos (esto sí es manual, una sola vez)
-```
-
-```sql
-CREATE USER 'admin_general'@'localhost' IDENTIFIED BY 'la-contraseña';
-GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES, PROCESS,
-      CREATE, DROP
-  ON *.* TO 'admin_general'@'localhost';
-FLUSH PRIVILEGES;
-```
-
-!!! note "`CREATE` y `DROP` son para poder probar la restauración"
-    `verify --restore-test` crea una base de datos desechable y la borra. Es la
-    única prueba que demuestra que el respaldo sirve.
-
-**No crees** `/home/admin/scripts`, ni `logs/`, ni `output/`: los crea `deploy`.
+!!! info "backupctl no inventa credenciales"
+    Solo guarda las que rescata del servidor y te las devuelve cuando montas
+    otro. Si nunca has hecho **Traer las claves del servidor**, no hay nada que
+    reusar.
 
 ---
 
-## Parte 3 · Desplegar (5 min)
+## 6 · Comprobar que funciona
 
-```bash
-# 🛡️ Ensayo: comprueba SSH, dependencias y lista qué copiaría
-backupctl -p MiVPS deploy admin@mivps.example.com --dry-run
+Pestaña **Estado**:
 
-# 🛡️ Foto de cómo está el servidor AHORA (antes de tocarlo)
-backupctl -p MiVPS pull admin@mivps.example.com
-```
+1. **Informe de blindaje** — debe salir sin ✗
+2. **Diagnóstico del servidor** — sin fallos
 
-!!! danger "En el `pull`, si pregunta por el env.sh: responde `n`"
-    Si el servidor ya tenía un `env.sh` antiguo, te enseñará el `diff` y
-    preguntará si traértelo. Quieres conservar el del repositorio, que es el
-    nuevo y completo.
+Pestaña **Respaldar**:
 
-```bash
-# Copiar de verdad
-backupctl -p MiVPS deploy admin@mivps.example.com
-```
+3. **Respaldar en el servidor** — el primero, a mano
+4. **Probar restauración**, con datos, sobre una base cualquiera
 
-Si el servidor tenía un `env.sh` distinto, te lo enseñará y **preguntará antes
-de sobrescribirlo**. Guarda una copia como `env.sh.anterior` en el propio
-servidor.
+!!! danger "El paso 4 no es opcional"
+    Los anteriores comprueban que el archivo existe. Ese es el único que
+    comprueba que **sirve para restaurar**. Crea una base desechable, restaura
+    dentro y la elimina; tu producción no se toca.
 
 ---
 
-## Parte 4 · Comprobar (5 min)
+## Lista de comprobación
 
-**Sin salir de tu equipo.** `remote` ejecuta la orden en el servidor:
-
-```bash
-# 🛡️ Diagnóstico. No escribe nada. Debe salir SIN fallos (✗)
-backupctl -p MiVPS remote doctor
-
-# El primer respaldo
-backupctl -p MiVPS remote backup
-
-# 🛡️ Verificarlo
-backupctl -p MiVPS remote verify
-```
-
-Y la prueba que de verdad importa. Elige una base de datos cualquiera:
-
-```bash
-backupctl -p MiVPS remote list --databases | head
-backupctl -p MiVPS remote verify --restore-test <una_bd> --with-data
-```
-
-!!! danger "No sigas si este paso falla"
-    Los anteriores comprueban que el archivo existe y está íntegro. Este es el
-    único que comprueba que **sirve para restaurar**.
+- [ ] Servidor añadido y desplegado
+- [ ] Cabecera en verde: conectado y con backupctl instalado
+- [ ] Cron del respaldo de bases de datos programado
+- [ ] Avisos probados y recibidos
+- [ ] Remoto de rclone configurado con su endpoint
+- [ ] Host de respaldo Restic registrado y su cron activo
+- [ ] Claves traídas al repositorio
+- [ ] **Claves copiadas también fuera de este repositorio**
+- [ ] Informe de blindaje sin ✗
+- [ ] Prueba de restauración superada
 
 ---
 
-## Parte 5 · Avisos y programación (5 min)
+## Después
 
-Primero los avisos, porque sin ellos un fallo pasa inadvertido.
+| Cada | Qué | Dónde |
+|---|---|---|
+| Semana | Informe de blindaje | Estado |
+| Mes | Prueba de restauración con datos | Respaldar |
+| Trimestre | Comprobar que las claves siguen fuera del servidor | — |
 
-Crea un check gratuito en [healthchecks.io](https://healthchecks.io) y:
-
-Edítalo en tu equipo y súbelo:
-
-```bash
-backupctl -p MiVPS config --edit     # export HEALTHCHECK_URL="https://hc-ping.com/tu-uuid"
-backupctl -p MiVPS deploy            # subir el cambio
-backupctl -p MiVPS remote notify-test
-```
-
-!!! tip "Por qué un healthcheck y no un correo"
-    Es el único canal que detecta que el cron **dejó de ejecutarse**. Si el
-    respaldo nunca arranca, no hay nada que envíe un correo.
-
-Ahora la programación:
-
-```bash
-# 🛡️ Ver qué propone, sin instalar
-backupctl -p MiVPS remote cron --show
-
-# Instalar (detecta que necesita sudo y lo usa)
-backupctl -p MiVPS remote cron --install
-```
-
-!!! info "En HestiaCP hace falta `sudo`, y es importante"
-    El crontab del sistema es un archivo **generado** a partir de
-    `cron.conf`. Una línea puesta con `crontab -e` no aparece en el panel y
-    **desaparece** en el siguiente rebuild. `backupctl` usa `v-add-cron-job`,
-    que exige root, para que quede registrada de verdad.
-
-Compruébalo en el panel de HestiaCP, sección **Cron**: deben aparecer tres
-trabajos.
-
----
-
-## Parte 6 · Cerrar el círculo (2 min)
-
-De vuelta en tu equipo:
-
-```bash
-backupctl -p MiVPS pull admin@mivps.example.com
-git add MiVPS/
-git commit -m "MiVPS: backupctl instalado y programado"
-```
-
-`MiVPS/ESTADO.md` queda con la versión instalada, el crontab, los respaldos y el
-diagnóstico. El repositorio ya recuerda el despliegue.
-
----
-
-## Ya está. ¿Y ahora?
-
-### Mañana
-
-```bash
-backupctl -p MiVPS status      # 🛡️ ¿se ejecutó anoche?
-```
-
-### Si tenías scripts antiguos
-
-Déjalos unos días conviviendo. `deploy` no los ha tocado y siguen funcionando.
-Cuando el nuevo lleve una semana sin errores:
-
-```bash
-ssh admin@mivps.example.com
-sudo /usr/local/hestia/bin/v-list-cron-jobs admin       # localizar el viejo
-sudo /usr/local/hestia/bin/v-delete-cron-job admin <ID>
-rm /home/admin/scripts/RunBackupDB.sh
-```
-
-### Cada mes
-
-```bash
-./bin/backupctl verify --restore-test <bd> --with-data
-```
-
-### Otro servidor
-
-Repite desde la Parte 1 con otro nombre de carpeta. El código no se duplica:
-`bin/` y `lib/` son los mismos para todos.
-
----
-
-## Lista completa
-
-- [ ] `MiVPS/env.sh` creado y `config --check` en verde
-- [ ] SSH por clave, y el usuario **tiene shell**
-- [ ] `zip`, `unzip`, `rsync` instalados en el VPS
-- [ ] Usuario de MySQL con permisos (incluidos `CREATE` y `DROP`)
-- [ ] `deploy --dry-run` sin errores
-- [ ] `pull` hecho antes de desplegar
-- [ ] `deploy` completado
-- [ ] `doctor` sin fallos en el VPS
-- [ ] `backup` con código `0`
-- [ ] **`verify --restore-test --with-data` pasa**
-- [ ] `HEALTHCHECK_URL` configurado y `notify-test` llega
-- [ ] `cron --install` con `sudo`, y los 3 trabajos se ven en el panel
-- [ ] `pull` final y commit en el repositorio
-
----
-
-## Si algo falla
-
-```bash
-./bin/backupctl doctor          # 🛡️ qué está mal y qué hacer
-./bin/backupctl logs --errors   # 🛡️ qué falló la última vez
-```
-
-Casi todo lo que puede salir mal está en
-[Cuando algo falla](guias/diagnostico.md). Para las órdenes sueltas, la
-[Chuleta](referencia/chuleta.md). Para restaurar o migrar, las
-[guías paso a paso](paso-a-paso/index.md).
+Si algo sale mal, **Diagnóstico** y **Registros → Solo errores**, ambos en la
+pestaña Estado. Casi todo lo que puede fallar está en
+[Cuando algo falla](guias/diagnostico.md).

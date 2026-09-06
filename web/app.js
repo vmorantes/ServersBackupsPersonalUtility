@@ -511,6 +511,16 @@ $('#clave').addEventListener('click', (ev) => {
 $('#alta-no').addEventListener('click', cerrarAlta);
 $('#alta-si').addEventListener('click', crearPerfil);
 $('#btn-rclone').addEventListener('click', configurarRclone);
+$('#btn-rclone-repo').addEventListener('click', async () => {
+  if (!(await confirmar('Se instalará en el servidor el rclone.conf que ya está ' +
+                        'rescatado en este repositorio, con tus claves guardadas. ' +
+                        'Se guardará copia de lo que hubiera antes.'))) return;
+  ejecutar('hestia-rclone-repo', {});
+});
+$('#btn-ver-claves').addEventListener('click', () => ejecutar('hestia-donde', {}));
+$('#btn-sshkey2').addEventListener('click', () => {
+  $('#clave').hidden = false; $('#k-pass').focus();
+});
 $('#rc-type').addEventListener('change', () => {
   const s3 = $('#rc-type').value === 's3';
   ['rc-key','rc-secret','rc-endpoint','rc-region'].forEach(

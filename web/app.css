@@ -272,3 +272,24 @@ input[type=password] {
 .rotulo strong { color: var(--texto); }
 .rotulo-aviso { border-left-color: var(--aviso); color: var(--aviso); }
 .rotulo-aviso strong { color: var(--aviso); }
+
+/* --- Acciones con explicación -------------------------------------------- */
+/* Cada botón lleva al lado qué hace exactamente. Una interfaz que ejecuta
+   órdenes sobre servidores de producción no puede permitirse que el usuario
+   deduzca el alcance de un botón por su nombre. */
+.acciones { display: flex; flex-direction: column; gap: 2px; margin: 10px 0 4px; }
+.accion {
+  display: grid; grid-template-columns: minmax(190px, 230px) 1fr;
+  gap: 14px; align-items: center;
+  padding: 7px 8px; border-radius: 7px;
+}
+.accion:hover { background: var(--fondo); }
+.accion .btn { width: 100%; text-align: left; }
+.accion-desc { font-size: 12.5px; color: var(--suave); line-height: 1.45; }
+.accion-desc strong { color: var(--texto); }
+.accion-desc .no-toca { color: var(--ok); font-weight: 600; }
+.accion-desc .escribe { color: var(--aviso); font-weight: 600; }
+.accion-desc .destruye { color: var(--peligro); font-weight: 600; }
+@media (max-width: 700px) {
+  .accion { grid-template-columns: 1fr; gap: 4px; }
+}

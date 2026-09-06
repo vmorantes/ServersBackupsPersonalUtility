@@ -86,6 +86,8 @@ ${BC_BLD}BLINDAJE (HestiaCP)${BC_RST}
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia cron${BC_RST}            activar el cron de Restic
   ${BC_GRN}·${BC_RST} ${BC_CYA}hestia verify${BC_RST}          instantáneas, integridad y espacio real
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia keys${BC_RST}            rescatar restic.conf Y rclone.conf
+  ${BC_GRN}·${BC_RST} ${BC_CYA}hestia donde${BC_RST}           ¿dónde están mis claves? rutas concretas
+  ${BC_YEL}~${BC_RST} ${BC_CYA}hestia rclone --desde-repo${BC_RST}  reinstalar las claves guardadas en otro servidor
 
 ${BC_BLD}ORDENES PRINCIPALES${BC_RST}
   ${BC_GRN}·${BC_RST} ${BC_CYA}status${BC_RST}                 ¿estoy protegido ahora mismo? (código != 0 si no)
@@ -456,18 +458,21 @@ case "$BC_CMD" in
         --type)   BC_OPT_RC_TYPE="${2:-}"; shift 2 ;;
         --endpoint) BC_OPT_RC_ENDPOINT="${2:-}"; shift 2 ;;
         --region) BC_OPT_RC_REGION="${2:-}"; shift 2 ;;
+        --desde-repo) BC_OPT_RC_REPO=1; shift ;;
         *) bc_die "opción desconocida para 'hestia $_sub': $1" ;;
       esac
     done
     case "$_sub" in
       status) bc_hestia_status ;;
       setup)  bc_hestia_setup ;;
-      rclone) bc_hestia_rclone ;;
+      rclone) if [[ "${BC_OPT_RC_REPO:-0}" == "1" ]]; then bc_hestia_rclone_desde_repo
+              else bc_hestia_rclone; fi ;;
+      donde|claves) bc_hestia_donde ;;
       restic) bc_hestia_restic ;;
       cron)   bc_hestia_cron ;;
       verify) bc_hestia_verify ;;
       keys)   bc_hestia_keys ;;
-      *) bc_die "subórdenes de 'hestia': status setup rclone restic cron verify keys" ;;
+      *) bc_die "subórdenes de 'hestia': status setup rclone restic cron verify keys donde" ;;
     esac
     ;;
 
