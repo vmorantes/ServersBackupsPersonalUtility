@@ -6,10 +6,10 @@ algo.**
 ## Repositorio ↔ servidor
 
 ```bash
-backupctl -p TejidoTesting pull admin@servidor      # DESCARGAR el estado real
+backupctl -p TejidoTesting pull root@servidor      # DESCARGAR el estado real
 backupctl -p TejidoTesting config --edit            # ajustar la configuración
-backupctl -p TejidoTesting deploy admin@servidor    # SUBIR los cambios
-backupctl -p TejidoTesting pull admin@servidor      # dejar constancia
+backupctl -p TejidoTesting deploy root@servidor    # SUBIR los cambios
+backupctl -p TejidoTesting pull root@servidor      # dejar constancia
 ```
 
 ```bash
@@ -130,22 +130,22 @@ backupctl config --edit             # BACKUP_RETENTION_DAYS="7"
 ## Migrar a un servidor nuevo
 
 ```bash
-backupctl deploy admin@nuevo.example
-ssh admin@nuevo.example '/home/admin/scripts/bin/backupctl doctor'
-backupctl migrate --to admin@nuevo.example --dry-run
-backupctl migrate --to admin@nuevo.example --fresh
+backupctl deploy root@nuevo.example
+ssh root@nuevo.example '/home/admin/scripts/bin/backupctl doctor'
+backupctl migrate --to root@nuevo.example --dry-run
+backupctl migrate --to root@nuevo.example --fresh
 ```
 
 ## Migrar solo unas bases
 
 ```bash
-backupctl migrate --to admin@nuevo.example --databases tienda,blog --fresh
+backupctl migrate --to root@nuevo.example --databases tienda,blog --fresh
 ```
 
 ## Migrar sin pisar las que ya existen
 
 ```bash
-backupctl migrate --to admin@nuevo.example --prefix viejo_ --fresh
+backupctl migrate --to root@nuevo.example --prefix viejo_ --fresh
 ```
 
 ## Actualizar backupctl en todos los servidores

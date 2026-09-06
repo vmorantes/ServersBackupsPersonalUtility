@@ -27,10 +27,10 @@ cuando estás seguro, dejar de usar el viejo.
 Desde el **origen**:
 
 ```bash
-ssh admin@origen.example
+ssh root@origen.example
 cd /home/admin/scripts
 
-./bin/backupctl migrate --to admin@nuevo.example --fresh
+./bin/backupctl migrate --to root@nuevo.example --fresh
 ```
 
 !!! tip "`--fresh` casi siempre"
@@ -44,7 +44,7 @@ cd /home/admin/scripts
 Pide confirmación explícita antes de escribir nada:
 
 ```
-[AVISO] Esto va a ESCRIBIR en las bases de datos del servidor admin@nuevo.example.
+[AVISO] Esto va a ESCRIBIR en las bases de datos del servidor root@nuevo.example.
 ¿Continuar con la migración de 76 bases de datos? [s/N]
 ```
 
@@ -78,13 +78,13 @@ catalogo       18      18       ok
     Algo no se restauró. **No sigas.** Mira el detalle de esa base:
 
     ```bash
-    ssh admin@nuevo.example '/home/admin/scripts/bin/backupctl logs --errors'
+    ssh root@nuevo.example '/home/admin/scripts/bin/backupctl logs --errors'
     ```
 
     Y reintenta solo esa:
 
     ```bash
-    ./bin/backupctl migrate --to admin@nuevo.example --databases catalogo --fresh
+    ./bin/backupctl migrate --to root@nuevo.example --databases catalogo --fresh
     ```
 
 ## Paso 2 — Recrear los usuarios de MySQL
@@ -104,8 +104,8 @@ Revísalo, ajusta las contraseñas (los `GRANT` no las traen en claro) y aplíca
 en el **destino**:
 
 ```bash
-scp /tmp/grants.sql admin@nuevo.example:/tmp/
-ssh admin@nuevo.example 'mysql < /tmp/grants.sql'
+scp /tmp/grants.sql root@nuevo.example:/tmp/
+ssh root@nuevo.example 'mysql < /tmp/grants.sql'
 ```
 
 !!! info "En HestiaCP hay atajo"
@@ -128,7 +128,7 @@ sudo v-backup-user admin
 ls -lh /backup/
 
 # Transferir
-scp /backup/admin.*.tar admin@nuevo.example:/backup/
+scp /backup/admin.*.tar root@nuevo.example:/backup/
 
 # En el DESTINO
 sudo v-restore-user admin admin.2026-09-05_03-10-01.tar
@@ -146,7 +146,7 @@ sudo v-restore-user admin admin.2026-09-05_03-10-01.tar
 ## Paso 4 — Comprobar el destino a fondo
 
 ```bash
-ssh admin@nuevo.example
+ssh root@nuevo.example
 cd /home/admin/scripts
 
 ./bin/backupctl doctor
@@ -191,14 +191,14 @@ Cambia las credenciales de conexión en la aplicación (`wp-config.php`,
 Durante los primeros días:
 
 ```bash
-ssh admin@nuevo.example '/home/admin/scripts/bin/backupctl status'
+ssh root@nuevo.example '/home/admin/scripts/bin/backupctl status'
 ```
 
 Y en tu equipo, deja constancia de ambos:
 
 ```bash
-backupctl -p MiVPS    pull admin@origen.example
-backupctl -p VPSNuevo pull admin@nuevo.example
+backupctl -p MiVPS    pull root@origen.example
+backupctl -p VPSNuevo pull root@nuevo.example
 git add MiVPS VPSNuevo
 git commit -m "Migración de MiVPS a VPSNuevo"
 ```
@@ -219,8 +219,8 @@ Solo cuando **todo** esté marcado:
 
 ```bash
 # Respaldo final del origen, a tu equipo
-ssh admin@origen.example '/home/admin/scripts/bin/backupctl backup'
-scp admin@origen.example:/home/admin/scripts/output/mysql_backups/all_databases_*.zip ~/archivo/
+ssh root@origen.example '/home/admin/scripts/bin/backupctl backup'
+scp root@origen.example:/home/admin/scripts/output/mysql_backups/all_databases_*.zip ~/archivo/
 backupctl -p MiVPS verify ~/archivo/all_databases_XXXX.zip
 ```
 
@@ -235,11 +235,11 @@ escribe en el destino.
 
 ```bash
 # Reintentar solo lo que falló
-./bin/backupctl migrate --to admin@nuevo.example --databases problematica --fresh
+./bin/backupctl migrate --to root@nuevo.example --databases problematica --fresh
 
 # O empezar de cero en el destino
-ssh admin@nuevo.example 'mysql -e "DROP DATABASE problematica;"'
-./bin/backupctl migrate --to admin@nuevo.example --databases problematica --fresh
+ssh root@nuevo.example 'mysql -e "DROP DATABASE problematica;"'
+./bin/backupctl migrate --to root@nuevo.example --databases problematica --fresh
 ```
 
 Ver [Cuando algo falla](../guias/diagnostico.md).

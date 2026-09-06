@@ -1,7 +1,7 @@
 # Desplegar en otro servidor
 
 ```bash
-backupctl deploy admin@servidor.example
+backupctl deploy root@servidor.example
 ```
 
 Copia `bin/` y `lib/` más el `env.sh` del perfil, y ejecuta el diagnóstico en el
@@ -12,7 +12,7 @@ destino.
 - Un usuario que pueda entrar por SSH. **Vale con contraseña**: se pide una sola
   vez para todo el despliegue. Con clave no la pide nunca:
   ```bash
-  ssh-copy-id admin@servidor.example      # opcional, pero cómodo
+  ssh-copy-id root@servidor.example      # opcional, pero cómodo
   ```
 - `rsync` en tu equipo. En el servidor, si falta, `deploy` se ofrece a
   instalarlo.
@@ -23,7 +23,7 @@ destino.
     instalación.
 
     ```bash
-    export DEPLOY_USER="admin"      # quién se conecta
+    export DEPLOY_USER="root"      # quien se conecta; los usuarios del panel no tienen consola      # quién se conecta
     export USER_NAME="cliente07"    # de quién es la instalación
     ```
 
@@ -33,7 +33,7 @@ destino.
 ## Ensayo primero
 
 ```bash
-backupctl deploy admin@servidor.example --dry-run
+backupctl deploy root@servidor.example --dry-run
 ```
 
 Muestra exactamente qué archivos se copiarían, sin tocar nada.
@@ -74,15 +74,15 @@ graph TD
 ```
 
 ```
-== Despliegue en admin@servidor.example:/home/admin/scripts ==
+== Despliegue en root@servidor.example:/home/admin/scripts ==
 [INFO ] Comprobando acceso SSH...
 [  OK ] conectado a servidor.example
 [INFO ]   GNU bash, version 5.2.21(1)-release
 [INFO ] Se copiarán: bin lib + env.sh del perfil 'TejidoTesting'
-¿Copiar backupctl a admin@servidor.example:/home/admin/scripts? [S/n]
+¿Copiar backupctl a root@servidor.example:/home/admin/scripts? [S/n]
 [INFO ] Copiando el tooling...
 [INFO ] Copiando la configuración del perfil 'TejidoTesting'...
-[  OK ] Desplegado en admin@servidor.example:/home/admin/scripts
+[  OK ] Desplegado en root@servidor.example:/home/admin/scripts
 
 == Diagnóstico en el destino ==
     ✓ mysql  (/usr/bin/mysql)
@@ -96,7 +96,7 @@ El `env.sh` queda **junto al tooling**, así que allí el perfil se llama `local
 y es el único. No hace falta indicarlo:
 
 ```bash
-ssh admin@servidor.example
+ssh root@servidor.example
 /home/admin/scripts/bin/backupctl status      # sin -p
 ```
 
@@ -106,13 +106,13 @@ ssh admin@servidor.example
     allí:
 
     ```bash
-    ssh admin@servidor.example '/home/admin/scripts/bin/backupctl config --edit'
+    ssh root@servidor.example '/home/admin/scripts/bin/backupctl config --edit'
     ```
 
 ## Cambiar la ruta de destino
 
 ```bash
-backupctl deploy admin@servidor.example --path /opt/backupctl
+backupctl deploy root@servidor.example --path /opt/backupctl
 ```
 
 Por defecto se usa `DEPLOY_PATH` del perfil (`/home/$USER_NAME/scripts`).
@@ -124,13 +124,13 @@ origen, y `output/` y `logs/` quedan excluidos, así que **no se pierde ningún
 respaldo**.
 
 ```bash
-backupctl deploy admin@servidor.example
+backupctl deploy root@servidor.example
 ```
 
 ## Después de desplegar
 
 ```bash
-ssh admin@servidor.example
+ssh root@servidor.example
 cd /home/admin/scripts
 
 ./bin/backupctl doctor                          # 1. sin fallos
@@ -145,7 +145,7 @@ En `env.sh`:
 
 ```bash
 export DEPLOY_HOST="servidor.example"
-export DEPLOY_USER="admin"
+export DEPLOY_USER="root"      # quien se conecta; los usuarios del panel no tienen consola
 export DEPLOY_PATH="/home/admin/scripts"
 ```
 

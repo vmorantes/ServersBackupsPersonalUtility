@@ -43,7 +43,7 @@ desapareciera este servidor?**
           - cliente_nuevo
 
 2 · Cuenta completa (archivos, correo, DNS)
-  ✓ Restic configurado: rclone:megas3-vicsen:tejido-testing/hestiacp/
+  ✓ Restic configurado: rclone:mi-almacenamiento:mi-servidor/hestiacp/
   ✓ el repositorio está fuera del servidor
   ✗ el cron de Restic NO está activo: configurado pero nunca se ejecuta
 
@@ -210,7 +210,7 @@ Todas estas órdenes funcionan igual desde los dos sitios:
 
 ```bash
 backupctl -p MiVPS hestia status          # va por SSH si hace falta
-ssh admin@servidor '.../backupctl hestia status'
+ssh root@servidor '.../backupctl hestia status'
 ```
 
 Si el perfil tiene `DEPLOY_HOST` y HestiaCP no está en tu equipo, `backupctl`

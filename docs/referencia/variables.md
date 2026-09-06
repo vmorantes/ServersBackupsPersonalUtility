@@ -155,5 +155,5 @@ export MIN_FREE_MB="4096"
 export HEALTHCHECK_URL="https://hc-ping.com/xxxx-xxxx"
 
 export DEPLOY_HOST="nuevo.example"
-export DEPLOY_USER="admin"
+export DEPLOY_USER="root"      # quien se conecta; los usuarios del panel no tienen consola
 ```

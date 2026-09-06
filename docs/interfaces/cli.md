@@ -63,7 +63,7 @@ backupctl backup && backupctl verify --quick
 backupctl backup && backupctl verify --restore-test tienda --with-data
 
 # Migración desatendida
-backupctl -y migrate --to admin@nuevo.example --fresh
+backupctl -y migrate --to root@nuevo.example --fresh
 ```
 
 ## Registro

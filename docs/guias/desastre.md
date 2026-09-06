@@ -85,10 +85,10 @@ ls /recuperacion/home/admin/scripts/output/mysql_backups/
 # 3. Montar el servidor nuevo, instalar MySQL y HestiaCP
 
 # 4. Desplegar backupctl y restaurar
-backupctl deploy admin@nuevo.example
-scp all_databases_XXXX.zip admin@nuevo.example:/home/admin/scripts/output/mysql_backups/
+backupctl deploy root@nuevo.example
+scp all_databases_XXXX.zip root@nuevo.example:/home/admin/scripts/output/mysql_backups/
 
-ssh admin@nuevo.example
+ssh root@nuevo.example
 cd /home/admin/scripts
 ./bin/backupctl verify all_databases_XXXX.zip        # ANTES de restaurar
 ./bin/backupctl list --databases all_databases_XXXX.zip

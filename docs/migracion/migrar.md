@@ -3,18 +3,18 @@
 Llevar las bases de datos de este servidor a otro, con comprobación.
 
 ```bash
-backupctl migrate --to admin@nuevo.example --fresh
+backupctl migrate --to root@nuevo.example --fresh
 ```
 
 ## Antes de empezar
 
 1. **Desplegar `backupctl` en el destino**:
    ```bash
-   backupctl deploy admin@nuevo.example
+   backupctl deploy root@nuevo.example
    ```
 2. Comprobar que allí funciona:
    ```bash
-   ssh admin@nuevo.example '/home/admin/scripts/bin/backupctl doctor'
+   ssh root@nuevo.example '/home/admin/scripts/bin/backupctl doctor'
    ```
 
 `migrate` se niega a empezar si el destino no tiene un `backupctl` operativo.
@@ -22,7 +22,7 @@ backupctl migrate --to admin@nuevo.example --fresh
 ## Ensayo
 
 ```bash
-backupctl migrate --to admin@nuevo.example --dry-run
+backupctl migrate --to root@nuevo.example --dry-run
 ```
 
 Comprueba conectividad, configuración del destino y lista qué se migraría, sin
@@ -85,7 +85,7 @@ Para una migración real casi siempre quieres `--fresh`.
 ### `--prefix`
 
 ```bash
-backupctl migrate --to admin@nuevo.example --prefix nuevo_
+backupctl migrate --to root@nuevo.example --prefix nuevo_
 ```
 
 `tienda` se restaura como `nuevo_tienda`. Sirve para migrar a un servidor que
@@ -107,17 +107,17 @@ transferencia usa `rsync -azP`, así que es reanudable si se corta.
 
 ```bash
 # 1. Preparar el destino
-backupctl deploy admin@nuevo.example
-ssh admin@nuevo.example '/home/admin/scripts/bin/backupctl doctor'
+backupctl deploy root@nuevo.example
+ssh root@nuevo.example '/home/admin/scripts/bin/backupctl doctor'
 
 # 2. Ensayo
-backupctl migrate --to admin@nuevo.example --dry-run
+backupctl migrate --to root@nuevo.example --dry-run
 
 # 3. Migración real con datos de ahora mismo
-backupctl migrate --to admin@nuevo.example --fresh
+backupctl migrate --to root@nuevo.example --fresh
 
 # 4. Comprobar en el destino
-ssh admin@nuevo.example
+ssh root@nuevo.example
 cd /home/admin/scripts
 ./bin/backupctl backup
 ./bin/backupctl verify --restore-test tienda --with-data

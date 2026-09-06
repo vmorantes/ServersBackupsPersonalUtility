@@ -341,10 +341,10 @@ def probe(name):
             if user not in ("root",):
                 r["ssh"] = "usuario-malo"
                 r["siguiente"] = (
-                    f"Estás intentando entrar como «{user}», que parece un usuario "
-                    f"del panel de HestiaCP. Esos usuarios NO tienen consola. "
-                    f"Cambia DEPLOY_USER a «root» en la pestaña Configuración y "
-                    f"vuelve a comprobar.")
+                    f"El perfil intenta entrar como «{user}», que es un usuario del "
+                    f"panel de HestiaCP y no tiene consola. Pulsa «Configurar acceso "
+                    f"por clave» aquí abajo: entra como root, y el perfil se corrige "
+                    f"solo.")
                 return r
             # Nada de mandar al terminal: el botón que lo resuelve está justo
             # debajo de este mensaje.

@@ -10,7 +10,7 @@ Es lo que quieres ejecutar **mientras piensas** si restaurar o no.
 ## Paso 1 — ¿Qué respaldos tengo?
 
 ```bash
-ssh admin@mivps.example.com
+ssh root@mivps.example.com
 cd /home/admin/scripts
 
 ./bin/backupctl list

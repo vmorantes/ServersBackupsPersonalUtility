@@ -111,7 +111,7 @@ Rellena el remoto:
 
 | Campo | Para Mega S4 |
 |---|---|
-| Nombre del remoto | `megas3-vicsen` — el que tú quieras |
+| Nombre del remoto | `mi-almacenamiento` — el que tú quieras |
 | Tipo | S3 |
 | Access key ID | Del panel de Mega, sección **S4** |
 | Secret access key | Del mismo sitio |
@@ -127,7 +127,7 @@ servidor con permisos `600`; no pasan por la línea de órdenes, así que no son
 visibles para otros usuarios de la máquina.
 
 Después, **Registrar en HestiaCP** con el repositorio
-(`rclone:megas3-vicsen:mi-servidor/hestiacp/`) y **Activar su cron**.
+(`rclone:mi-almacenamiento:mi-servidor/hestiacp/`) y **Activar su cron**.
 
 !!! warning "HestiaCP no activa ese cron por su cuenta"
     Sin él, Restic queda perfectamente configurado y **no se ejecuta nunca**. El
@@ -155,7 +155,7 @@ La pregunta importa, y tiene dos respuestas según el caso:
     ```
     Origen: MiVPS/output/HestiaCP/rclone_20260905.conf  (2 días)
     Remotos que contiene:
-            megas3-vicsen
+            mi-almacenamiento
     ```
 
 === "Destino nuevo"

@@ -68,7 +68,7 @@ graph LR
 === "SUBIR — `deploy`"
 
     ```bash
-    backupctl -p TejidoTesting deploy admin@servidor
+    backupctl -p TejidoTesting deploy root@servidor
     ```
 
     Lleva `bin/`, `lib/` y el `env.sh` de ese perfil al servidor. Es lo que
@@ -79,7 +79,7 @@ graph LR
 === "DESCARGAR — `pull`"
 
     ```bash
-    backupctl -p TejidoTesting pull admin@servidor
+    backupctl -p TejidoTesting pull root@servidor
     ```
 
     Trae al repositorio lo que hay realmente allí: compara el `env.sh` del
@@ -103,7 +103,7 @@ Allí los scripts **viven y corren**: el cron los ejecuta de madrugada y tú
 puedes entrar por SSH y lanzarlos a mano.
 
 ```bash
-ssh admin@servidor
+ssh root@servidor
 /home/admin/scripts/bin/backupctl status     # sin -p: allí solo hay un perfil
 ```
 
@@ -127,16 +127,16 @@ Si te pierdes, vuelve a esto:
 
 ```bash
 # 1. Ver qué hay realmente en el servidor
-backupctl -p TejidoTesting pull admin@servidor
+backupctl -p TejidoTesting pull root@servidor
 
 # 2. Ajustar algo
 backupctl -p TejidoTesting config --edit      # abre TejidoTesting/env.sh
 
 # 3. Subirlo
-backupctl -p TejidoTesting deploy admin@servidor
+backupctl -p TejidoTesting deploy root@servidor
 
 # 4. Comprobar allí
-ssh admin@servidor '/home/admin/scripts/bin/backupctl doctor'
+ssh root@servidor '/home/admin/scripts/bin/backupctl doctor'
 ```
 
 ## Añadir un servidor nuevo
@@ -147,8 +147,8 @@ cp config/env.sh.example MiServidor/env.sh
 ${EDITOR:-nano} MiServidor/env.sh              # credenciales y DEPLOY_HOST
 
 backupctl profiles                             # debería aparecer
-backupctl -p MiServidor deploy admin@nuevo
-backupctl -p MiServidor pull admin@nuevo       # ESTADO.md y NOTAS.md
+backupctl -p MiServidor deploy root@nuevo
+backupctl -p MiServidor pull root@nuevo       # ESTADO.md y NOTAS.md
 ```
 
 Nada más. No hay plantillas que copiar ni scripts que duplicar.

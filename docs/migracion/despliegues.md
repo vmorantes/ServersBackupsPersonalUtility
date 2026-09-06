@@ -57,7 +57,7 @@ No hay que darles shell: se conecta con uno que sí la tenga y se instala en el
 home del otro.
 
 ```bash
-export DEPLOY_USER="admin"     # quién se conecta (necesita shell)
+export DEPLOY_USER="root"      # quien se conecta; los usuarios del panel no tienen consola     # quién se conecta (necesita shell)
 export USER_NAME="cliente07"   # de quién es la instalación (no necesita shell)
 ```
 
@@ -97,7 +97,7 @@ no es escribible por quien conecta.
 ## `pull` — descargar el estado real
 
 ```bash
-backupctl -p TejidoTesting pull admin@servidor
+backupctl -p TejidoTesting pull root@servidor
 backupctl -p TejidoTesting pull                 # si DEPLOY_HOST está definido
 ```
 
@@ -113,7 +113,7 @@ cada máquina, sin tener que conectarse a mirarlo.
     [AVISO] el env.sh del SERVIDOR difiere del que hay en el repositorio:
 
         --- repositorio: TejidoTesting/env.sh
-        +++ servidor:    admin@servidor:/home/admin/scripts/env.sh
+        +++ servidor:    root@servidor:/home/admin/scripts/env.sh
         -export BACKUP_RETENTION_DAYS="14"
         +export BACKUP_RETENTION_DAYS="30"
 
@@ -154,7 +154,7 @@ TejidoTesting/
 ### Ensayo
 
 ```bash
-backupctl -p TejidoTesting pull admin@servidor --dry-run
+backupctl -p TejidoTesting pull root@servidor --dry-run
 ```
 
 Se conecta y enseña las diferencias, pero no escribe nada.
@@ -164,8 +164,8 @@ Se conecta y enseña las diferencias, pero no escribe nada.
 Funciona igual, con menos información:
 
 ```
-[AVISO] no hay backupctl en admin@servidor:/home/admin/scripts. Se recogerá lo que se pueda.
-[AVISO] Para desplegarlo: backupctl -p TejidoTesting deploy admin@servidor
+[AVISO] no hay backupctl en root@servidor:/home/admin/scripts. Se recogerá lo que se pueda.
+[AVISO] Para desplegarlo: backupctl -p TejidoTesting deploy root@servidor
 ```
 
 Recoge el `env.sh`, el crontab, el disco y el contenido del directorio. Útil
@@ -178,8 +178,8 @@ para inventariar un servidor antes de modernizarlo.
 Documentado en detalle en [Desplegar en otro servidor](desplegar.md).
 
 ```bash
-backupctl -p TejidoTesting deploy admin@servidor
-backupctl -p TejidoTesting deploy admin@servidor --dry-run
+backupctl -p TejidoTesting deploy root@servidor
+backupctl -p TejidoTesting deploy root@servidor --dry-run
 ```
 
 ---
@@ -188,19 +188,19 @@ backupctl -p TejidoTesting deploy admin@servidor --dry-run
 
 ```bash
 # 1. ¿Qué hay ahora mismo allí?
-backupctl -p TejidoTesting pull admin@servidor
+backupctl -p TejidoTesting pull root@servidor
 
 # 2. Ajustar la configuración en el repositorio
 backupctl -p TejidoTesting config --edit
 
 # 3. Subirlo
-backupctl -p TejidoTesting deploy admin@servidor
+backupctl -p TejidoTesting deploy root@servidor
 
 # 4. Confirmar
-ssh admin@servidor '/home/admin/scripts/bin/backupctl doctor'
+ssh root@servidor '/home/admin/scripts/bin/backupctl doctor'
 
 # 5. Dejar constancia en el repositorio
-backupctl -p TejidoTesting pull admin@servidor
+backupctl -p TejidoTesting pull root@servidor
 ```
 
 Los pasos 1 y 5 son los que mantienen el repositorio sincronizado con la

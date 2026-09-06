@@ -21,7 +21,7 @@ ${EDITOR:-nano} VPSNuevo/env.sh
 ```
 
 ```bash
-backupctl -p VPSNuevo deploy admin@nuevo.example --dry-run
+backupctl -p VPSNuevo deploy root@nuevo.example --dry-run
 ```
 
 ## Paso 2 — Comprobar el acceso entre las tres máquinas
@@ -29,24 +29,24 @@ backupctl -p VPSNuevo deploy admin@nuevo.example --dry-run
 La orden `migrate` se lanza **desde el origen** y habla con el destino por SSH.
 
 ```bash
-ssh admin@origen.example
+ssh root@origen.example
 cd /home/admin/scripts
 
 # ¿Llega el origen al destino?
-ssh admin@nuevo.example 'hostname'
+ssh root@nuevo.example 'hostname'
 ```
 
 Si pide contraseña:
 
 ```bash
 ssh-keygen -t ed25519 -C "migracion"      # si el origen no tiene clave
-ssh-copy-id admin@nuevo.example
+ssh-copy-id root@nuevo.example
 ```
 
 ## Paso 3 — Comprobar que el destino está listo
 
 ```bash
-ssh admin@nuevo.example '/home/admin/scripts/bin/backupctl doctor'
+ssh root@nuevo.example '/home/admin/scripts/bin/backupctl doctor'
 ```
 
 Debe salir **sin fallos**. `migrate` se niega a empezar si el destino no tiene
@@ -57,11 +57,11 @@ un `backupctl` operativo con configuración válida.
 Desde el **origen**:
 
 ```bash
-./bin/backupctl migrate --to admin@nuevo.example --dry-run
+./bin/backupctl migrate --to root@nuevo.example --dry-run
 ```
 
 ```
-== Migración hacia admin@nuevo.example ==
+== Migración hacia root@nuevo.example ==
 [INFO ] Comprobando el destino...
 [  OK ] backupctl encontrado en el destino.
 [  OK ] la configuración del destino es válida.
@@ -71,7 +71,7 @@ Desde el **origen**:
         - blog
         ...
 [  OK ] Simulación (--dry-run): se habría transferido all_databases_...zip (38.3M)
-        y restaurado 76 bases de datos en admin@nuevo.example.
+        y restaurado 76 bases de datos en root@nuevo.example.
 ```
 
 No transfiere ni escribe nada.
@@ -80,13 +80,13 @@ No transfiere ni escribe nada.
 
 ```bash
 # Solo unas bases concretas
-./bin/backupctl migrate --to admin@nuevo.example --databases tienda,blog --dry-run
+./bin/backupctl migrate --to root@nuevo.example --databases tienda,blog --dry-run
 
 # Con prefijo, si el destino ya tiene bases con esos nombres
-./bin/backupctl migrate --to admin@nuevo.example --prefix viejo_ --dry-run
+./bin/backupctl migrate --to root@nuevo.example --prefix viejo_ --dry-run
 
 # Desde un respaldo concreto en vez del más reciente
-./bin/backupctl migrate --to admin@nuevo.example \
+./bin/backupctl migrate --to root@nuevo.example \
     --from all_databases_20260901_033010.zip --dry-run
 ```
 
@@ -100,7 +100,7 @@ mysql -e "SELECT table_schema, COUNT(*) tablas
           GROUP BY table_schema ORDER BY table_schema;" > /tmp/origen.txt
 
 # Lo mismo en el DESTINO
-ssh admin@nuevo.example "mysql -e \"SELECT table_schema, COUNT(*) tablas
+ssh root@nuevo.example "mysql -e \"SELECT table_schema, COUNT(*) tablas
           FROM information_schema.tables
           WHERE table_schema NOT IN ('information_schema','performance_schema','mysql','sys')
           GROUP BY table_schema ORDER BY table_schema;\"" > /tmp/destino.txt
@@ -114,7 +114,7 @@ por escrito ayuda cuando algo no cuadra.
 ## Paso 7 — Comprobar espacio en el destino
 
 ```bash
-ssh admin@nuevo.example 'df -h /home/admin'
+ssh root@nuevo.example 'df -h /home/admin'
 ```
 
 Hace falta sitio para el `.zip` transferido **más** el volcado descomprimido

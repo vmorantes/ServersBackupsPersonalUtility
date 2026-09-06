@@ -7,6 +7,7 @@
 
 const TOKEN = new URLSearchParams(location.search).get('t') || '';
 let perfilActual = null;
+let ultimaSonda = null;
 let ejecutando = false;
 
 const $  = (s) => document.querySelector(s);
@@ -23,6 +24,16 @@ function on(sel, ev, fn) {
   if (!el) { console.warn('backupctl: no existe ' + sel); return false; }
   el.addEventListener(ev, fn);
   return true;
+}
+
+// Abre el diálogo de acceso con los datos que ya conocemos del perfil
+function abrirDialogoClave() {
+  const d = ultimaSonda || {};
+  const [u, h] = (d.destino || '@').split('@');
+  $('#k-user').value = (d.ssh === 'usuario-malo' || !u) ? 'root' : u;
+  $('#k-host').value = h || '';
+  $('#clave').hidden = false;
+  ($('#k-host').value ? $('#k-pass') : $('#k-host')).focus();
 }
 
 // --- API ---------------------------------------------------------------------
@@ -296,6 +307,7 @@ async function sondear(nombre) {
     d = await (await api('/api/probe?profile=' + encodeURIComponent(nombre))).json();
   } catch (e) { $('#t-ssh').textContent = e.message; return; }
 
+  ultimaSonda = d;
   const mapa = {
     'ok':          ['✓', 'Conectado a ' + d.destino],
     'sin-clave':   ['✗', 'Sin acceso por clave a ' + d.destino],
@@ -341,8 +353,15 @@ async function sondear(nombre) {
   const acc = $('#acciones-estado');
   // El botón de instalar la clave solo tiene sentido si el usuario SÍ puede
   // entrar; con un usuario sin consola, instalarle una clave no arregla nada.
-  acc.hidden = d.ssh !== 'sin-clave';
-  if (d.ssh === 'sin-clave') $('#k-target').value = d.destino || '';
+  // El botón aparece tanto si falta la clave como si el usuario configurado no
+  // puede entrar: en los dos casos el diálogo resuelve el problema.
+  acc.hidden = !(d.ssh === 'sin-clave' || d.ssh === 'usuario-malo');
+  if (!acc.hidden) {
+    const [u, h] = (d.destino || '@').split('@');
+    // Un usuario del panel no puede entrar: se propone root
+    $('#k-user').value = (d.ssh === 'usuario-malo' || !u) ? 'root' : u;
+    $('#k-host').value = h || '';
+  }
 
   // Si el perfil es de otra máquina, avisar en las pestañas que actúan aquí
   const rot = $('#rotulo-local');
@@ -444,9 +463,11 @@ async function guardarConfig() {
 
 // --- Instalar la clave SSH ---------------------------------------------------
 async function instalarClave() {
-  const target = $('#k-target').value.trim();
+  const user = ($('#k-user').value.trim() || 'root');
+  const host = $('#k-host').value.trim();
+  const target = user + '@' + host;
   const password = $('#k-pass').value;
-  if (!target || !password) { alert('Hacen falta el servidor y la contraseña.'); return; }
+  if (!host || !password) { alert('Hacen falta el servidor y la contraseña.'); return; }
   $('#clave').hidden = true;
   $('#k-pass').value = '';          // no se queda en el formulario
   await ejecutar('sshkey', { profile: perfilActual, target, password }, '/api/sshkey');
@@ -553,9 +574,7 @@ on('#pestanas', 'click', (ev) => {
 
 on('#btn-refrescar', 'click', cargarPanel);
 on('#btn-nuevo', 'click', abrirAlta);
-on('#btn-sshkey', 'click', () => {
-  $('#clave').hidden = false; $('#k-pass').focus();
-});
+on('#btn-sshkey', 'click', abrirDialogoClave);
 on('#clave-no', 'click', () => { $('#clave').hidden = true; $('#k-pass').value = ''; });
 on('#clave-si', 'click', instalarClave);
 on('#clave', 'click', (ev) => {
@@ -571,9 +590,7 @@ on('#btn-rclone-repo', 'click', async () => {
                         'Se guardará copia de lo que hubiera antes.'))) return;
   ejecutar('hestia-rclone-repo', {});
 });
-on('#btn-sshkey2', 'click', () => {
-  $('#clave').hidden = false; $('#k-pass').focus();
-});
+on('#btn-sshkey2', 'click', abrirDialogoClave);
 on('#rc-type', 'change', () => {
   const s3 = $('#rc-type').value === 's3';
   ['rc-key','rc-secret','rc-endpoint','rc-region'].forEach(

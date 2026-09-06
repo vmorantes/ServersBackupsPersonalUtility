@@ -451,28 +451,42 @@ bc_hestia_users() {
     return 1
   fi
 
+  # El repositorio y la retención son GLOBALES, pero la CLAVE de cifrado es de
+  # cada usuario: cada uno tiene su propio restic.conf. Con la clave de uno no
+  # se abren los respaldos de los demás, así que la cobertura se mira usuario a
+  # usuario y no como una sola cosa.
   local filas; filas="$(mktemp)"
-  printf 'USUARIO	DOMINIOS	BASES	CORREO	RESPALDO RESTIC
-' > "$filas"
+  printf 'USUARIO\tDOMINIOS\tBASES\tCORREO\tCLAVE PROPIA\tÚLTIMO RESPALDO\n' > "$filas"
   local u
   while IFS= read -r u; do
     u="$(awk '{print $1}' <<<"$u")"
     [[ -z "$u" || "$u" == "USER" ]] && continue
-    local dom bd mail rst
+    local dom bd mail rst ult
     dom="$( { bc_hestia_read "$HESTIA_DIR/bin/v-list-web-domains $u plain" || true; } | grep -c . )"
     bd="$(  { bc_hestia_read "$HESTIA_DIR/bin/v-list-databases $u plain"   || true; } | grep -c . )"
     mail="$({ bc_hestia_read "$HESTIA_DIR/bin/v-list-mail-domains $u plain" || true; } | grep -c . )"
-    # La presencia de su restic.conf indica que ese usuario tiene clave propia
+    # La presencia de su restic.conf indica que ese usuario ya tiene clave propia
     if bc_hestia_read "test -f '$HESTIA_DIR/data/users/$u/restic.conf'"; then rst="sí"; else rst="NO"; fi
-    printf '%s	%s	%s	%s	%s
-' "$u" "$dom" "$bd" "$mail" "$rst" >> "$filas"
+    # Último respaldo según el propio HestiaCP
+    ult="$( { bc_hestia_read "$HESTIA_DIR/bin/v-list-user-backups $u plain" || true; } \
+            | awk 'NF{print $1}' | sort -r | head -1 )"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$u" "$dom" "$bd" "$mail" "$rst" "${ult:-ninguno}" >> "$filas"
   done <<<"$lista"
 
   bc_table < "$filas"; rm -f "$filas"
   echo
-  bc_log "v-backup-users-restic respalda TODOS los usuarios de esta lista."
-  bc_log "Los que aparezcan con RESPALDO RESTIC = NO todavía no tienen clave:"
-  bc_log "se les crea sola en su primer respaldo."
+  bc_step "Cómo se reparte esto"
+  bc_log "  El repositorio y la retención son GLOBALES: una sola configuración en"
+  bc_log "  data/users/conf/restic.conf, la que pone v-add-backup-host-restic."
+  bc_log "  La CLAVE de cifrado es DE CADA USUARIO: su propio restic.conf, que se"
+  bc_log "  le crea solo la primera vez que se le respalda."
+  bc_log "  v-backup-users-restic respalda a todos; v-backup-user-restic <u>, a uno."
+  echo
+  bc_log "  «CLAVE PROPIA = NO» solo significa que ese usuario aún no se ha"
+  bc_log "  respaldado nunca. No es un error si acabas de montarlo."
+  bc_warn "Hay que rescatar la clave de CADA usuario: con la de uno no se abren los"
+  bc_warn "respaldos de los demás. «Traer las claves del servidor» las coge todas."
 }
 
 # =============================================================================

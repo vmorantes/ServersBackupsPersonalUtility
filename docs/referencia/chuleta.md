@@ -182,7 +182,7 @@ backupctl verify --restore-test <bd> --with-data
 !!! info "Una conexión, una contraseña"
     Un despliegue hace unas ocho conexiones SSH. `backupctl` abre una conexión
     maestra y todo lo demás viaja por ella, así que la contraseña se pide una
-    vez. No hace falta configurar claves, aunque con `ssh-copy-id admin@servidor`
+    vez. No hace falta configurar claves, aunque con `ssh-copy-id root@servidor`
     no te la pedirá nunca.
 
     Sin terminal (cron, scripts) se exige clave y se falla con un mensaje claro
@@ -234,10 +234,10 @@ MiVPS/
 ## Ciclo repositorio ↔ servidor
 
 ```bash
-backupctl -p MiVPS pull   admin@servidor   # DESCARGAR el estado real
+backupctl -p MiVPS pull   root@servidor   # DESCARGAR el estado real
 backupctl -p MiVPS config --edit           # ajustar
-backupctl -p MiVPS deploy admin@servidor   # SUBIR
-backupctl -p MiVPS pull   admin@servidor   # dejar constancia
+backupctl -p MiVPS deploy root@servidor   # SUBIR
+backupctl -p MiVPS pull   root@servidor   # dejar constancia
 ```
 
 ## En el servidor
@@ -245,7 +245,7 @@ backupctl -p MiVPS pull   admin@servidor   # dejar constancia
 Allí solo hay un perfil (`local`), así que no hace falta `-p`:
 
 ```bash
-ssh admin@servidor
+ssh root@servidor
 cd /home/admin/scripts
 ./bin/backupctl status
 ```

@@ -20,7 +20,7 @@ backupctl -p TejidoTesting status
     único:
 
     ```bash
-    ssh admin@servidor
+    ssh root@servidor
     /home/admin/scripts/bin/backupctl status
     ```
 
@@ -28,10 +28,10 @@ backupctl -p TejidoTesting status
 
 ```bash
 # Desde este repositorio
-backupctl -p TejidoTesting deploy admin@servidor
+backupctl -p TejidoTesting deploy root@servidor
 
 # En el servidor
-ssh admin@servidor
+ssh root@servidor
 cd /home/admin/scripts
 ./bin/backupctl doctor
 ./bin/backupctl backup

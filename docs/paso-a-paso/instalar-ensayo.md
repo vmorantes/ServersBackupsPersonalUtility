@@ -39,7 +39,7 @@ export MYSQL_USER="admin_general"
 export MYSQL_PASS="..."
 
 export DEPLOY_HOST="mivps.example.com"
-export DEPLOY_USER="admin"
+export DEPLOY_USER="root"      # quien se conecta; los usuarios del panel no tienen consola
 export DEPLOY_PATH="/home/admin/scripts"
 ```
 
@@ -64,14 +64,14 @@ Esto es lo único que hay que tener **antes** de desplegar. Todo lo demás lo cr
 ### 3.1 Un usuario que pueda entrar por SSH
 
 ```bash
-ssh admin@mivps.example.com 'hostname; bash --version | head -1'
+ssh root@mivps.example.com 'hostname; bash --version | head -1'
 ```
 
 **Vale con contraseña**: `backupctl` abre una conexión maestra y la pide una sola
 vez para toda la operación. Con clave no la pide nunca, que es más cómodo:
 
 ```bash
-ssh-copy-id admin@mivps.example.com     # opcional
+ssh-copy-id root@mivps.example.com     # opcional
 ```
 
 !!! tip "Si el usuario propietario no tiene shell, NO hace falta dárselo"
@@ -80,7 +80,7 @@ ssh-copy-id admin@mivps.example.com     # opcional
     tenga shell y declara de quién es la instalación:
 
     ```bash
-    export DEPLOY_USER="admin"      # quién se conecta   (necesita shell)
+    export DEPLOY_USER="root"      # quien se conecta; los usuarios del panel no tienen consola      # quién se conecta   (necesita shell)
     export USER_NAME="cliente07"    # de quién es todo   (no la necesita)
     ```
 
@@ -169,7 +169,7 @@ Regla: `tamaño_de_los_datos × 2` para el volcado, más
 ## Paso 4 — Ver qué se copiaría, sin copiar
 
 ```bash
-backupctl -p MiVPS deploy admin@mivps.example.com --dry-run
+backupctl -p MiVPS deploy root@mivps.example.com --dry-run
 ```
 
 Se conecta, comprueba la versión de bash del destino y **lista los archivos que
@@ -191,7 +191,7 @@ se copiarían**. No escribe ni un byte allí.
 ## Paso 5 — Fotografiar el estado actual del VPS
 
 ```bash
-backupctl -p MiVPS pull admin@mivps.example.com --dry-run
+backupctl -p MiVPS pull root@mivps.example.com --dry-run
 ```
 
 Se conecta y te enseña qué encontraría, sin escribir `ESTADO.md` ni tocar tu
@@ -208,7 +208,7 @@ Es normal: todavía no lo has instalado.
 Todo esto es de solo lectura:
 
 ```bash
-ssh admin@mivps.example.com
+ssh root@mivps.example.com
 ```
 
 ```bash
@@ -239,7 +239,7 @@ mysql -e "SELECT table_schema, ROUND(SUM(data_length+index_length)/1024/1024) AS
 Antes de pasar a la instalación en serio:
 
 - [ ] `backupctl -p MiVPS config --check` devuelve `0`
-- [ ] `ssh admin@mivps` entra sin pedir contraseña **y da una shell**
+- [ ] `ssh root@mivps` entra sin pedir contraseña **y da una shell**
 - [ ] `zip`, `unzip` y `rsync` en el VPS (o dejar que `deploy` los instale)
 - [ ] Usuario de MySQL creado (o dejar que `backupctl setup` lo cree)
 - [ ] `deploy --dry-run` dice que no falta ninguna dependencia

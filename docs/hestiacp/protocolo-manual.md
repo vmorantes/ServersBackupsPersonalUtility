@@ -53,7 +53,7 @@ rclone config
 
     ```
     n                          nuevo remoto
-    name> megas3-vicsen
+    name> mi-almacenamiento
     Storage> s3                Amazon S3 Compliant Storage Providers
     provider> Other            Mega S4 es compatible, no es un proveedor listado
     env_auth> false
@@ -88,8 +88,8 @@ rclone config
 funcionará:
 
 ```bash
-rclone lsd megas3-vicsen:
-rclone mkdir megas3-vicsen:mi-servidor
+rclone lsd mi-almacenamiento:
+rclone mkdir mi-almacenamiento:mi-servidor
 ```
 
 La configuración queda en `/root/.config/rclone/rclone.conf`, **con las claves
@@ -104,7 +104,7 @@ v-add-backup-host-restic 'rclone:REMOTO:RUTA/' SNAPSHOTS DIARIAS SEMANALES MENSU
 ```
 
 ```bash
-v-add-backup-host-restic 'rclone:megas3-vicsen:mi-servidor/hestiacp/' 30 8 5 3 -1
+v-add-backup-host-restic 'rclone:mi-almacenamiento:mi-servidor/hestiacp/' 30 8 5 3 -1
 ```
 
 !!! danger "El orden de los cinco números"
@@ -134,7 +134,7 @@ HestiaCP **no** lo hace. Si el primer respaldo falla diciendo que el repositorio
 no existe, es esto:
 
 ```bash
-restic init -r rclone:megas3-vicsen:mi-servidor/hestiacp/
+restic init -r rclone:mi-almacenamiento:mi-servidor/hestiacp/
 ```
 
 Una sola vez, y solo la primera.
@@ -211,13 +211,13 @@ Guardarlos solo en el propio servidor no sirve de nada.
 
 ```bash
 # ¿Hay instantáneas y de cuándo?
-restic -r rclone:megas3-vicsen:mi-servidor/hestiacp/ snapshots
+restic -r rclone:mi-almacenamiento:mi-servidor/hestiacp/ snapshots
 
 # ¿El repositorio está sano?
-restic -r rclone:megas3-vicsen:mi-servidor/hestiacp/ check
+restic -r rclone:mi-almacenamiento:mi-servidor/hestiacp/ check
 
 # ¿Cuánto ocupa de verdad tras deduplicar?
-restic -r rclone:megas3-vicsen:mi-servidor/hestiacp/ stats
+restic -r rclone:mi-almacenamiento:mi-servidor/hestiacp/ stats
 
 # Lo que ve HestiaCP
 v-list-user-backups admin
@@ -235,15 +235,15 @@ del proveedor:
 mkdir -p /root/.config/rclone
 cp rclone_20260905.conf /root/.config/rclone/rclone.conf
 chmod 600 /root/.config/rclone/rclone.conf
-rclone lsd megas3-vicsen:          # comprobar que responde
+rclone lsd mi-almacenamiento:          # comprobar que responde
 ```
 
 Y después los pasos 3 a 5 con **otra ruta dentro del mismo bucket**, para que
 los dos servidores no se pisen:
 
 ```bash
-v-add-backup-host-restic 'rclone:megas3-vicsen:servidor-nuevo/hestiacp/' 30 8 5 3 -1
-restic init -r rclone:megas3-vicsen:servidor-nuevo/hestiacp/
+v-add-backup-host-restic 'rclone:mi-almacenamiento:servidor-nuevo/hestiacp/' 30 8 5 3 -1
+restic init -r rclone:mi-almacenamiento:servidor-nuevo/hestiacp/
 v-add-cron-job admin 30 5 '*' '*' '*' 'v-backup-users-restic'
 ```
 

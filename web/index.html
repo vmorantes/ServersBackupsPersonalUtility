@@ -231,7 +231,7 @@
       <p class="rotulo">Acceso e instalación de backupctl <strong>en el servidor</strong>.</p>
       <div class="campos" id="form-deploy">
         <label>Destino <span class="pista">vacío = el del perfil</span>
-          <input type="text" data-opt="target" placeholder="admin@servidor" autocomplete="off"></label>
+          <input type="text" data-opt="target" placeholder="root@servidor" autocomplete="off"></label>
         <label>Ruta remota <span class="pista">opcional</span>
           <input type="text" data-opt="path" placeholder="/home/admin/scripts" autocomplete="off"></label>
       </div>
@@ -263,7 +263,7 @@
       <h3>1 · Dónde se guarda (remoto de rclone)</h3>
       <div class="campos">
         <label>Nombre del remoto
-          <input type="text" id="rc-name" placeholder="megas3-vicsen" autocomplete="off"></label>
+          <input type="text" id="rc-name" placeholder="mi-almacenamiento" autocomplete="off"></label>
         <label>Tipo
           <select id="rc-type"><option value="s3">S3 (Mega S4, compatible)</option>
                                <option value="local">Disco local o NAS</option></select></label>
@@ -288,7 +288,7 @@
          no los días. Es el error más común al configurarlo a mano.</p>
       <div class="campos" id="form-hrestic">
         <label>Repositorio
-          <input type="text" data-opt="repo" placeholder="rclone:megas3-vicsen:mi-servidor/hestiacp/" autocomplete="off"></label>
+          <input type="text" data-opt="repo" placeholder="rclone:mi-almacenamiento:mi-servidor/hestiacp/" autocomplete="off"></label>
       </div>
       <div class="acciones">
         <div class="accion"><button class="btn btn-escribe" data-act="hestia-restic" data-form="#form-hrestic"
@@ -343,7 +343,7 @@
       <p class="rotulo rotulo-aviso">Trasladar las bases a <strong>OTRA</strong> máquina,
          que debe tener backupctl desplegado. <strong>No es un respaldo.</strong></p>
       <div class="campos" id="form-migrate">
-        <label>Destino <input type="text" data-opt="to" placeholder="admin@nuevo.example" autocomplete="off"></label>
+        <label>Destino <input type="text" data-opt="to" placeholder="root@nuevo.example" autocomplete="off"></label>
         <label>Solo estas bases <span class="pista">opcional</span>
           <input type="text" data-opt="databases" placeholder="tienda,blog" autocomplete="off"></label>
         <label>Prefijo en el destino <span class="pista">opcional</span>
@@ -478,7 +478,7 @@
     </div>
     <div class="campos" id="bloque-restic" hidden>
       <label>Nombre del remoto
-        <input type="text" id="f-rcname" placeholder="megas3-vicsen" autocomplete="off"></label>
+        <input type="text" id="f-rcname" placeholder="mi-almacenamiento" autocomplete="off"></label>
       <label>Tipo
         <select id="f-rctype"><option value="s3">S3 (Mega S4, compatible)</option>
                               <option value="local">Disco local o NAS</option></select></label>
@@ -505,19 +505,31 @@
 </div>
 
 <div id="clave" class="modal" hidden>
-  <div class="modal-caja">
-    <h3>Acceso por clave SSH</h3>
+  <div class="modal-caja modal-ancho">
+    <h3>Dar acceso al servidor</h3>
     <p class="ayuda">Se usará tu contraseña <strong>una sola vez</strong> para dejar
-       instalada tu clave pública en el servidor. A partir de ahí no se vuelve a
-       pedir: ni aquí, ni en el cron, ni en los guiones.</p>
-    <p class="ayuda">Si no tienes clave, se genera una (ed25519).
-       La contraseña no se guarda en ningún sitio.</p>
+       instalada tu clave pública. A partir de ahí no se vuelve a pedir: ni aquí,
+       ni en el cron, ni en nada. Si no tienes clave, se genera una.
+       <strong>La contraseña no se guarda.</strong></p>
+
     <div class="campos">
-      <label>Servidor
-        <input type="text" id="k-target" autocomplete="off"></label>
-      <label>Contraseña SSH
+      <label>Usuario con el que entrar <span class="pista">casi siempre root</span>
+        <input type="text" id="k-user" value="root" autocomplete="off"></label>
+      <label>Servidor <span class="pista">nombre o IP</span>
+        <input type="text" id="k-host" autocomplete="off"></label>
+      <label>Contraseña de ese usuario
         <input type="password" id="k-pass" autocomplete="new-password"></label>
     </div>
+
+    <p class="ayuda"><strong>¿Por qué root?</strong> En HestiaCP los usuarios del
+       panel (<code>admin</code>, y los de cada cliente) tienen la shell puesta a
+       <code>nologin</code>: no pueden abrir consola, así que por SSH no se entra
+       como ellos. Además las órdenes <code>v-*</code> de HestiaCP exigen
+       privilegios. El usuario del panel dueño de los respaldos se configura
+       aparte y no necesita consola.</p>
+    <p class="ayuda">Si esto funciona, el perfil se corrige solo: no hace falta
+       tocar ningún archivo.</p>
+    <input type="hidden" id="k-target">
     <div class="modal-botones">
       <button class="btn btn-sec" id="clave-no">Cancelar</button>
       <button class="btn btn-escribe" id="clave-si">Instalar la clave</button>

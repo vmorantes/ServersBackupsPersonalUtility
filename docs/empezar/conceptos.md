@@ -32,8 +32,8 @@ Cada carpeta de servidor guarda tres cosas:
 Y hay dos sentidos entre el repositorio y el servidor:
 
 ```bash
-backupctl -p TejidoTesting deploy admin@servidor   # SUBIR código + config
-backupctl -p TejidoTesting pull   admin@servidor   # DESCARGAR el estado real
+backupctl -p TejidoTesting deploy root@servidor   # SUBIR código + config
+backupctl -p TejidoTesting pull   root@servidor   # DESCARGAR el estado real
 ```
 
 !!! note "El perfil `local`"

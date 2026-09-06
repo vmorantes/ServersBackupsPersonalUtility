@@ -158,7 +158,7 @@ No hay ninguna lista que mantener.
 ## Retirar un servidor
 
 ```bash
-backupctl -p ViejoServidor pull admin@viejo   # última foto, para el historial
+backupctl -p ViejoServidor pull root@viejo   # última foto, para el historial
 git add ViejoServidor && git commit -m "ViejoServidor: última foto antes de retirarlo"
 git rm -r ViejoServidor
 ```

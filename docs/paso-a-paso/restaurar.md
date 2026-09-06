@@ -35,7 +35,7 @@ que quieres en el 90 % de los casos reales.
 ### A1. Restaurar con otro nombre
 
 ```bash
-ssh admin@mivps.example.com
+ssh root@mivps.example.com
 cd /home/admin/scripts
 
 ./bin/backupctl restore all_databases_20260904_033010.zip tienda \
@@ -168,7 +168,7 @@ Comprueba la aplicación antes de dar por cerrado el incidente.
 Y en tu equipo, deja constancia:
 
 ```bash
-backupctl -p MiVPS pull admin@mivps.example.com
+backupctl -p MiVPS pull root@mivps.example.com
 ${EDITOR:-nano} MiVPS/NOTAS.md      # qué pasó, qué se restauró, qué aprendiste
 ```
 

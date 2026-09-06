@@ -147,6 +147,21 @@ bc_sshkey_run() {
 
   local rc=0
   bc_sshkey_instalar "$target" "$passfile" || rc=$?
+
+  # Si funcionó con un destino distinto del que tenía el perfil, se corrige el
+  # perfil. Nadie debería tener que editar un archivo de configuración para
+  # arreglar un dato que la herramienta acaba de averiguar.
+  if (( rc == 0 )); then
+    local u="${target%@*}" h="${target#*@}"
+    if [[ "$u" != "$DEPLOY_USER" ]]; then
+      bc_log "El perfil decía DEPLOY_USER=$DEPLOY_USER; se corrige a $u."
+      bc_config_set DEPLOY_USER "$u" || bc_warn "no se pudo guardar el cambio."
+    fi
+    if [[ -n "$h" && "$h" != "$DEPLOY_HOST" ]]; then
+      bc_log "El perfil decía DEPLOY_HOST=$DEPLOY_HOST; se corrige a $h."
+      bc_config_set DEPLOY_HOST "$h" || bc_warn "no se pudo guardar el cambio."
+    fi
+  fi
   [[ -n "$passfile" && -z "${BC_SSH_PASSWORD_FILE:-}" ]] && rm -f "$passfile"
   # Salida controlada: el trap ERR no debe informar de un "fallo no controlado"
   (( rc != 0 )) && BC_DELIBERATE_EXIT=1

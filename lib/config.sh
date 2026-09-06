@@ -176,6 +176,38 @@ bc_config_check() {
   return $fatal
 }
 
+# -----------------------------------------------------------------------------
+# Cambiar un valor del env.sh sin abrir un editor
+# -----------------------------------------------------------------------------
+# La interfaz web tiene que poder corregir un dato suelto —el usuario de SSH,
+# por ejemplo— sin obligar a nadie a editar un archivo de configuración a mano.
+# Se sustituye la línea si existe y se añade si no, validando la sintaxis antes
+# de tocar el archivo bueno.
+bc_config_set() {
+  local clave="$1" valor="$2"
+  [[ "$clave" =~ ^[A-Z_][A-Z0-9_]*$ ]] || { bc_err "clave no válida: $clave"; return 1; }
+  [[ -f "$BC_ENV_FILE" ]] || { bc_err "no existe $BC_ENV_FILE"; return 1; }
+
+  local tmp; tmp="$(mktemp)"
+  if grep -qE "^[[:space:]]*export[[:space:]]+$clave=" "$BC_ENV_FILE"; then
+    awk -v k="$clave" -v v="$valor" '
+      $0 ~ "^[[:space:]]*export[[:space:]]+" k "=" { print "export " k "="" v """; next }
+      { print }' "$BC_ENV_FILE" > "$tmp"
+  else
+    cat "$BC_ENV_FILE" > "$tmp"
+    printf '
+export %s="%s"
+' "$clave" "$valor" >> "$tmp"
+  fi
+
+  if ! bash -n "$tmp" 2>/dev/null; then
+    rm -f "$tmp"; bc_err "el cambio dejaría el env.sh con errores de sintaxis."; return 1
+  fi
+  cp -a "$BC_ENV_FILE" "$BC_ENV_FILE.anterior" 2>/dev/null || true
+  mv "$tmp" "$BC_ENV_FILE"
+  bc_ok "$clave = $valor   (guardado en $(basename "$BC_ENV_FILE"))"
+}
+
 # Muestra la configuración efectiva (valores por defecto ya aplicados)
 bc_config_show() {
   local show_secrets="${1:-0}"

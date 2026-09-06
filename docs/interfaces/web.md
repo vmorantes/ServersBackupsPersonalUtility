@@ -51,7 +51,7 @@ Al abrir un perfil, la interfaz comprueba el estado y te lo dice:
 ✗ Sin acceso por clave a admin@vps-ef720100.vps.ovh.ca
 · Las rutas del perfil no existen en este equipo
 Siguiente paso: La web no puede usar contraseña: no hay terminal donde
-teclearla. Ejecuta una vez  ssh-copy-id admin@vps-ef720100.vps.ovh.ca
+teclearla. Ejecuta una vez  ssh-copy-id root@vps-ef720100.vps.ovh.ca
 ```
 
 ## Qué muestra

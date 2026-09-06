@@ -30,7 +30,7 @@ Solo tres cosas. El resto lo crea `deploy`.
 
 | Requisito | Comprobación | Si falta |
 |---|---|---|
-| **Un usuario con acceso SSH** | `ssh admin@servidor hostname` | Vale contraseña; se pide una sola vez |
+| **Un usuario con acceso SSH** | `ssh root@servidor hostname` | Vale contraseña; se pide una sola vez |
 | **`zip`, `unzip`, `rsync`** | `deploy` lo comprueba solo | **`deploy` se ofrece a instalarlos** |
 | **Usuario de MySQL** | `mysql -u X -p -e "SHOW DATABASES;"` | **`backupctl setup` puede crearlo** |
 
@@ -47,7 +47,7 @@ Solo tres cosas. El resto lo crea `deploy`.
     sí tenga shell (`admin` o `root`) y declara de quién es la instalación:
 
     ```bash
-    export DEPLOY_USER="admin"      # quién se conecta
+    export DEPLOY_USER="root"      # quien se conecta; los usuarios del panel no tienen consola      # quién se conecta
     export USER_NAME="cliente07"    # de quién es la instalación
     ```
 
@@ -64,7 +64,7 @@ Solo tres cosas. El resto lo crea `deploy`.
     Si ya tienes el repositorio en tu equipo, despliega por SSH:
 
     ```bash
-    backupctl -p TejidoTesting deploy admin@servidor.example
+    backupctl -p TejidoTesting deploy root@servidor.example
     ```
 
     Copia `bin/` y `lib/`, sube el `env.sh` del perfil y ejecuta el diagnóstico
@@ -74,13 +74,13 @@ Solo tres cosas. El resto lo crea `deploy`.
 
     ```bash
     # 1. Copiar el tooling
-    scp -r bin lib admin@servidor:/home/admin/scripts/
+    scp -r bin lib root@servidor:/home/admin/scripts/
 
     # 2. Configuración
-    scp config/env.sh.example admin@servidor:/home/admin/scripts/env.sh
+    scp config/env.sh.example root@servidor:/home/admin/scripts/env.sh
 
     # 3. En el servidor
-    ssh admin@servidor
+    ssh root@servidor
     cd /home/admin/scripts
     mkdir -p logs output
     chmod +x bin/backupctl

@@ -33,7 +33,7 @@
 ## Paso 1 — Guardar constancia de cómo está ahora
 
 ```bash
-backupctl -p MiVPS pull admin@mivps.example.com
+backupctl -p MiVPS pull root@mivps.example.com
 ```
 
 !!! danger "Aquí te va a preguntar algo"
@@ -47,7 +47,7 @@ apuntes. Tener el "antes" guardado vale mucho si algo sale raro.
 ## Paso 2 — Copiar el ecosistema
 
 ```bash
-backupctl -p MiVPS deploy admin@mivps.example.com
+backupctl -p MiVPS deploy root@mivps.example.com
 ```
 
 Pide confirmación, copia `bin/`, `lib/` y `env.sh`, y ejecuta el diagnóstico en
@@ -56,7 +56,7 @@ el destino.
 ## Paso 3 — Diagnóstico en el VPS
 
 ```bash
-ssh admin@mivps.example.com
+ssh root@mivps.example.com
 cd /home/admin/scripts
 ./bin/backupctl doctor
 ```
@@ -181,7 +181,7 @@ rm /home/admin/scripts/HestiaCPResticUserPassBackup.sh
 En tu equipo:
 
 ```bash
-backupctl -p MiVPS pull admin@mivps.example.com
+backupctl -p MiVPS pull root@mivps.example.com
 git add MiVPS/
 git commit -m "MiVPS: backupctl instalado y programado"
 ```
