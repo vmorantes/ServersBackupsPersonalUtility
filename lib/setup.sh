@@ -311,7 +311,7 @@ bc_setup_mysql_remote() {
     [[ -n "$pass" ]] && echo "password=$pass"
   } | bc_ssh "cat > '$cnf' && chmod 600 '$cnf'" || { bc_ssh "rm -f '$cnf'"; return 1; }
 
-  bc_ssh "mysql --defaults-extra-file='$cnf'" <<<"$sql" || rc=$?
+  bc_ssh "mysql --defaults-file='$cnf'" <<<"$sql" || rc=$?
   bc_ssh "rm -f '$cnf'"
   return $rc
 }

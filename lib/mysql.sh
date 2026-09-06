@@ -44,8 +44,18 @@ bc_mysql_cleanup() {
   BC_DEFAULTS_FILE=""
 }
 
-bc_mysql()     { bc_mysql_init; mysql     --defaults-extra-file="$BC_DEFAULTS_FILE" "$@"; }
-bc_mysqldump() { bc_mysql_init; mysqldump --defaults-extra-file="$BC_DEFAULTS_FILE" "$@"; }
+# Se usa --defaults-file y NO --defaults-extra-file.
+#
+# La diferencia importa: --defaults-extra-file se lee ANTES que ~/.my.cnf, así
+# que un `password=` en /root/.my.cnf —habitual en servidores con HestiaCP—
+# pisa el nuestro y la conexión falla con "Access denied" pese a tener la
+# contraseña correcta. Con --defaults-file solo se lee nuestro archivo y el
+# resultado es el mismo en cualquier máquina y con cualquier usuario.
+#
+# La contrapartida es que tampoco se leen /etc/mysql/my.cnf ni similares: por
+# eso el fichero incluye host, puerto y socket cuando el perfil los declara.
+bc_mysql()     { bc_mysql_init; mysql     --defaults-file="$BC_DEFAULTS_FILE" "$@"; }
+bc_mysqldump() { bc_mysql_init; mysqldump --defaults-file="$BC_DEFAULTS_FILE" "$@"; }
 
 # Consulta que devuelve valores en crudo, sin cabeceras ni marco
 bc_mysql_q() { bc_mysql -s --skip-column-names -e "$1"; }
