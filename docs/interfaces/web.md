@@ -48,10 +48,10 @@ backupctl -p MiVPS sshkey
 Al abrir un perfil, la interfaz comprueba el estado y te lo dice:
 
 ```
-✗ Sin acceso por clave a admin@vps-ef720100.vps.ovh.ca
+✗ Sin acceso por clave a admin@mi-servidor.example
 · Las rutas del perfil no existen en este equipo
 Siguiente paso: La web no puede usar contraseña: no hay terminal donde
-teclearla. Ejecuta una vez  ssh-copy-id root@vps-ef720100.vps.ovh.ca
+teclearla. Ejecuta una vez  ssh-copy-id root@mi-servidor.example
 ```
 
 ## Qué muestra

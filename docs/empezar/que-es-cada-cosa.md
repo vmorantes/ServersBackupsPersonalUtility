@@ -18,7 +18,7 @@
 ├── 📖 mkdocs.yml           Configuración de la documentación
 ├── 📖 config/env.sh.example  Plantilla de configuración
 │
-└── 🖥️ TejidoTesting/       UN SERVIDOR
+└── 🖥️ MiVPS/       UN SERVIDOR
     ├── ✏️ env.sh           ← LO ÚNICO QUE EDITAS TÚ
     ├── ✏️ NOTAS.md         ← tus apuntes. Nadie los toca
     ├── 🤖 ESTADO.md        ← lo genera `backupctl pull`. No editar
@@ -45,7 +45,7 @@
 Cada servidor tiene su carpeta en la raíz del repositorio:
 
 ```
-TejidoTesting/       ← un servidor
+MiVPS/       ← un servidor
 OtroCliente/         ← otro servidor
 ```
 
@@ -68,7 +68,7 @@ graph LR
 === "SUBIR — `deploy`"
 
     ```bash
-    backupctl -p TejidoTesting deploy root@servidor
+    backupctl -p MiVPS deploy root@servidor
     ```
 
     Lleva `bin/`, `lib/` y el `env.sh` de ese perfil al servidor. Es lo que
@@ -79,7 +79,7 @@ graph LR
 === "DESCARGAR — `pull`"
 
     ```bash
-    backupctl -p TejidoTesting pull root@servidor
+    backupctl -p MiVPS pull root@servidor
     ```
 
     Trae al repositorio lo que hay realmente allí: compara el `env.sh` del
@@ -94,7 +94,7 @@ graph LR
 /home/admin/scripts/
 ├── bin/backupctl      ← copiado del repo (igual en todos los servidores)
 ├── lib/*.sh           ← copiado del repo (igual en todos los servidores)
-├── env.sh             ← copiado de TejidoTesting/env.sh
+├── env.sh             ← copiado de MiVPS/env.sh
 ├── logs/              ← se genera allí
 └── output/            ← se genera allí (los respaldos viven aquí)
 ```
@@ -118,22 +118,22 @@ Si te pierdes, vuelve a esto:
 
 | Quiero… | Archivo / orden |
 |---|---|
-| Cambiar la configuración de un servidor | `TejidoTesting/env.sh` |
-| Apuntar algo del despliegue | `TejidoTesting/NOTAS.md` |
-| Saber qué hay ahora mismo en el servidor | `TejidoTesting/ESTADO.md` (o `backupctl pull`) |
+| Cambiar la configuración de un servidor | `MiVPS/env.sh` |
+| Apuntar algo del despliegue | `MiVPS/NOTAS.md` |
+| Saber qué hay ahora mismo en el servidor | `MiVPS/ESTADO.md` (o `backupctl pull`) |
 | Cambiar cómo funciona el respaldo | `lib/backup.sh` **y luego `deploy` a todos** |
 
 ## Ciclo típico de trabajo
 
 ```bash
 # 1. Ver qué hay realmente en el servidor
-backupctl -p TejidoTesting pull root@servidor
+backupctl -p MiVPS pull root@servidor
 
 # 2. Ajustar algo
-backupctl -p TejidoTesting config --edit      # abre TejidoTesting/env.sh
+backupctl -p MiVPS config --edit      # abre MiVPS/env.sh
 
 # 3. Subirlo
-backupctl -p TejidoTesting deploy root@servidor
+backupctl -p MiVPS deploy root@servidor
 
 # 4. Comprobar allí
 ssh root@servidor '/home/admin/scripts/bin/backupctl doctor'

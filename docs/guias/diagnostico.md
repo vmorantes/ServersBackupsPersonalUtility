@@ -19,15 +19,15 @@ backupctl status             # ¿estoy protegido?
 ## No se puede conectar a MySQL
 
 ```
-[ERROR] no se pudo conectar a MySQL como 'admin_general':
-        ERROR 1045 (28000): Access denied for user 'admin_general'@'localhost'
+[ERROR] no se pudo conectar a MySQL como 'backupctl':
+        ERROR 1045 (28000): Access denied for user 'backupctl'@'localhost'
 ```
 
 **Causas y comprobación:**
 
 ```bash
 backupctl config --show-secrets      # ¿la contraseña es la que crees?
-mysql -u admin_general -p -e "SELECT 1"    # ¿funciona a mano?
+mysql -u backupctl -p -e "SELECT 1"    # ¿funciona a mano?
 ```
 
 Si funciona a mano pero no desde `backupctl`, revisa `MYSQL_HOST`: vacío

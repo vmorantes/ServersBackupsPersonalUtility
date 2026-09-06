@@ -75,9 +75,9 @@ Y, si el cliente las soporta (se detecta en tiempo de ejecución):
 # backupctl MANIFEST
 formato_version: 1
 generado: 2026-09-05 03:30:12 -05
-perfil: TejidoTesting
+perfil: MiVPS
 servidor: servidor.example
-usuario_mysql: admin_general
+usuario_mysql: backupctl
 mysql_version: 10.11.6-MariaDB
 charset: utf8mb4
 backupctl_version: 2.0.0

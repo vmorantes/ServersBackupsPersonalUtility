@@ -84,6 +84,7 @@ nav:
       - Las seis guías: paso-a-paso/index.md
       - 1. Instalar — ensayo: paso-a-paso/instalar-ensayo.md
       - 2. Instalar en serio: paso-a-paso/instalar.md
+      - Normalizar uno que ya existe: paso-a-paso/normalizar-existente.md
       - 3. Restaurar — ensayo: paso-a-paso/restaurar-ensayo.md
       - 4. Restaurar en serio: paso-a-paso/restaurar.md
       - 5. Migrar — ensayo: paso-a-paso/migrar-ensayo.md
@@ -118,9 +119,6 @@ nav:
       - Cuando algo falla: guias/diagnostico.md
       - Recetas: guias/recetas.md
       - Recuperación ante desastre: guias/desastre.md
-  - Servidores:
-      - TejidoTesting: servidores/tejidotesting.md
-      - Normalizar TejidoTesting: servidores/normalizar-tejidotesting.md
   - Desarrollo:
       - Mantener el repositorio: desarrollo/repositorio.md
       - Arquitectura: desarrollo/arquitectura.md

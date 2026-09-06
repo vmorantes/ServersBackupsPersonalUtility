@@ -8,7 +8,7 @@ Un **perfil** es un servidor. En la práctica, un directorio con un `env.sh`
 dentro.
 
 ```
-TejidoTesting/
+MiVPS/
 └── env.sh          ← todo lo que distingue a este servidor
 ```
 
@@ -18,7 +18,7 @@ avisos. Por eso no hay copias del script por servidor que puedan divergir.
 
 ```bash
 backupctl profiles                  # ver los perfiles disponibles
-backupctl -p TejidoTesting status   # trabajar con uno concreto
+backupctl -p MiVPS status   # trabajar con uno concreto
 ```
 
 Cada carpeta de servidor guarda tres cosas:
@@ -32,8 +32,8 @@ Cada carpeta de servidor guarda tres cosas:
 Y hay dos sentidos entre el repositorio y el servidor:
 
 ```bash
-backupctl -p TejidoTesting deploy root@servidor   # SUBIR código + config
-backupctl -p TejidoTesting pull   root@servidor   # DESCARGAR el estado real
+backupctl -p MiVPS deploy root@servidor   # SUBIR código + config
+backupctl -p MiVPS pull   root@servidor   # DESCARGAR el estado real
 ```
 
 !!! note "El perfil `local`"

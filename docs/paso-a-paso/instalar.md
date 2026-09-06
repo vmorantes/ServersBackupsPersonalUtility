@@ -76,7 +76,7 @@ aceptables al principio.
 
     ```sql
     GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES, PROCESS
-      ON *.* TO 'admin_general'@'localhost';
+      ON *.* TO 'backupctl'@'localhost';
     FLUSH PRIVILEGES;
     ```
 

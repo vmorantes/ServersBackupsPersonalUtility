@@ -10,7 +10,7 @@ Sin argumentos y con terminal, se abre el menú. Es la compuerta pensada para
 ## El menú principal
 
 ```
-backupctl 2.0.0 — perfil 'TejidoTesting'
+backupctl 2.0.0 — perfil 'MiVPS'
 Ecosistema de respaldo y migración.
 Servidor: servidor.example
 

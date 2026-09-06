@@ -10,14 +10,14 @@ backupctl profiles
 
 ```
 PERFIL         CONFIGURACIÓN
-TejidoTesting  /var/www/html/.../TejidoTesting/env.sh
+MiVPS  /var/www/html/.../MiVPS/env.sh
 ```
 
 Si solo hay un perfil, no hace falta nombrarlo nunca. Si hay varios, se indica
 con `-p`:
 
 ```bash
-backupctl -p TejidoTesting status
+backupctl -p MiVPS status
 ```
 
 ## 2. ¿Estoy protegido ahora mismo?
@@ -27,11 +27,11 @@ backupctl status
 ```
 
 ```
-== Estado del respaldo — perfil 'TejidoTesting' ==
+== Estado del respaldo — perfil 'MiVPS' ==
 [  OK ] Último respaldo: all_databases_20260905_033012.zip — hace 0 días, 38.3M
 [INFO ] Respaldos guardados: 14 (536M)
 [  OK ] Disco: 55812MB libres (62% usado).
-[  OK ] MySQL: accesible como 'admin_general', 76 bases de datos a respaldar.
+[  OK ] MySQL: accesible como 'backupctl', 76 bases de datos a respaldar.
 [  OK ] Avisos configurados: healthcheck
 [  OK ] Último log (backup_20260905_033012.log): sin errores.
 [  OK ] Todo correcto.

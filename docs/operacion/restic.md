@@ -66,7 +66,7 @@ backupctl restic-list
 ```
 USUARIO        ARCHIVO
 admin          /usr/local/hestia/data/users/admin/restic.conf
-naturalsurf    /usr/local/hestia/data/users/naturalsurf/restic.conf
+cliente1    /usr/local/hestia/data/users/cliente1/restic.conf
 ```
 
 ## Cuándo ejecutarlo

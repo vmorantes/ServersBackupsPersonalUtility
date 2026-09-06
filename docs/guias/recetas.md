@@ -6,10 +6,10 @@ algo.**
 ## Repositorio ↔ servidor
 
 ```bash
-backupctl -p TejidoTesting pull root@servidor      # DESCARGAR el estado real
-backupctl -p TejidoTesting config --edit            # ajustar la configuración
-backupctl -p TejidoTesting deploy root@servidor    # SUBIR los cambios
-backupctl -p TejidoTesting pull root@servidor      # dejar constancia
+backupctl -p MiVPS pull root@servidor      # DESCARGAR el estado real
+backupctl -p MiVPS config --edit            # ajustar la configuración
+backupctl -p MiVPS deploy root@servidor    # SUBIR los cambios
+backupctl -p MiVPS pull root@servidor      # dejar constancia
 ```
 
 ```bash
@@ -243,7 +243,7 @@ WHERE engine NOT IN ('InnoDB') AND engine IS NOT NULL
   AND table_schema NOT IN ('information_schema','performance_schema','mysql','sys');
 
 -- Privilegios del usuario de respaldo
-SHOW GRANTS FOR 'admin_general'@'localhost';
+SHOW GRANTS FOR 'backupctl'@'localhost';
 
 -- Vistas con DEFINER que no existe (fallarían al migrar)
 SELECT table_schema, table_name, definer FROM information_schema.views

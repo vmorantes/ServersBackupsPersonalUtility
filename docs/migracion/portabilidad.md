@@ -8,13 +8,13 @@ máquina**. Estas son las cuatro razones y lo que hace `backupctl` con cada una.
 MySQL añade a cada vista, rutina y trigger la cláusula que dice quién los creó:
 
 ```sql
-CREATE DEFINER=`admin_general`@`localhost` PROCEDURE `p_calcular`() ...
+CREATE DEFINER=`backupctl`@`localhost` PROCEDURE `p_calcular`() ...
 ```
 
-Al restaurar en un servidor donde `admin_general@localhost` **no existe**:
+Al restaurar en un servidor donde `backupctl@localhost` **no existe**:
 
 ```
-ERROR 1449 (HY000): The user specified as a definer ('admin_general'@'localhost') does not exist
+ERROR 1449 (HY000): The user specified as a definer ('backupctl'@'localhost') does not exist
 ```
 
 `backupctl` elimina la cláusula en los segmentos de estructura:

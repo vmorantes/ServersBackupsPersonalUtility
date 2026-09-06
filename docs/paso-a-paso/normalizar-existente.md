@@ -1,4 +1,4 @@
-# Normalizar TejidoTesting
+# Normalizar un servidor que ya existe
 
 Pasar este servidor del sistema antiguo —scripts sueltos— al blindaje completo,
 **sin tocar el terminal** y sin apagar nada de lo que ya funciona.
@@ -7,7 +7,7 @@ Pasar este servidor del sistema antiguo —scripts sueltos— al blindaje comple
 backupctl web --open
 ```
 
-Y clic en la tarjeta **TejidoTesting**. Todo lo demás es en el navegador.
+Y clic en la tarjeta **MiVPS**. Todo lo demás es en el navegador.
 
 !!! success "Los scripts antiguos no se tocan"
     `RunBackupDB.sh` y compañía siguen en el servidor y siguen ejecutándose.
@@ -16,30 +16,20 @@ Y clic en la tarjeta **TejidoTesting**. Todo lo demás es en el navegador.
 
 ---
 
-## Punto de partida
+## Antes de empezar
 
-Lo que este servidor ya tiene, comprobado:
+Comprueba qué tiene ya ese servidor y qué le falta. Pestaña **Blindaje** →
+**Informe de blindaje**: te lo dice todo de una vez, y sin escribir nada.
 
-| | Estado |
-|---|---|
-| Acceso SSH | `root@vps-ef720100.vps.ovh.ca` |
-| Usuario de MySQL | `admin_general` |
-| Usuarios de HestiaCP | `admin`, `naturalsurf`, `testing-admin` |
-| Restic | ✅ configurado contra Mega S4 |
-| Retención Restic | 30 instantáneas · 8 diarias · 5 semanales · 3 mensuales · anuales ilimitadas |
-| Claves Restic | ✅ rescatadas |
-| **`rclone.conf`** | ❌ **sin rescatar** |
-| **Avisos** | ❌ **sin configurar** |
-| **backupctl en el servidor** | ❌ **sin instalar** |
+Lo habitual en un servidor que lleva tiempo funcionando es que tenga los
+respaldos montados pero le falte alguna pieza del blindaje —casi siempre el
+`rclone.conf` sin rescatar, o los avisos sin configurar—.
 
-Cinco de las ocho piezas están. Faltan tres.
-
-!!! danger "La más grave es el `rclone.conf`"
-    Tienes las claves que **descifran** el repositorio, pero no la configuración
-    que permite **llegar** a él. Si pierdes el servidor hoy, tendrías que
-    reconstruir el acceso a Mega S4 desde cero. Se resuelve en el paso 5.
-
----
+!!! danger "La falta más común y más grave"
+    Tener las claves que **descifran** el repositorio pero no la configuración
+    que permite **llegar** a él. Restic guarda las cuentas de usuario, no la
+    configuración de root, así que el `rclone.conf` queda fuera de todos los
+    respaldos. Se resuelve en el paso 5.
 
 ## 1 · Dar acceso al servidor
 
@@ -48,7 +38,7 @@ Pestaña **Servidor** → **Configurar acceso por clave**.
 | Campo | Valor |
 |---|---|
 | Usuario | `root` |
-| Servidor | `vps-ef720100.vps.ovh.ca` |
+| Servidor | `mi-servidor` |
 | Contraseña | La de root de tu VPS |
 
 Instala tu clave pública usando la contraseña **una sola vez**. A partir de ahí
@@ -69,11 +59,11 @@ el plan de lo que falta.
 Pestaña **Blindaje**. Nada de esto escribe.
 
 1. **Informe de blindaje** — qué falta, en orden
-2. **Usuarios del panel** — tus tres usuarios, y si cada uno tiene ya su clave
+2. **Usuarios del panel** — todos tus usuarios, y si cada uno tiene ya su clave
 3. **Cobertura de las bases de datos** — **la importante**
 
 ??? info "Qué esperar de la cobertura"
-    Cruza tus ~76 bases de datos en tres columnas: si HestiaCP las conoce, si
+    Cruza tus todas tus bases de datos en tres columnas: si HestiaCP las conoce, si
     están en el último respaldo, y qué situación tienen.
 
     Presta atención a las marcadas **«solo backupctl»**: se crearon a mano en
@@ -106,7 +96,7 @@ Pestaña **Respaldar**:
 Pestaña **Verificar**:
 
 2. **Verificar en el servidor**
-3. **Probar restauración** con una base cualquiera (`encausa`, por ejemplo) y
+3. **Probar restauración** con una base cualquiera cualquiera y
    **Incluir los datos** marcado.
 
 !!! danger "No sigas si el paso 3 falla"
@@ -120,13 +110,13 @@ Pestaña **Verificar**:
 
 Pestaña **HestiaCP** → **Traer las claves del servidor**.
 
-Trae los `restic.conf` de tus tres usuarios **y el `rclone.conf`**, que es el que
+Trae los `restic.conf` de todos tus usuarios **y el `rclone.conf`**, que es el que
 te falta.
 
 !!! warning "La clave es de cada usuario"
     El repositorio y la retención son globales, pero **cada usuario tiene su
-    propia clave de cifrado**. Con la de `admin` no se abren los respaldos de
-    `naturalsurf`. Este botón las coge todas.
+    propia clave de cifrado**. Con la de uno no se abren los de
+    los demás. Este botón las coge todas.
 
 Comprueba con **¿Dónde están mis claves?**: deben aparecer los dos archivos.
 
@@ -176,7 +166,7 @@ Pestaña **Blindaje** → **Informe de blindaje**. Debe salir **sin ✗**.
 Y en tu equipo:
 
 ```bash
-git add TejidoTesting/ && git commit -m "TejidoTesting: normalizado"
+git add MiVPS/ && git commit -m "MiVPS: normalizado"
 ```
 
 ---

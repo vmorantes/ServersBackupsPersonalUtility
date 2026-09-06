@@ -50,14 +50,14 @@ crontab de un servidor HestiaCP, porque están condenadas a desaparecer.
 ## Lo que instala
 
 ```cron
-# backupctl:TejidoTesting  (generado por: backupctl cron --install)
+# backupctl:MiVPS  (generado por: backupctl cron --install)
 # Respaldo diario de las bases de datos
-30 3 * * * /home/admin/scripts/bin/backupctl -p TejidoTesting backup || echo "Respaldo MySQL FALLIDO en servidor — revisa /home/admin/scripts/logs"
+30 3 * * * /home/admin/scripts/bin/backupctl -p MiVPS backup || echo "Respaldo MySQL FALLIDO en servidor — revisa /home/admin/scripts/logs"
 # Verificación estructural del último respaldo, los domingos
-0 5 * * 0 /home/admin/scripts/bin/backupctl -p TejidoTesting verify --quick || echo "Verificación de respaldo FALLIDA en servidor"
+0 5 * * 0 /home/admin/scripts/bin/backupctl -p MiVPS verify --quick || echo "Verificación de respaldo FALLIDA en servidor"
 # Estado semanal: avisa si el respaldo más reciente se está quedando viejo
-0 9 * * 1 /home/admin/scripts/bin/backupctl -p TejidoTesting status || true
-# backupctl:TejidoTesting end
+0 9 * * 1 /home/admin/scripts/bin/backupctl -p MiVPS status || true
+# backupctl:MiVPS end
 ```
 
 Las marcas de inicio y fin hacen que reinstalar sea **idempotente**: se

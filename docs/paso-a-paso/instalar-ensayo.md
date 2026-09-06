@@ -35,7 +35,7 @@ Lo mínimo que hay que rellenar:
 
 ```bash
 export USER_NAME="admin"                    # usuario de HestiaCP
-export MYSQL_USER="admin_general"
+export MYSQL_USER="backupctl"
 export MYSQL_PASS="..."
 
 export DEPLOY_HOST="mivps.example.com"
@@ -125,16 +125,16 @@ HestiaCP y con el sistema base.
 Si el VPS ya tenía respaldos, reutiliza el que ya usabas. Para crearlo a mano:
 
 ```sql
-CREATE USER 'admin_general'@'localhost' IDENTIFIED BY 'una-contraseña-larga';
+CREATE USER 'backupctl'@'localhost' IDENTIFIED BY 'una-contraseña-larga';
 GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES, PROCESS
-  ON *.* TO 'admin_general'@'localhost';
+  ON *.* TO 'backupctl'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
 Compruébalo antes de seguir:
 
 ```bash
-mysql -u admin_general -p -e "SHOW DATABASES;" | head
+mysql -u backupctl -p -e "SHOW DATABASES;" | head
 ```
 
 ??? question "¿Y si quiero usar `verify --restore-test`?"
@@ -142,7 +142,7 @@ mysql -u admin_general -p -e "SHOW DATABASES;" | head
     también `CREATE` y `DROP`:
 
     ```sql
-    GRANT CREATE, DROP ON *.* TO 'admin_general'@'localhost';
+    GRANT CREATE, DROP ON *.* TO 'backupctl'@'localhost';
     ```
 
     Es la comprobación que demuestra que el respaldo sirve. Si prefieres

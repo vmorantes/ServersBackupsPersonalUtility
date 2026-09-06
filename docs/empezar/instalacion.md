@@ -64,7 +64,7 @@ Solo tres cosas. El resto lo crea `deploy`.
     Si ya tienes el repositorio en tu equipo, despliega por SSH:
 
     ```bash
-    backupctl -p TejidoTesting deploy root@servidor.example
+    backupctl -p MiVPS deploy root@servidor.example
     ```
 
     Copia `bin/` y `lib/`, sube el `env.sh` del perfil y ejecuta el diagnóstico
@@ -92,7 +92,7 @@ Solo tres cosas. El resto lo crea `deploy`.
 Edita `env.sh`. Lo mínimo son dos líneas:
 
 ```bash
-export MYSQL_USER="admin_general"
+export MYSQL_USER="backupctl"
 export MYSQL_PASS="la-contraseña"
 ```
 
@@ -112,7 +112,7 @@ El usuario necesita esto para un volcado completo:
 
 ```sql
 GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES, PROCESS
-  ON *.* TO 'admin_general'@'localhost';
+  ON *.* TO 'backupctl'@'localhost';
 FLUSH PRIVILEGES;
 ```
 

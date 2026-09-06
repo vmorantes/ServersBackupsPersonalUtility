@@ -89,7 +89,7 @@ no es escribible por quien conecta.
 
     ```sql
     GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES, PROCESS, CREATE, DROP
-      ON *.* TO 'admin_general'@'localhost';
+      ON *.* TO 'backupctl'@'localhost';
     ```
 
 ---
@@ -97,8 +97,8 @@ no es escribible por quien conecta.
 ## `pull` — descargar el estado real
 
 ```bash
-backupctl -p TejidoTesting pull root@servidor
-backupctl -p TejidoTesting pull                 # si DEPLOY_HOST está definido
+backupctl -p MiVPS pull root@servidor
+backupctl -p MiVPS pull                 # si DEPLOY_HOST está definido
 ```
 
 Es lo que hace que el repositorio sirva **para recordar** qué hay desplegado en
@@ -112,7 +112,7 @@ cada máquina, sin tener que conectarse a mirarlo.
     ```
     [AVISO] el env.sh del SERVIDOR difiere del que hay en el repositorio:
 
-        --- repositorio: TejidoTesting/env.sh
+        --- repositorio: MiVPS/env.sh
         +++ servidor:    root@servidor:/home/admin/scripts/env.sh
         -export BACKUP_RETENTION_DAYS="14"
         +export BACKUP_RETENTION_DAYS="30"
@@ -141,7 +141,7 @@ cada máquina, sin tener que conectarse a mirarlo.
 ### Los tres archivos por servidor
 
 ```
-TejidoTesting/
+MiVPS/
 ├── env.sh          ✏️  lo editas tú          → se sube con deploy
 ├── NOTAS.md        ✏️  lo escribes tú        → pull NUNCA lo toca
 └── ESTADO.md       🤖  lo genera pull        → se regenera entero cada vez
@@ -154,7 +154,7 @@ TejidoTesting/
 ### Ensayo
 
 ```bash
-backupctl -p TejidoTesting pull root@servidor --dry-run
+backupctl -p MiVPS pull root@servidor --dry-run
 ```
 
 Se conecta y enseña las diferencias, pero no escribe nada.
@@ -165,7 +165,7 @@ Funciona igual, con menos información:
 
 ```
 [AVISO] no hay backupctl en root@servidor:/home/admin/scripts. Se recogerá lo que se pueda.
-[AVISO] Para desplegarlo: backupctl -p TejidoTesting deploy root@servidor
+[AVISO] Para desplegarlo: backupctl -p MiVPS deploy root@servidor
 ```
 
 Recoge el `env.sh`, el crontab, el disco y el contenido del directorio. Útil
@@ -178,8 +178,8 @@ para inventariar un servidor antes de modernizarlo.
 Documentado en detalle en [Desplegar en otro servidor](desplegar.md).
 
 ```bash
-backupctl -p TejidoTesting deploy root@servidor
-backupctl -p TejidoTesting deploy root@servidor --dry-run
+backupctl -p MiVPS deploy root@servidor
+backupctl -p MiVPS deploy root@servidor --dry-run
 ```
 
 ---
@@ -188,19 +188,19 @@ backupctl -p TejidoTesting deploy root@servidor --dry-run
 
 ```bash
 # 1. ¿Qué hay ahora mismo allí?
-backupctl -p TejidoTesting pull root@servidor
+backupctl -p MiVPS pull root@servidor
 
 # 2. Ajustar la configuración en el repositorio
-backupctl -p TejidoTesting config --edit
+backupctl -p MiVPS config --edit
 
 # 3. Subirlo
-backupctl -p TejidoTesting deploy root@servidor
+backupctl -p MiVPS deploy root@servidor
 
 # 4. Confirmar
 ssh root@servidor '/home/admin/scripts/bin/backupctl doctor'
 
 # 5. Dejar constancia en el repositorio
-backupctl -p TejidoTesting pull root@servidor
+backupctl -p MiVPS pull root@servidor
 ```
 
 Los pasos 1 y 5 son los que mantienen el repositorio sincronizado con la

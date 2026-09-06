@@ -4,7 +4,7 @@ Todas viven en el `env.sh` del perfil. **Todas tienen un valor por defecto
 razonable**: un `env.sh` mínimo son dos líneas.
 
 ```bash
-export MYSQL_USER="admin_general"
+export MYSQL_USER="backupctl"
 export MYSQL_PASS="la-contraseña"
 ```
 
@@ -141,7 +141,7 @@ Con estas definidas, `backupctl deploy` y `migrate` funcionan sin argumentos.
 export USER_NAME="admin"
 export SCRIPTS_DIR="/home/${USER_NAME}/scripts"
 
-export MYSQL_USER="admin_general"
+export MYSQL_USER="backupctl"
 export MYSQL_PASS="..."
 export MYSQL_CHARSET="utf8mb4"
 
