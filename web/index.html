@@ -86,23 +86,23 @@
         <div class="accion"><button class="btn" data-act="remote-hestia-status">La del servidor</button>
           <div class="accion-desc"><span class="no-toca">No toca nada.</span> Lo mismo, leído <strong>del servidor</strong>.</div>
         </div>
-        <div class="accion"><button class="btn" data-act="remote-hestia-verify">Verificar el repositorio Restic</button>
-          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Ejecuta <code>restic snapshots</code>, <code>check</code> y <code>stats</code> contra el repositorio real. Puede tardar.</div>
+        <div class="accion"><button class="btn" data-act="remote-hestia-verify">Verificar el repositorio (vía backupctl del servidor)</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Lo mismo, ejecutado por el backupctl <strong>del servidor</strong>. Requiere haberlo instalado allí antes.</div>
         </div>
-                <div class="accion"><button class="btn" data-act="hestia-verify">Verificar el repositorio (aquí)</button>
-          <div class="accion-desc"><span class="no-toca">No toca nada.</span> <code>restic snapshots</code>, <code>check</code> y <code>stats</code>, ejecutados desde este equipo. Útil solo si backupctl corre en el propio servidor.</div>
+                <div class="accion"><button class="btn" data-act="hestia-verify">Verificar el repositorio Restic</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Se conecta por SSH y ejecuta <code>restic snapshots</code>, <code>check</code> y <code>stats</code>. <strong>Funciona sin haber instalado nada allí.</strong> Puede tardar.</div>
         </div>
-        <div class="accion"><button class="btn" data-act="hestia-users">Usuarios del panel (aquí)</button>
-          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Igual que el de arriba, pero leyendo el HestiaCP de esta máquina.</div>
+        <div class="accion"><button class="btn" data-act="hestia-users">Usuarios del panel</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Se conecta por SSH y lee el panel del servidor. <strong>Funciona sin haber instalado nada allí.</strong></div>
         </div>
-        <div class="accion"><button class="btn" data-act="hestia-dbs">Cobertura de las bases (aquí)</button>
-          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Igual que el de arriba, pero sobre el HestiaCP de esta máquina.</div>
+        <div class="accion"><button class="btn" data-act="hestia-dbs">Cobertura de las bases de datos</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Se conecta por SSH y cruza las bases que <strong>HestiaCP conoce</strong> con las de MySQL y las del último respaldo. <strong>Funciona sin haber instalado nada allí.</strong></div>
         </div>
-        <div class="accion"><button class="btn" data-act="remote-hestia-users">Usuarios del panel</button>
-          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Usuarios de HestiaCP con sus dominios, bases y correo, si cada uno ya tiene <strong>su propia clave</strong> de Restic, y cuándo fue su último respaldo.</div>
+        <div class="accion"><button class="btn" data-act="remote-hestia-users">Usuarios del panel (vía backupctl del servidor)</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Lo mismo, pero ejecutado por el backupctl <strong>del servidor</strong>. Requiere haberlo instalado allí antes.</div>
         </div>
-        <div class="accion"><button class="btn" data-act="remote-hestia-dbs">Cobertura de las bases de datos</button>
-          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Cruza las bases que <strong>HestiaCP conoce</strong> con las que hay en MySQL y las del último respaldo. Las que no conoce no viajan en sus respaldos ni se recrean al restaurar una cuenta: <strong>al migrar hay que darlas de alta a mano</strong>.</div>
+        <div class="accion"><button class="btn" data-act="remote-hestia-dbs">Cobertura de las bases (vía backupctl del servidor)</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Lo mismo, ejecutado por el backupctl <strong>del servidor</strong>. Requiere haberlo instalado allí antes.</div>
         </div>
         <div class="accion"><button class="btn" data-act="hestia-donde">¿Dónde están mis claves?</button>
           <div class="accion-desc"><span class="no-toca">No toca nada.</span> Rutas concretas: dónde están las claves en el servidor, cuáles hay rescatadas aquí, y de dónde salen al montar un servidor nuevo.</div>
