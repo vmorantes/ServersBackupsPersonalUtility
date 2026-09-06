@@ -120,6 +120,7 @@ nav:
       - Recuperación ante desastre: guias/desastre.md
   - Servidores:
       - TejidoTesting: servidores/tejidotesting.md
+      - Normalizar TejidoTesting: servidores/normalizar-tejidotesting.md
   - Desarrollo:
       - Mantener el repositorio: desarrollo/repositorio.md
       - Arquitectura: desarrollo/arquitectura.md

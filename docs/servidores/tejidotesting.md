@@ -11,6 +11,11 @@ Servidor HestiaCP de TejidoTesting.
 | Bases de datos | ~76 |
 | Tamaño del respaldo | ~38 MB |
 
+!!! tip "¿Vienes a ponerlo al día?"
+    **[Normalizar TejidoTesting](normalizar-tejidotesting.md)** — los nueve
+    pasos desde la interfaz, con el estado real de este servidor y sin tocar el
+    terminal.
+
 ```bash
 backupctl -p TejidoTesting status
 ```

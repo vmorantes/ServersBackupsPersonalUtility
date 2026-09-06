@@ -148,6 +148,8 @@ para saber qué es seguro ejecutar sin pensarlo.
 
 ## Mapa de la documentación
 
+- **[Normalizar TejidoTesting](servidores/normalizar-tejidotesting.md)** — poner
+  al día el servidor que ya existe, paso a paso desde la interfaz.
 - **[Qué es cada cosa](empezar/que-es-cada-cosa.md)** — de todos los archivos del
   repositorio, cuál tocas tú. **Empieza aquí si te pierdes.**
 - **[Conceptos](empezar/conceptos.md)** — perfiles, segmentos, el flujo completo.
