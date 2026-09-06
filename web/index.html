@@ -89,6 +89,21 @@
         <div class="accion"><button class="btn" data-act="remote-hestia-verify">Verificar el repositorio Restic</button>
           <div class="accion-desc"><span class="no-toca">No toca nada.</span> Ejecuta <code>restic snapshots</code>, <code>check</code> y <code>stats</code> contra el repositorio real. Puede tardar.</div>
         </div>
+                <div class="accion"><button class="btn" data-act="hestia-verify">Verificar el repositorio (aquí)</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> <code>restic snapshots</code>, <code>check</code> y <code>stats</code>, ejecutados desde este equipo. Útil solo si backupctl corre en el propio servidor.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="hestia-users">Usuarios del panel (aquí)</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Igual que el de arriba, pero leyendo el HestiaCP de esta máquina.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="hestia-dbs">Cobertura de las bases (aquí)</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Igual que el de arriba, pero sobre el HestiaCP de esta máquina.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="remote-hestia-users">Usuarios del panel</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Usuarios de HestiaCP con sus dominios, bases y correo, si cada uno ya tiene <strong>su propia clave</strong> de Restic, y cuándo fue su último respaldo.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="remote-hestia-dbs">Cobertura de las bases de datos</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Cruza las bases que <strong>HestiaCP conoce</strong> con las que hay en MySQL y las del último respaldo. Las que no conoce no viajan en sus respaldos ni se recrean al restaurar una cuenta: <strong>al migrar hay que darlas de alta a mano</strong>.</div>
+        </div>
         <div class="accion"><button class="btn" data-act="hestia-donde">¿Dónde están mis claves?</button>
           <div class="accion-desc"><span class="no-toca">No toca nada.</span> Rutas concretas: dónde están las claves en el servidor, cuáles hay rescatadas aquí, y de dónde salen al montar un servidor nuevo.</div>
         </div>
@@ -112,6 +127,12 @@
         </div>
         <div class="accion"><button class="btn" data-act="list">Listar respaldos</button>
           <div class="accion-desc"><span class="no-toca">No toca nada.</span> Los respaldos guardados con tamaño, fecha, edad y número de bases.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="remote-list">Respaldos del servidor</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Los respaldos guardados <strong>en el servidor</strong>, con tamaño, fecha y edad.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="remote-config">Configuración del servidor</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> El <code>env.sh</code> efectivo <strong>tal y como está en el servidor</strong>. Útil para ver si alguien lo cambió allí.</div>
         </div>
         <div class="accion"><button class="btn" data-act="list-databases">Bases del último respaldo</button>
           <div class="accion-desc"><span class="no-toca">No toca nada.</span> Qué bases de datos contiene el respaldo más reciente.</div>
@@ -303,6 +324,12 @@
 
       <h3>3 · Claves de recuperación <span class="etq etq-error">crítico</span></h3>
       <div class="acciones">
+        <div class="accion"><button class="btn btn-escribe" data-act="hestia-keys" data-confirmar="Se rescatarán las claves del HestiaCP de este equipo.">Rescatar las claves (aquí)</button>
+          <div class="accion-desc"><span class="escribe">Escribe.</span> Rescata <code>restic.conf</code> de cada usuario y el <code>rclone.conf</code>, leyendo el HestiaCP de <strong>esta</strong> máquina.</div>
+        </div>
+        <div class="accion"><button class="btn btn-escribe" data-act="hestia-cron" data-confirmar="Se registrará el cron de Restic en este equipo.">Activar el cron de Restic (aquí)</button>
+          <div class="accion-desc"><span class="escribe">Escribe.</span> Registra <code>v-backup-users-restic</code> en el HestiaCP de <strong>esta</strong> máquina.</div>
+        </div>
         <div class="accion"><button class="btn btn-escribe" data-act="remote-hestia-keys"
                   data-confirmar="Se traerán al repositorio las claves DEL servidor.">Traer las claves del servidor</button>
           <div class="accion-desc"><span class="escribe">Escribe en este repositorio.</span> Trae del servidor el <code>restic.conf</code> de cada usuario y el <code>rclone.conf</code> de root.</div>
@@ -323,6 +350,18 @@
       <div class="acciones">
         <div class="accion"><button class="btn" data-act="cron-show">Ver la programación</button>
           <div class="accion-desc"><span class="no-toca">No toca nada.</span> La programación propuesta y la que ya existe.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="remote-cron">Ver la del servidor</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> La programación que hay <strong>en el servidor</strong>, tal cual.</div>
+        </div>
+        <div class="accion"><button class="btn btn-escribe" data-act="cron-install" data-confirmar="Se modificará la programación de este equipo.">Programar aquí</button>
+          <div class="accion-desc"><span class="escribe">Escribe.</span> Instala la programación en <strong>este</strong> equipo. Solo tiene sentido si backupctl corre aquí.</div>
+        </div>
+        <div class="accion"><button class="btn btn-peligro" data-act="cron-remove" data-confirmar="Se quitarán las entradas de backupctl de este equipo.">Quitarla de aquí</button>
+          <div class="accion-desc"><span class="destruye">Quita la programación de este equipo.</span> Solo las entradas de backupctl.</div>
+        </div>
+        <div class="accion"><button class="btn btn-escribe" data-act="notify-test" data-confirmar="Se enviará un aviso de prueba.">Probar los avisos (aquí)</button>
+          <div class="accion-desc"><span class="escribe">Escribe.</span> Envía un aviso de prueba usando la configuración de <strong>este</strong> perfil.</div>
         </div>
         <div class="accion"><button class="btn btn-escribe" data-act="remote-cron-install"
                   data-confirmar="Se instalará la programación EN el servidor.">Programar en el servidor</button>

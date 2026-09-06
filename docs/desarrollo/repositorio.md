@@ -106,8 +106,15 @@ git add --renormalize .        # reescribe los que hicieran falta
 ```bash
 bash -n bin/backupctl lib/*.sh      # sintaxis, sin ejecutar nada
 shellcheck bin/backupctl lib/*.sh   # análisis estático (más completo)
+python3 web/comprobar.py            # coherencia de la interfaz web
 mkdocs build --strict               # documentación, falla ante cualquier aviso
 ```
+
+!!! warning "No te saltes `web/comprobar.py`"
+    Comprueba que ninguna acción del servidor se quede sin botón y, sobre todo,
+    que el JavaScript no apunte a elementos que ya no existen. Un solo id
+    ausente lanza un `TypeError` que **aborta el script entero**: la interfaz se
+    queda en blanco sin ninguna pista de la causa. Ya ha pasado dos veces.
 
 Y una prueba funcional rápida, que no toca ninguna base de datos:
 
