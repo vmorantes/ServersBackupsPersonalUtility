@@ -382,7 +382,13 @@ bc_backup_run() {
       "$(printf 'Servidor: %s\nPerfil: %s\nArchivo: %s\nDuración: %s\n\nBases de datos con fallos:\n%s\n\nLog: %s\n' \
           "$(hostname -f 2>/dev/null || hostname)" "$BC_PROFILE" "$final_zip" \
           "$(bc_duration "$elapsed")" "$(printf '  - %s\n' "${BC_FAILED_DBS[@]}")" \
-          "${BC_LOG_FILE:-n/d}")"
+          "${BC_LOG_FILE:-n/d}")" || true
+    # Que el respaldo falle es malo; que además nadie se entere es lo que
+    # convierte el fallo en pérdida. Se dice aparte, y bien alto.
+    if (( BC_NOTIFY_OK == 0 )); then
+      bc_err "Y NO SE PUDO AVISAR A NADIE de este fallo:"
+      printf '%s' "$BC_NOTIFY_MOTIVOS" >&2
+    fi
     BC_DELIBERATE_EXIT=1
     return 1
   fi

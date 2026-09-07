@@ -44,7 +44,7 @@ export MIN_FREE_MB="2048"
 # --- Avisos ante fallo -------------------------------------------------------
 # ⚠ SIN CONFIGURAR. Mientras estén vacíos, un respaldo fallido no avisa a nadie.
 #   Configura al menos uno. Ver ScriptsTemplates/env.sh.example.
-export NOTIFY_EMAIL=""
+export NOTIFY_EMAIL="servers@testing.tejidodigital.com"
 export NOTIFY_COMMAND=""
 export HEALTHCHECK_URL=""
 
