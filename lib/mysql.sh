@@ -34,6 +34,7 @@ bc_mysql_init() {
     [[ -n "$MYSQL_HOST"   ]] && echo "host=$MYSQL_HOST"
     [[ -n "$MYSQL_PORT"   ]] && echo "port=$MYSQL_PORT"
     [[ -n "$MYSQL_SOCKET" ]] && echo "socket=$MYSQL_SOCKET"
+    true    # el código del grupo no debe depender del último [[ ]]
     echo "default-character-set=$MYSQL_CHARSET"
   } > "$BC_DEFAULTS_FILE"
   bc_debug "fichero de credenciales: $BC_DEFAULTS_FILE"

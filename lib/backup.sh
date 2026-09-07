@@ -265,7 +265,7 @@ bc_backup_run() {
   if [[ -n "$non_innodb" ]]; then
     bc_warn "hay tablas no InnoDB; --single-transaction NO garantiza coherencia en ellas:"
     printf '%s\n' "$non_innodb" | head -10 | sed 's/^/        /'
-    local n; n="$(grep -c . <<<"$non_innodb")"
+    local n; n="$(grep -c . <<<"$non_innodb" || true)"
     (( n > 10 )) && bc_log "        ... y $(( n - 10 )) más."
   fi
 

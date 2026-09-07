@@ -50,26 +50,33 @@ bc_hestia_cerrar() { (( BC_HESTIA_REMOTO )) && bc_ssh_close; return 0; }
 # LECTURA: se intenta primero sin elevar. Muchos de estos archivos son
 # legibles por el usuario, y pedir sudo para leerlos sería tan molesto como
 # innecesario. Solo si falla se escala.
+# La entrada estándar se cierra a propósito. Sin esto, un `ssh` invocado dentro
+# de un bucle `while read` se COME las líneas que quedaban por leer: el bucle
+# procesa el primer elemento y termina. Es la causa de que la lista de usuarios
+# mostrara solo el primero de los tres.
 bc_hestia_read() {
   if (( BC_HESTIA_REMOTO )); then
-    bc_ssh "$*" 2>/dev/null && return 0
-    bc_ssh_sudo "$*" 2>/dev/null
+    bc_ssh "$*" 2>/dev/null < /dev/null && return 0
+    bc_ssh_sudo "$*" 2>/dev/null < /dev/null
   else
-    bash -c "$*" 2>/dev/null && return 0
+    bash -c "$*" 2>/dev/null < /dev/null && return 0
     [[ "$(id -u)" -eq 0 ]] && return 1
-    sudo -n bash -c "$*" 2>/dev/null
+    sudo -n bash -c "$*" 2>/dev/null < /dev/null
   fi
 }
 
 # ESCRITURA: siempre elevado. Nunca se intenta sin sudo, porque un intento a
 # medias podría dejar un archivo escrito a medias.
+# Igual que en bc_hestia_read: sin cerrar stdin, un ssh dentro de un bucle se
+# lleva por delante las líneas pendientes. Para enviar datos está la variante
+# bc_hestia_root_stdin.
 bc_hestia_root() {
   if (( BC_HESTIA_REMOTO )); then
-    bc_ssh_sudo "$*"
+    bc_ssh_sudo "$*" < /dev/null
   elif [[ "$(id -u)" -eq 0 ]]; then
-    bash -c "$*"
+    bash -c "$*" < /dev/null
   elif sudo -n true 2>/dev/null; then
-    sudo -n bash -c "$*"
+    sudo -n bash -c "$*" < /dev/null
   elif bc_can_prompt; then
     sudo bash -c "$*"
   else
@@ -395,7 +402,7 @@ bc_hestia_keys() {
   local confs
   confs="$(bc_hestia_read "find '$HESTIA_DIR' -type f -name restic.conf" || true)"
   if [[ -n "$confs" ]]; then
-    n_restic="$(grep -c . <<<"$confs")"
+    n_restic="$(grep -c . <<<"$confs" || true)"
     {
       printf '# Claves de repositorio Restic de HestiaCP\n'
       printf '# Servidor: %s\n' "$( (( BC_HESTIA_REMOTO )) && echo "$DEPLOY_HOST" || hostname -f 2>/dev/null || hostname )"
@@ -462,14 +469,16 @@ bc_hestia_users() {
     u="$(awk '{print $1}' <<<"$u")"
     [[ -z "$u" || "$u" == "USER" ]] && continue
     local dom bd mail rst ult
-    dom="$( { bc_hestia_read "$HESTIA_DIR/bin/v-list-web-domains $u plain" || true; } | grep -c . )"
-    bd="$(  { bc_hestia_read "$HESTIA_DIR/bin/v-list-databases $u plain"   || true; } | grep -c . )"
-    mail="$({ bc_hestia_read "$HESTIA_DIR/bin/v-list-mail-domains $u plain" || true; } | grep -c . )"
+    dom="$( { bc_hestia_read "$HESTIA_DIR/bin/v-list-web-domains $u plain" || true; } | grep -c . || true )"
+    bd="$(  { bc_hestia_read "$HESTIA_DIR/bin/v-list-databases $u plain"   || true; } | grep -c . || true )"
+    mail="$({ bc_hestia_read "$HESTIA_DIR/bin/v-list-mail-domains $u plain" || true; } | grep -c . || true )"
     # La presencia de su restic.conf indica que ese usuario ya tiene clave propia
     if bc_hestia_read "test -f '$HESTIA_DIR/data/users/$u/restic.conf'"; then rst="sí"; else rst="NO"; fi
     # Último respaldo según el propio HestiaCP
+    # v-list-user-backups devuelve el nombre del .tar en la primera columna y la
+    # fecha en la última. Interesa la fecha, no el nombre del archivo.
     ult="$( { bc_hestia_read "$HESTIA_DIR/bin/v-list-user-backups $u plain" || true; } \
-            | awk 'NF{print $1}' | sort -r | head -1 )"
+            | awk -F'\t' 'NF>1{print $NF}' | grep -E '^[0-9]{4}-' | sort -r | head -1 )"
     printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$u" "$dom" "$bd" "$mail" "$rst" "${ult:-ninguno}" >> "$filas"
   done <<<"$lista"
@@ -487,6 +496,50 @@ bc_hestia_users() {
   bc_log "  respaldado nunca. No es un error si acabas de montarlo."
   bc_warn "Hay que rescatar la clave de CADA usuario: con la de uno no se abren los"
   bc_warn "respaldos de los demás. «Traer las claves del servidor» las coge todas."
+}
+
+# -----------------------------------------------------------------------------
+# Consultar MySQL y los respaldos EN EL SERVIDOR
+# -----------------------------------------------------------------------------
+# Las credenciales viajan a un archivo temporal 0600 en el destino y se borran
+# al terminar: pasarlas como -p las haría visibles en `ps` para toda la máquina.
+bc_hestia_mysql_remoto() {
+  local cnf
+  cnf="$(bc_ssh 'mktemp' < /dev/null)" || return 1
+  # El `true` final NO es decorativo. Sin él, el último `[[ -n ... ]] && echo`
+  # decide el código de salida del grupo: con MYSQL_SOCKET vacío —lo normal—
+  # el grupo devuelve 1, y con pipefail la tubería entera se da por fallida.
+  # La función abortaba antes de consultar nada y devolvía cero bases de datos
+  # sin ningún error visible.
+  {
+    echo "[client]"
+    echo "user=$MYSQL_USER"
+    [[ -n "$MYSQL_PASS"   ]] && echo "password=$MYSQL_PASS"
+    [[ -n "$MYSQL_HOST"   ]] && echo "host=$MYSQL_HOST"
+    [[ -n "$MYSQL_PORT"   ]] && echo "port=$MYSQL_PORT"
+    [[ -n "$MYSQL_SOCKET" ]] && echo "socket=$MYSQL_SOCKET"
+    true
+  } | bc_ssh "cat > '$cnf' && chmod 600 '$cnf'" || { bc_ssh "rm -f '$cnf'" < /dev/null; return 1; }
+
+  # El script se envía por la entrada estándar a `bash -s` en lugar de meterlo
+  # entrecomillado en la orden de ssh: anidar comillas dentro de comillas
+  # dentro de SQL es una fuente inagotable de errores de escapado.
+  bc_ssh 'bash -s' <<REMOTO || true
+mysql --defaults-file='$cnf' -s --skip-column-names -e "
+  SELECT schema_name FROM information_schema.schemata
+  WHERE schema_name NOT IN $EXCLUDE_DBS ORDER BY schema_name"
+REMOTO
+  bc_ssh "rm -f '$cnf'" < /dev/null || true
+}
+
+# Bases de datos contenidas en el respaldo más reciente DEL SERVIDOR
+bc_hestia_respaldo_remoto() {
+  # \$z queda literal para que lo resuelva el shell del servidor;
+  # $BACKUP_OUTPUT_DIR sí se expande aquí, que es lo que queremos enviar.
+  bc_ssh 'bash -s' <<REMOTO || true
+z=\$(ls -t '$BACKUP_OUTPUT_DIR'/all_databases_*.zip 2>/dev/null | head -1)
+[ -n "\$z" ] && unzip -Z1 "\$z" 2>/dev/null | awk -F/ 'NF>1{print \$1}' | sort -u
+REMOTO
 }
 
 # =============================================================================
@@ -525,24 +578,32 @@ bc_hestia_dbs() {
   conocidas="$(sed '/^$/d' <<<"$conocidas" | sort -u)"
 
   # --- Las que hay de verdad en MySQL ---------------------------------------
+  # Las tres fuentes tienen que salir de la MISMA máquina. Al trabajar contra un
+  # servidor remoto, MySQL y los respaldos están allí: consultarlos en local
+  # devolvería cero y el cruce diría cualquier cosa menos la verdad.
   local en_mysql=""
-  if bc_mysql_check >/dev/null 2>&1; then
+  if (( BC_HESTIA_REMOTO )); then
+    en_mysql="$(bc_hestia_mysql_remoto | sort -u || true)"
+    [[ -z "$en_mysql" ]] && bc_warn "no se pudo consultar MySQL en el servidor."
+  elif bc_mysql_check >/dev/null 2>&1; then
     en_mysql="$(bc_mysql_databases 2>/dev/null | sort -u || true)"
   else
     bc_warn "no se pudo consultar MySQL: la comparación queda incompleta."
   fi
 
   # --- Las que están en el último respaldo ----------------------------------
-  local en_respaldo="" zip
-  zip="$(bc_backup_latest || true)"
-  if [[ -n "$zip" ]]; then
-    en_respaldo="$(unzip -Z1 "$zip" 2>/dev/null | awk -F/ 'NF>1{print $1}' | sort -u || true)"
+  local en_respaldo=""
+  if (( BC_HESTIA_REMOTO )); then
+    en_respaldo="$(bc_hestia_respaldo_remoto | sort -u || true)"
+  else
+    local zip; zip="$(bc_backup_latest || true)"
+    [[ -n "$zip" ]] && en_respaldo="$(unzip -Z1 "$zip" 2>/dev/null | awk -F/ 'NF>1{print $1}' | sort -u || true)"
   fi
 
   local n_con n_my
   n_con="$(grep -c . <<<"$conocidas" || true)"
   n_my="$(grep -c . <<<"$en_mysql" || true)"
-  bc_log "HestiaCP conoce $n_con · en MySQL hay $n_my · en el último respaldo $(grep -c . <<<"$en_respaldo" || echo 0)"
+  bc_log "HestiaCP conoce $n_con · en MySQL hay $n_my · en el último respaldo $(grep -c . <<<"$en_respaldo" || true)"
   echo
 
   # --- Cruce ----------------------------------------------------------------
