@@ -107,6 +107,7 @@ nav:
       - Portabilidad del volcado: migracion/portabilidad.md
   - Interfaces:
       - Interfaz web: interfaces/web.md
+      - Como aplicación del escritorio: interfaces/escritorio.md
       - TUI interactiva: interfaces/tui.md
       - CLI y automatización: interfaces/cli.md
   - Referencia:

@@ -4,6 +4,10 @@
 backupctl web --open
 ```
 
+!!! tip "¿Prefieres abrirla desde el menú de aplicaciones?"
+    [Instálala como aplicación del escritorio](escritorio.md): se enciende al
+    abrirla y se apaga al cerrar la ventana.
+
 La tercera fachada sobre la misma lógica. Lo que aporta sobre la TUI es ver
 **todos tus servidores a la vez**: en el terminal hay que recorrerlos uno a uno.
 
