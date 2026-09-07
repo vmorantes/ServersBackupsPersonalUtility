@@ -53,6 +53,32 @@ bc_remote_run() {
   # enteros al otro lado.
   local quoted; quoted="$(printf '%q ' "$@")"
 
+  # ---------------------------------------------------------------------------
+  # Se ejecuta como el DUEÑO de la instalación, no como quien entra por SSH.
+  # ---------------------------------------------------------------------------
+  # Al servidor se entra como root, porque los usuarios del panel de HestiaCP
+  # tienen shell 'nologin'. Pero el cron corre como el usuario del panel: si el
+  # respaldo lo genera root, el zip queda de root dentro del árbol de admin y
+  # la retención del día siguiente NO puede borrarlo. El directorio se llena en
+  # silencio hasta que se acaba el disco.
+  #
+  # Así que se mira de quién es la instalación y se ejecuta como él.
+  local dueno=""
+  if [[ "${DEPLOY_USER:-root}" == "root" ]]; then
+    dueno="$(bc_ssh "stat -c %U '$path' 2>/dev/null" < /dev/null | tr -d '\r')" || dueno=""
+    [[ "$dueno" == "root" ]] && dueno=""
+  fi
+  local como=""
+  if [[ -n "$dueno" ]]; then
+    # El `cd` NO es decorativo. sudo hereda el directorio de trabajo de quien
+    # entró por SSH, que es /root, y admin no puede leerlo: `find` aborta con
+    # «Failed to restore initial working directory» a mitad del empaquetado,
+    # después de haber volcado las 81 bases. Se entra a la propia instalación,
+    # que el dueño sí puede leer por definición.
+    como="cd '$path' && sudo -u $dueno -H "
+    bc_log "Se ejecutará como '$dueno', dueño de $path, para no dejar archivos de root."
+  fi
+
   bc_section "$target · backupctl $*"
 
   local rc=0
@@ -62,9 +88,9 @@ bc_remote_run() {
   elif bc_is_tty; then
     # Con terminal se asigna uno para que se vea el progreso en vivo y para que
     # las confirmaciones del otro lado funcionen.
-    bc_ssh_tty "'$path/bin/backupctl' $quoted" || rc=$?
+    bc_ssh_tty "$como'$path/bin/backupctl' $quoted" || rc=$?
   else
-    bc_ssh "'$path/bin/backupctl' $quoted" || rc=$?
+    bc_ssh "$como'$path/bin/backupctl' $quoted" || rc=$?
   fi
 
   echo

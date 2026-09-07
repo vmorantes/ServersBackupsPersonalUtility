@@ -153,6 +153,16 @@ bc_mysql_non_innodb() {
               LIMIT 50"
 }
 
+# Bases de datos que contienen alguna tabla no transaccional. Se consulta UNA
+# vez, no una por base: con 80 bases, preguntar por cada una multiplica el
+# trabajo sobre information_schema sin ganar nada.
+bc_mysql_schemas_no_transaccionales() {
+  bc_mysql_q "SELECT DISTINCT table_schema
+              FROM information_schema.tables
+              WHERE engine IS NOT NULL AND engine NOT IN ('InnoDB')
+                AND table_schema NOT IN $EXCLUDE_DBS"
+}
+
 # -----------------------------------------------------------------------------
 # Opciones de mysqldump
 # -----------------------------------------------------------------------------

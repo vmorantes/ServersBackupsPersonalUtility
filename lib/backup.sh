@@ -59,6 +59,9 @@ bc_backup_resolve() {
 # Uso: bc_dump_segment <archivo_destino> <strip:yes|no> <opciones de mysqldump...>
 # Devuelve 0 si el volcado fue limpio, 1 si hubo un error real.
 # -----------------------------------------------------------------------------
+# Bases de datos que exigen --lock-tables en vez de --single-transaction.
+declare -A BC_DBS_NO_TRX=()
+
 bc_dump_segment() {
   local out_file="$1"; shift
   local strip="$1"; shift
@@ -130,6 +133,20 @@ bc_backup_database() {
     echo "  COLLATE $collate;"
     echo "$header"
   } > "$db_path/database.sql"
+
+  # Esta base se vuelca con bloqueo si tiene tablas no transaccionales. Se
+  # cambia la opción, no se añade: --single-transaction y --lock-tables son
+  # mutuamente excluyentes y mysqldump ignora una de las dos en silencio.
+  local -a opts_previas=("${BC_DUMP_OPTS[@]}")
+  if [[ -n "${BC_DBS_NO_TRX[$db]:-}" ]]; then
+    local i
+    for i in "${!BC_DUMP_OPTS[@]}"; do
+      [[ "${BC_DUMP_OPTS[$i]}" == "--single-transaction" ]] && BC_DUMP_OPTS[$i]="--lock-tables"
+    done
+    bc_debug "    '$db' tiene tablas no transaccionales: --lock-tables"
+  fi
+  # shellcheck disable=SC2064
+  trap 'BC_DUMP_OPTS=("${opts_previas[@]}")' RETURN
 
   # --- 2. tables.sql ---------------------------------------------------------
   echo "$header" > "$db_path/tables.sql"
@@ -260,13 +277,27 @@ bc_backup_run() {
     bc_die "espacio insuficiente: ${free_mb}MB libres, se estiman ${need_mb}MB necesarios."
   fi
 
-  # Aviso informativo: --single-transaction no cubre motores no transaccionales
-  local non_innodb; non_innodb="$(bc_mysql_non_innodb 2>/dev/null || true)"
-  if [[ -n "$non_innodb" ]]; then
-    bc_warn "hay tablas no InnoDB; --single-transaction NO garantiza coherencia en ellas:"
-    printf '%s\n' "$non_innodb" | head -10 | sed 's/^/        /'
-    local n; n="$(grep -c . <<<"$non_innodb" || true)"
-    (( n > 10 )) && bc_log "        ... y $(( n - 10 )) más."
+  # --- Motores no transaccionales --------------------------------------------
+  # --single-transaction toma una instantánea coherente, pero solo de InnoDB.
+  # En una tabla MyISAM o MEMORY no hace nada: si alguien escribe mientras se
+  # vuelca, el respaldo puede quedar internamente incoherente —una fila hija sin
+  # su fila padre— y eso no se nota hasta el día que hay que restaurar.
+  #
+  # Antes esto solo se avisaba. Ahora, las bases que tengan alguna tabla así se
+  # vuelcan con --lock-tables, que sí garantiza coherencia. El bloqueo es de
+  # lectura, dura lo que dura el volcado de ESA base, y no afecta a las demás.
+  BC_DBS_NO_TRX=()
+  local esquemas; esquemas="$(bc_mysql_schemas_no_transaccionales 2>/dev/null || true)"
+  if [[ -n "$esquemas" ]]; then
+    local e
+    while IFS= read -r e; do [[ -n "$e" ]] && BC_DBS_NO_TRX["$e"]=1; done <<<"$esquemas"
+    bc_warn "bases con tablas no InnoDB ($(grep -c . <<<"$esquemas")): se volcarán con --lock-tables"
+    bc_log  "        $(tr '\n' ' ' <<<"$esquemas")"
+    bc_log  "        --single-transaction no cubre MyISAM ni MEMORY. El bloqueo es"
+    bc_log  "        de lectura y solo mientras se vuelca esa base."
+    local detalle; detalle="$(bc_mysql_non_innodb 2>/dev/null || true)"
+    [[ -n "$detalle" ]] && { printf '%s\n' "$detalle" | head -5 | sed 's/^/          /'; \
+      local n; n="$(grep -c . <<<"$detalle" || true)"; (( n > 5 )) && bc_log "          ... y $(( n - 5 )) tablas más."; }
   fi
 
   # --- Selección de bases de datos -------------------------------------------

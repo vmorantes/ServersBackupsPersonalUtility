@@ -155,13 +155,22 @@ bc_doctor_run() {
     else
       bc_doc_warn "sin trabajos de backupctl en HestiaCP (usa: backupctl cron --install)"
     fi
-    if crontab -l 2>/dev/null | grep -q 'backupctl'; then
+    # Puestas a mano = en el crontab del usuario pero NO en su cron.conf, que es
+    # de donde HestiaCP lo regenera. Compararlo con `crontab -l` a secas marcaba
+    # como «a mano» las que había instalado la propia orden.
+    if crontab -l 2>/dev/null | grep -q 'backupctl' \
+       && ! bc_cron_hestia_our_jobs | grep -q .; then
       bc_doc_fail "hay líneas de backupctl puestas a mano en el crontab: HestiaCP las borrará en el próximo rebuild. Reinstálalas con: backupctl cron --install"
     fi
   fi
 
+  # `crontab -l` es el crontab de QUIEN EJECUTA. Los trabajos los instala
+  # v-add-cron-job bajo el usuario del panel, así que ejecutando esto como root
+  # salía «sin entradas en el crontab» justo debajo de «registrado en HestiaCP»:
+  # dos líneas seguidas diciendo lo contrario. Se miran todos los crontabs.
   local ct
-  ct="$(crontab -l 2>/dev/null || true)"
+  ct="$( { crontab -l 2>/dev/null || true; cat /var/spool/cron/crontabs/* 2>/dev/null || true; \
+           cat /etc/cron.d/* 2>/dev/null || true; } )"
   if grep -q 'backupctl' <<<"$ct"; then
     bc_doc_ok "hay entradas de backupctl en el crontab"
     # El % sin escapar en crontab se traduce a salto de línea y parte la orden
