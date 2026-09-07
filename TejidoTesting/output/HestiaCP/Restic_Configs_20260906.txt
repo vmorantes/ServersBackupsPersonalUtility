@@ -1,0 +1,29 @@
+# Claves de repositorio Restic de HestiaCP
+# Servidor: vps-ef720100.vps.ovh.ca
+# Generado: 2026-09-06 22:13:50 -05 por backupctl 2.0.0
+
+# admin:
+kCgSQeHrDarRjq6gUHBMsrxCGkskHpqq
+
+=====================
+
+# naturalsurf:
+tszdqCwaK5ez53EsZXZ9e9eiphz7pROg
+
+=====================
+
+# testing-admin:
+EJrgKgglKCARJuWLSOVxnXdrR1t9SRVz
+
+=====================
+
+# conf:
+REPO='rclone:megas3-vicsen:tejido-testing/hestiacp/'
+SNAPSHOTS='30'
+KEEP_DAILY='8'
+KEEP_WEEKLY='5'
+KEEP_MONTHLY='3'
+KEEP_YEARLY='-1'
+
+=====================
+

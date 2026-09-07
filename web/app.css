@@ -303,3 +303,28 @@ input[type=password] {
 .paso-ok .paso-titulo { color: var(--ok); }
 .paso-falta .paso-titulo { color: var(--aviso); }
 .paso-hacer { color: var(--suave); }
+
+/* --- Estado real leído del servidor ---------------------------------------
+   Va pegado al encabezado de cada sección: antes de ofrecer un botón que
+   escribe, hay que decir qué hay ya puesto. */
+.estado-real {
+  margin: .4rem 0 .9rem; padding: .6rem .8rem;
+  border-left: 3px solid var(--borde, #444);
+  background: rgba(127,127,127,.07);
+  border-radius: 0 4px 4px 0;
+  font-size: .88rem; line-height: 1.5;
+}
+.estado-real.ok        { border-left-color: #3fb950; }
+.estado-real.vacio     { border-left-color: #8b949e; }
+.estado-real.problema  { border-left-color: #d29922; }
+.estado-real.sin-datos { border-left-color: #f85149; }
+.estado-real dl { display: grid; grid-template-columns: max-content 1fr;
+                  gap: .15rem .8rem; margin: .4rem 0 0; }
+.estado-real dt { opacity: .7; }
+.estado-real dd { margin: 0; font-family: ui-monospace, monospace; word-break: break-all; }
+.estado-real .aviso-pisa { display: block; margin-top: .5rem; color: #d29922; }
+.estado-real .aviso-pisa strong { color: #f0883e; }
+
+/* Botón cuya acción ya está hecha: sigue pulsable, pero deja de invitar */
+.btn.ya-hecho { opacity: .55; }
+.btn.ya-hecho::after { content: " ✓"; }

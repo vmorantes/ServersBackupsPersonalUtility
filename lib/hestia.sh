@@ -194,8 +194,9 @@ bc_hestia_status() {
 
   # --- Claves rescatadas -----------------------------------------------------
   local restic_local rclone_local
-  restic_local="$( { find "$HESTIA_OUTPUT_DIR" -maxdepth 1 -name 'Restic_Configs_*.txt' 2>/dev/null || true; } | wc -l)"
-  rclone_local="$( { find "$HESTIA_OUTPUT_DIR" -maxdepth 1 -name 'rclone_*.conf' 2>/dev/null || true; } | wc -l)"
+  local dir_claves; dir_claves="$(bc_hestia_salida)"
+  restic_local="$( { find "$dir_claves" -maxdepth 1 -name 'Restic_Configs_*.txt' 2>/dev/null || true; } | wc -l)"
+  rclone_local="$( { find "$dir_claves" -maxdepth 1 -name 'rclone_*.conf' 2>/dev/null || true; } | wc -l)"
   if (( restic_local > 0 )); then bc_ok "Claves Restic rescatadas: $restic_local archivo(s)."
   else bc_err "las claves Restic NO están rescatadas. Sin ellas el repositorio es ILEGIBLE."; fi
   if (( rclone_local > 0 )); then bc_ok "rclone.conf rescatado: $rclone_local archivo(s)."
@@ -519,6 +520,24 @@ bc_hestia_verify() {
 # =============================================================================
 # Rescate de claves — lo que hace que el respaldo sea recuperable
 # =============================================================================
+# -----------------------------------------------------------------------------
+# ¿Dónde se dejan las claves rescatadas?
+# -----------------------------------------------------------------------------
+# Cuando el perfil apunta a otro servidor, HESTIA_OUTPUT_DIR es una ruta DEL
+# SERVIDOR (/home/admin/scripts/output/HestiaCP). Aquí no existe, y `mkdir -p`
+# se estrellaba contra «Permiso denegado» al intentar crear /home/admin.
+#
+# Rescatando desde fuera, el destino correcto es el repositorio: es exactamente
+# el sitio donde tienen que estar, fuera del servidor que se quiere poder
+# perder. Ahí están ya los rescates anteriores.
+bc_hestia_salida() {
+  if (( BC_HESTIA_REMOTO )); then
+    echo "$BC_PROFILE_DIR/output/HestiaCP"
+  else
+    echo "$HESTIA_OUTPUT_DIR"
+  fi
+}
+
 bc_hestia_keys() {
   bc_hestia_conectar
   trap 'bc_hestia_cerrar' RETURN
@@ -527,12 +546,15 @@ bc_hestia_keys() {
   bc_warn "Sin estos dos archivos, tus respaldos son irrecuperables aunque estén"
   bc_warn "intactos: uno descifra el repositorio y el otro permite llegar a él."
 
-  mkdir -p "$HESTIA_OUTPUT_DIR"
+  local destino; destino="$(bc_hestia_salida)"
+  mkdir -p "$destino" 2>/dev/null \
+    || bc_die "no se puede escribir en $destino. Comprueba los permisos."
+  bc_log "Las claves se guardarán en: $destino"
   local fecha; fecha="$(date +%Y%m%d)"
   local n_restic=0
 
   # --- restic.conf de cada usuario ------------------------------------------
-  local salida="$HESTIA_OUTPUT_DIR/Restic_Configs_${fecha}.txt"
+  local salida="$destino/Restic_Configs_${fecha}.txt"
   local confs
   confs="$(bc_hestia_read "find '$HESTIA_DIR' -type f -name restic.conf" || true)"
   if [[ -n "$confs" ]]; then
@@ -557,7 +579,7 @@ bc_hestia_keys() {
   # Este es el que casi nadie guarda: Restic respalda las cuentas de usuario,
   # no la configuración de root. Sin él no se puede LLEGAR al repositorio,
   # aunque se tengan las claves para descifrarlo.
-  local rc_salida="$HESTIA_OUTPUT_DIR/rclone_${fecha}.conf"
+  local rc_salida="$destino/rclone_${fecha}.conf"
   if bc_hestia_read "cat '$BC_HESTIA_RCLONE_CONF'" > "$rc_salida" && [[ -s "$rc_salida" ]]; then
     bc_ok "Configuración de rclone: $rc_salida"
   else
@@ -570,8 +592,8 @@ bc_hestia_keys() {
   bc_log "En un gestor de contraseñas o en otra máquina. Si solo están aquí, se"
   bc_log "pierden con el servidor, y con ellos la posibilidad de recuperar nada."
 
-  bc_prune "$HESTIA_OUTPUT_DIR" 'Restic_Configs_*.txt' "$RESTIC_RETENTION_DAYS" 2 "claves Restic" 0
-  bc_prune "$HESTIA_OUTPUT_DIR" 'rclone_*.conf'        "$RESTIC_RETENTION_DAYS" 2 "config rclone"  0
+  bc_prune "$destino" 'Restic_Configs_*.txt' "$RESTIC_RETENTION_DAYS" 2 "claves Restic" 0
+  bc_prune "$destino" 'rclone_*.conf'        "$RESTIC_RETENTION_DAYS" 2 "config rclone"  0
 }
 
 # -----------------------------------------------------------------------------

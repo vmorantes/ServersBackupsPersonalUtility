@@ -282,6 +282,7 @@
          cubre <strong>archivos, correo, DNS y configuración</strong>.</p>
 
       <h3>1 · Dónde se guarda (remoto de rclone)</h3>
+      <div class="estado-real" id="est-rclone">Leyendo el servidor…</div>
       <div class="campos">
         <label>Nombre del remoto
           <input type="text" id="rc-name" placeholder="mi-almacenamiento" autocomplete="off"></label>
@@ -305,6 +306,7 @@
       </div>
 
       <h3>2 · Host de respaldo y retención</h3>
+      <div class="estado-real" id="est-restic">Leyendo el servidor…</div>
       <p class="ayuda">El <strong>primer</strong> número es el total de instantáneas,
          no los días. Es el error más común al configurarlo a mano.</p>
       <div class="campos" id="form-hrestic">
@@ -323,6 +325,7 @@
       </div>
 
       <h3>3 · Claves de recuperación <span class="etq etq-error">crítico</span></h3>
+      <div class="estado-real" id="est-claves">Leyendo el servidor…</div>
       <div class="acciones">
         <div class="accion"><button class="btn btn-escribe" data-act="hestia-keys" data-confirmar="Se rescatarán las claves del HestiaCP de este equipo.">Rescatar las claves (aquí)</button>
           <div class="accion-desc"><span class="escribe">Escribe.</span> Rescata <code>restic.conf</code> de cada usuario y el <code>rclone.conf</code>, leyendo el HestiaCP de <strong>esta</strong> máquina.</div>

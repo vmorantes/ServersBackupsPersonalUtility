@@ -129,12 +129,12 @@ bc_shield_run() {
   # === 3. Las claves =========================================================
   bc_sh_cab "3 · Claves de recuperación"
   local n_restic n_rclone
-  n_restic="$( { find "$HESTIA_OUTPUT_DIR" -maxdepth 1 -name 'Restic_Configs_*.txt' 2>/dev/null || true; } | wc -l)"
-  n_rclone="$( { find "$HESTIA_OUTPUT_DIR" -maxdepth 1 -name 'rclone_*.conf' 2>/dev/null || true; } | wc -l)"
+  n_restic="$( { find "$(bc_hestia_salida)" -maxdepth 1 -name 'Restic_Configs_*.txt' 2>/dev/null || true; } | wc -l)"
+  n_rclone="$( { find "$(bc_hestia_salida)" -maxdepth 1 -name 'rclone_*.conf' 2>/dev/null || true; } | wc -l)"
 
   if (( n_restic > 0 )); then
     local ultima
-    ultima="$( { find "$HESTIA_OUTPUT_DIR" -maxdepth 1 -name 'Restic_Configs_*.txt' -printf '%T@ %p\n' 2>/dev/null || true; } | sort -rn | head -1 | cut -d' ' -f2-)"
+    ultima="$( { find "$(bc_hestia_salida)" -maxdepth 1 -name 'Restic_Configs_*.txt' -printf '%T@ %p\n' 2>/dev/null || true; } | sort -rn | head -1 | cut -d' ' -f2-)"
     bc_sh_ok "claves Restic rescatadas (hace $(bc_age_days "$ultima") días)"
   else
     bc_sh_fail "claves Restic NO rescatadas: el repositorio sería ILEGIBLE"

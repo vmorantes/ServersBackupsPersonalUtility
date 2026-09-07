@@ -383,7 +383,135 @@ function seleccionar(nombre) {
   $$('.tarjeta').forEach(t => t.classList.toggle(
     'sel', t.querySelector('.tarjeta-nombre').textContent === nombre));
   cargarRespaldos(nombre);
+  cargarEstadoHestia(nombre);
   $('#panel-detalle').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// --- Estado real de HestiaCP -------------------------------------------------
+// Se lee ANTES de ofrecer nada. Un botón que escribe sin decir qué hay ya
+// puesto es una trampa: conf/restic.conf es uno solo por HestiaCP entero.
+async function cargarEstadoHestia(nombre) {
+  const cajas = ['#est-rclone', '#est-restic', '#est-claves'];
+  cajas.forEach(c => { const e = $(c); if (e) { e.className = 'estado-real'; e.textContent = 'Leyendo el servidor…'; } });
+
+  let d;
+  try {
+    d = await (await api('/api/hestia-estado?profile=' + encodeURIComponent(nombre))).json();
+  } catch (e) {
+    cajas.forEach(c => pintarEstado(c, 'sin-datos', 'No se pudo leer el servidor. Los botones de esta pestaña escribirían a ciegas: no los uses hasta resolverlo.'));
+    return;
+  }
+  if (!d.conectado) {
+    cajas.forEach(c => pintarEstado(c, 'sin-datos',
+      'No se pudo leer el servidor' + (d.detalle ? ': ' + esc(d.detalle) : '') +
+      '.<br>Sin saber qué hay configurado, cualquier botón que escriba podría pisar algo. Resuélvelo en la pestaña Servidor.'));
+    marcarPisa(null);
+    return;
+  }
+
+  // --- 1. Remoto de rclone --------------------------------------------------
+  const rem = d.rclone.remotos || [];
+  if (rem.length) {
+    pintarEstado('#est-rclone', 'ok',
+      '<strong>Ya configurado.</strong> Remotos que existen en el servidor: ' +
+      rem.map(x => '<code>' + esc(x) + '</code>').join(', ') +
+      '<span class="aviso-pisa">«Configurar el remoto» <strong>reescribe</strong> el rclone.conf del servidor. ' +
+      'Si usas un nombre que ya está en la lista, esas claves se sustituyen. Se guarda copia de la versión anterior.</span>');
+  } else {
+    pintarEstado('#est-rclone', 'vacio',
+      'Todavía no hay ningún remoto de rclone en el servidor. Nada que pisar: puedes configurarlo con tranquilidad.');
+  }
+
+  // --- 2. Host de respaldo Restic ------------------------------------------
+  const R = d.restic;
+  const campoRepo = $('#form-hrestic input[data-opt="repo"]');
+  if (R.repo) {
+    pintarEstado('#est-restic', 'ok',
+      '<strong>Ya configurado.</strong> Esta configuración es <strong>una sola para todo el HestiaCP</strong>, ' +
+      'no una por usuario:' +
+      '<dl>' +
+      '<dt>Repositorio</dt><dd>' + esc(R.repo) + '</dd>' +
+      '<dt>Instantáneas</dt><dd>' + esc(R.snapshots || '?') + ' en total</dd>' +
+      '<dt>Retención</dt><dd>' + esc(R.diarias) + ' diarias · ' + esc(R.semanales) + ' semanales · ' +
+        esc(R.mensuales) + ' mensuales · ' + (R.anuales === '-1' ? 'anuales ilimitadas' : esc(R.anuales) + ' anuales') + '</dd>' +
+      '</dl>' +
+      '<span class="aviso-pisa">«Registrar en HestiaCP» <strong>sustituye</strong> estos valores para todas las cuentas. ' +
+      'Si solo querías mirar, no lo pulses.</span>');
+    // El campo se rellena con lo que hay: así no se cambia por teclearlo de nuevo
+    if (campoRepo && !campoRepo.value) campoRepo.value = R.repo;
+  } else {
+    pintarEstado('#est-restic', 'vacio',
+      'Restic no está configurado en este servidor. Nada que pisar.');
+  }
+
+  // El cron, en la misma sección: es el botón de al lado
+  const cron = d.cron.lineas || [];
+  const caja = $('#est-restic');
+  if (caja && cron.length) {
+    caja.insertAdjacentHTML('beforeend',
+      '<div style="margin-top:.6rem"><strong>El cron ya está activo:</strong> ' +
+      '<code>' + esc(cron[0]) + '</code><br>' +
+      '«Activar su cron» comprobará que existe y <strong>no</strong> añadirá otro.</div>');
+  } else if (caja && R.repo) {
+    caja.insertAdjacentHTML('beforeend',
+      '<div style="margin-top:.6rem;color:#f85149"><strong>El cron NO está activo.</strong> ' +
+      'Restic está configurado pero no se ejecuta nunca. Pulsa «Activar su cron».</div>');
+  }
+
+  // --- 3. Claves ------------------------------------------------------------
+  const C = d.claves;
+  const conClave = C.con_clave || [], usuarios = C.usuarios || [];
+  let txt = 'En el servidor hay <strong>' + usuarios.length + '</strong> cuenta(s) de HestiaCP y <strong>' +
+            conClave.length + '</strong> con clave de cifrado propia' +
+            (conClave.length ? ': ' + conClave.map(x => '<code>' + esc(x) + '</code>').join(', ') : '') + '.';
+  if (C.rescatadas_aqui > 0) {
+    txt += '<br>Rescatadas en este equipo: <strong>' + C.rescatadas_aqui + '</strong> archivo(s) en <code>' +
+             esc(C.donde || '') + '</code>.' +
+           '<span class="aviso-pisa">Rescatar otra vez <strong>no borra nada</strong>: cada rescate lleva la fecha ' +
+           'en el nombre y se conservan los anteriores.</span>';
+    pintarEstado('#est-claves', 'ok', txt);
+  } else {
+    txt += '<br><strong style="color:#f85149">No hay ninguna rescatada en este equipo.</strong> ' +
+           'Si el servidor desapareciera hoy, el repositorio sería ilegible. Pulsa «Traer las claves del servidor».';
+    pintarEstado('#est-claves', 'problema', txt);
+  }
+
+  marcarPisa(d);
+}
+
+function pintarEstado(sel, clase, html) {
+  const e = $(sel);
+  if (!e) return;
+  e.className = 'estado-real ' + clase;
+  e.innerHTML = html;
+}
+
+// Reescribe el texto de confirmación de los botones que pisan algo, para que
+// el aviso diga QUÉ se pierde, no un genérico «¿continuar?».
+function marcarPisa(d) {
+  const btnRestic = $('[data-act="hestia-restic"]');
+  if (btnRestic) {
+    btnRestic.dataset.confirmar = (d && d.restic && d.restic.repo)
+      ? 'YA HAY UN REPOSITORIO CONFIGURADO EN ESTE HESTIACP:\n\n  ' + d.restic.repo +
+        '\n\nSe va a SUSTITUIR por lo que hayas escrito arriba, para TODAS las cuentas.\n¿Seguro?'
+      : 'Se registrará el host de respaldo Restic en HestiaCP. Ahora mismo no hay ninguno, así que no se pisa nada.';
+  }
+  const btnRclone = $('#btn-rclone');
+  if (btnRclone) {
+    const rem = (d && d.rclone && d.rclone.remotos) || [];
+    btnRclone.dataset.confirmar = rem.length
+      ? 'En el servidor ya existen estos remotos:\n\n  ' + rem.join(', ') +
+        '\n\nSi el nombre que escribiste coincide con uno de ellos, sus claves se sustituyen.\nSe guarda copia de la versión anterior.\n¿Seguro?'
+      : 'Se creará el remoto de rclone en el servidor. No hay ninguno todavía: no se pisa nada.';
+  }
+  const btnCron = $('[data-act="remote-hestia-cron"]');
+  if (btnCron) {
+    const hay = d && d.cron && (d.cron.lineas || []).length;
+    btnCron.classList.toggle('ya-hecho', !!hay);
+    btnCron.dataset.confirmar = hay
+      ? 'El cron ya existe. Esta acción solo lo comprobará y NO añadirá un segundo.\n¿Continuar?'
+      : 'Se activará el cron de Restic EN el servidor.';
+  }
 }
 
 async function cargarRespaldos(nombre) {

@@ -364,6 +364,105 @@ def probe(name):
     return r
 
 
+# -----------------------------------------------------------------------------
+# Estado REAL de la configuración de HestiaCP
+# -----------------------------------------------------------------------------
+# Ofrecer botones sin decir qué hay ya configurado es una trampa: conf/restic.conf
+# es UNO SOLO por HestiaCP entero, así que «Registrar en HestiaCP» pisa lo que
+# hubiera. Esto se lee antes de enseñar nada, en una sola conexión.
+RCLONE_CONF_REMOTO = "/root/.config/rclone/rclone.conf"
+
+LECTURA_HESTIA = r"""
+echo "==RCLONE=="
+grep -oP '^\[\K[^]]+' """ + RCLONE_CONF_REMOTO + r""" 2>/dev/null
+echo "==RESTIC=="
+cat /usr/local/hestia/conf/restic.conf 2>/dev/null
+echo "==CRON=="
+grep -h 'v-backup-users-restic' /var/spool/cron/crontabs/* /etc/cron.d/* /etc/crontab 2>/dev/null | grep -v '^#'
+echo "==USUARIOS=="
+ls /usr/local/hestia/data/users/ 2>/dev/null
+echo "==CLAVES=="
+for d in /usr/local/hestia/data/users/*/; do [ -f "$d/restic.conf" ] && basename "$d"; done
+echo "==FIN=="
+"""
+
+
+def dir_claves_local(name, meta):
+    """Dónde están las claves rescatadas EN ESTE EQUIPO.
+
+    Igual que bc_hestia_salida en lib/hestia.sh: si HestiaCP no está en esta
+    máquina, HESTIA_OUTPUT_DIR es una ruta DEL SERVIDOR y aquí no existe. Lo
+    rescatado vive en el repositorio, que es su sitio: fuera del servidor.
+    """
+    if not os.path.isdir("/usr/local/hestia"):
+        return str(BC_ROOT / name / "output" / "HestiaCP")
+    return meta.get("HESTIA_OUTPUT_DIR", "")
+
+
+def hestia_estado(name):
+    """Lo que YA está configurado en el servidor. Solo lectura."""
+    meta = profile_meta(name)
+    host = meta.get("DEPLOY_HOST", "")
+    user = meta.get("DEPLOY_USER", "root")
+    r = {"conectado": False, "detalle": "",
+         "rclone": {"remotos": []},
+         "restic": {"repo": "", "snapshots": "", "diarias": "", "semanales": "",
+                    "mensuales": "", "anuales": ""},
+         "cron": {"lineas": []},
+         "claves": {"usuarios": [], "con_clave": [], "rescatadas_aqui": 0}}
+
+    # Claves ya rescatadas en ESTE repositorio: no necesita el servidor
+    salida = dir_claves_local(name, meta)
+    r["claves"]["donde"] = salida
+    if salida and os.path.isdir(salida):
+        f = os.listdir(salida)
+        r["claves"]["rescatadas_aqui"] = (
+            sum(1 for x in f if x.startswith("Restic_Configs_")) +
+            sum(1 for x in f if x.startswith("rclone_")))
+
+    if not host:
+        r["detalle"] = "falta DEPLOY_HOST en la configuración"
+        return r
+    try:
+        c = subprocess.run(
+            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
+             "-o", "StrictHostKeyChecking=accept-new", f"{user}@{host}",
+             LECTURA_HESTIA],
+            capture_output=True, text=True, timeout=40)
+    except Exception as e:
+        r["detalle"] = str(e)
+        return r
+    if "==FIN==" not in (c.stdout or ""):
+        err = (c.stderr or "").strip()
+        r["detalle"] = err.splitlines()[-1] if err else "no se pudo leer el servidor"
+        return r
+
+    r["conectado"] = True
+    bloques, actual = {}, None
+    for ln in c.stdout.splitlines():
+        if ln.startswith("==") and ln.endswith("=="):
+            actual = ln.strip("="); bloques[actual] = []
+        elif actual:
+            if ln.strip():
+                bloques[actual].append(ln.rstrip())
+
+    r["rclone"]["remotos"] = bloques.get("RCLONE", [])
+    r["cron"]["lineas"]    = bloques.get("CRON", [])
+    r["claves"]["usuarios"]  = bloques.get("USUARIOS", [])
+    r["claves"]["con_clave"] = bloques.get("CLAVES", [])
+
+    campos = {"REPO": "repo", "SNAPSHOTS": "snapshots", "KEEP_DAILY": "diarias",
+              "KEEP_WEEKLY": "semanales", "KEEP_MONTHLY": "mensuales",
+              "KEEP_YEARLY": "anuales"}
+    for ln in bloques.get("RESTIC", []):
+        if "=" not in ln:
+            continue
+        k, _, v = ln.partition("=")
+        if k in campos:
+            r["restic"][campos[k]] = v.strip().strip("'\"")
+    return r
+
+
 def plan_pasos(name, destino, path, hay_ctl):
     """Estado de cada pieza del blindaje, en el orden en que hay que montarlas."""
     pasos = [
@@ -412,7 +511,7 @@ def plan_pasos(name, destino, path, hay_ctl):
 
     # ¿Claves rescatadas en el repositorio?
     meta = profile_meta(name)
-    salida = meta.get("HESTIA_OUTPUT_DIR", "")
+    salida = dir_claves_local(name, meta)
     tiene = False
     if salida and os.path.isdir(salida):
         f = os.listdir(salida)
@@ -506,6 +605,12 @@ class Handler(BaseHTTPRequestHandler):
                                       "edad": c[4],
                                       "bd": c[5] if len(c) > 5 else "?"})
             return self._json({"respaldos": filas})
+
+        if u.path == "/api/hestia-estado":
+            name = parse_qs(u.query).get("profile", [""])[0]
+            if not SAFE_NAME.match(name or ""):
+                return self._json({"error": "perfil no válido"}, 400)
+            return self._json(hestia_estado(name))
 
         if u.path == "/api/probe":
             name = parse_qs(u.query).get("profile", [""])[0]
