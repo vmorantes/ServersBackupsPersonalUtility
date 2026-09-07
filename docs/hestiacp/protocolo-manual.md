@@ -123,7 +123,7 @@ v-add-backup-host-restic 'rclone:mi-almacenamiento:mi-servidor/hestiacp/' 30 8 5
     tienes es «3 mensuales y anuales para siempre»:
 
     ```bash
-    cat /usr/local/hestia/data/users/conf/restic.conf
+    cat /usr/local/hestia/conf/restic.conf
     ```
 
 ---
@@ -155,21 +155,34 @@ Una sola vez, y solo la primera.
 
 ```
 Comando:  v-backup-users-restic
-Horario:  30 05 * * *
+Horario:  45 05 * * *
 ```
 
-A una hora distinta de los respaldos tradicionales, para no solaparlos.
+A una hora distinta de los respaldos tradicionales, que corren a las 05:10.
 
-O desde la línea de órdenes:
+O desde la línea de órdenes, siguiendo el mismo idioma que usa HestiaCP en
+`v-add-cron-restart-job` — comprobar con `grep`, añadir al final, y dejar los
+permisos como estaban:
 
 ```bash
-v-add-cron-job admin 30 5 '*' '*' '*' 'v-backup-users-restic'
+CT=/var/spool/cron/crontabs/hestiaweb
+grep -q v-backup-users-restic "$CT" \
+  || echo "45 05 * * * sudo /usr/local/hestia/bin/v-backup-users-restic" >> "$CT"
+chmod 600 "$CT"; chown hestiaweb:hestiaweb "$CT"
 ```
 
-!!! tip "Hazlo por la vía de HestiaCP, no con `crontab -e`"
-    En HestiaCP, el crontab del sistema es un archivo **generado** a partir de
-    `data/users/<user>/cron.conf`. Una línea puesta a mano no aparece en el
-    panel y **desaparece** en el siguiente `v-rebuild-cron-jobs`.
+!!! warning "No es una tarea de un usuario del panel"
+    `v-backup-users-restic` recorre **todas** las cuentas: es una tarea del
+    sistema. Va en el crontab de `hestiaweb`, junto a `v-backup-users` y
+    `v-update-sys-queue`, no en el `cron.conf` de una cuenta.
+
+    `v-rebuild-cron-jobs` recibe un USUARIO del panel y regenera su crontab a
+    partir de su `cron.conf`. `hestiaweb` no es usuario del panel, así que esta
+    línea no la borra ningún rebuild.
+
+    Comprobado en HestiaCP 1.10.4: no hay una sola mención a
+    `v-backup-users-restic` en `bin/`, `func/` ni `install/`. Configurar el
+    respaldo incremental **no** programa nada.
 
 **c) Probar a mano** antes de fiarte:
 
@@ -244,7 +257,9 @@ los dos servidores no se pisen:
 ```bash
 v-add-backup-host-restic 'rclone:mi-almacenamiento:servidor-nuevo/hestiacp/' 30 8 5 3 -1
 restic init -r rclone:mi-almacenamiento:servidor-nuevo/hestiacp/
-v-add-cron-job admin 30 5 '*' '*' '*' 'v-backup-users-restic'
+grep -q v-backup-users-restic /var/spool/cron/crontabs/hestiaweb \
+  || echo "45 05 * * * sudo /usr/local/hestia/bin/v-backup-users-restic" \
+     >> /var/spool/cron/crontabs/hestiaweb
 ```
 
 ---

@@ -23,7 +23,17 @@ bc_restic_run() {
   bc_section "Claves de repositorio Restic (HestiaCP)"
 
   [[ "$(id -u)" -eq 0 ]] || bc_die "debe ejecutarse como root: sudo backupctl restic"
-  [[ -d "$HESTIA_DIR" ]] || bc_die "no existe $HESTIA_DIR. ¿Es este un servidor HestiaCP? Ajusta HESTIA_DIR en $BC_ENV_FILE."
+  if [[ ! -d "$HESTIA_DIR" ]]; then
+    if (( ${BC_PERFIL_REMOTO:-0} )); then
+      bc_err "HestiaCP está en $DEPLOY_HOST, no en este equipo."
+      bc_log "Para rescatar sus claves DESDE aquí, sin instalar nada allí:"
+      bc_log "    backupctl -p $BC_PROFILE hestia keys"
+      bc_log "Eso las trae por SSH y las deja en $BC_PROFILE_DIR/output/HestiaCP."
+      BC_DELIBERATE_EXIT=1
+      return 1
+    fi
+    bc_die "no existe $HESTIA_DIR. ¿Es este un servidor HestiaCP? Ajusta HESTIA_DIR en $BC_ENV_FILE."
+  fi
 
   mkdir -p "$HESTIA_OUTPUT_DIR"
 

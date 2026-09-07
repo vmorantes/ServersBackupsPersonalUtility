@@ -20,6 +20,12 @@ bc_doctor_run() {
   BC_DOC_FAIL=0; BC_DOC_WARN=0
 
   bc_section "Diagnóstico — perfil '$BC_PROFILE'"
+  if (( ${BC_PERFIL_REMOTO:-0} )); then
+    bc_warn "Este perfil describe $DEPLOY_HOST, no este equipo."
+    bc_warn "Aquí se comprueba lo que hace falta para ADMINISTRARLO desde fuera."
+    bc_warn "El diagnóstico del servidor:  backupctl -p $BC_PROFILE remote doctor"
+    echo
+  fi
 
   # --- 1. Órdenes del sistema ------------------------------------------------
   printf '\n%sÓrdenes necesarias%s\n' "$BC_BLD" "$BC_RST"
@@ -85,7 +91,10 @@ bc_doctor_run() {
 
   # --- 5. MySQL --------------------------------------------------------------
   printf '\n%sMySQL%s\n' "$BC_BLD" "$BC_RST"
-  if bc_mysql_check >/dev/null 2>&1; then
+  if (( ${BC_PERFIL_REMOTO:-0} )); then
+    bc_doc_warn "no aplica: MySQL está en $DEPLOY_HOST. Diagnostícalo allí con:"
+    bc_doc_warn "  backupctl -p $BC_PROFILE remote doctor"
+  elif bc_mysql_check >/dev/null 2>&1; then
     bc_doc_ok "conexión correcta como '$MYSQL_USER'"
     bc_doc_ok "versión del servidor: $(bc_mysql_version)"
     local n; n="$(bc_mysql_databases 2>/dev/null | grep -c . || echo 0)"

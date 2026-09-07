@@ -161,9 +161,26 @@ backupctl hestia cron
     Es el paso que más se olvida. Sin él, Restic queda perfectamente configurado
     y **no se ejecuta nunca**. `shield` lo marca como fallo.
 
-Registra `v-backup-users-restic` con `v-add-cron-job`, de modo que aparece en el
-panel y sobrevive a los rebuilds de HestiaCP. Por defecto a las 05:30, para no
-solaparse con los respaldos tradicionales.
+`v-backup-users-restic` recorre **todas** las cuentas, así que es una tarea del
+sistema y no de un usuario del panel. Por eso se registra en el crontab de
+`hestiaweb` —donde el instalador de HestiaCP pone `v-backup-users`,
+`v-update-sys-queue` y las demás tareas propias— y no con `v-add-cron-job`, que
+lo ataría a una cuenta concreta.
+
+`v-rebuild-cron-jobs` actúa sobre un usuario del panel y regenera su crontab a
+partir de su `cron.conf`. `hestiaweb` no es un usuario del panel, de modo que
+esta línea no la borra ningún rebuild.
+
+Por defecto a las 05:45, para no solaparse con los respaldos tradicionales, que
+corren a las 05:10.
+
+!!! warning "Buscar el cron en un solo sitio da falsos negativos"
+    La entrada puede estar en el crontab de `hestiaweb`, en el de `root`, en
+    `/etc/cron.d/` o en el `cron.conf` de una cuenta, según quién y cómo la
+    pusiera. Mirar solo `crontab -l` informa de que el cron **no está activo**
+    en servidores que llevan meses respaldando cada noche. La orden busca en
+    todos esos sitios, y si encuentra uno **no añade un segundo**: dos
+    respaldos simultáneos competirían por el mismo repositorio.
 
 ---
 

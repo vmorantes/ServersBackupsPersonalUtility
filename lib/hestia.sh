@@ -531,10 +531,15 @@ bc_hestia_verify() {
 # el sitio donde tienen que estar, fuera del servidor que se quiere poder
 # perder. Ahí están ya los rescates anteriores.
 bc_hestia_salida() {
-  if (( BC_HESTIA_REMOTO )); then
-    echo "$BC_PROFILE_DIR/output/HestiaCP"
-  else
+  # No se mira BC_HESTIA_REMOTO: hay funciones que consultan esto sin haber
+  # abierto conexión, y entonces la variable no está puesta. El criterio es
+  # el hecho objetivo —si HestiaCP está en esta máquina o no— y es el mismo
+  # que aplica dir_claves_local() en web/server.py, para que la interfaz y
+  # la línea de órdenes no puedan discrepar.
+  if [[ -d "$HESTIA_DIR" ]]; then
     echo "$HESTIA_OUTPUT_DIR"
+  else
+    echo "$BC_PROFILE_DIR/output/HestiaCP"
   fi
 }
 
@@ -737,7 +742,7 @@ bc_hestia_respaldo_remoto() {
   # \$z queda literal para que lo resuelva el shell del servidor;
   # $BACKUP_OUTPUT_DIR sí se expande aquí, que es lo que queremos enviar.
   bc_ssh 'bash -s' <<REMOTO || true
-z=\$(ls -t '$BACKUP_OUTPUT_DIR'/all_databases_*.zip 2>/dev/null | head -1)
+z=\$(ls -t '$BC_SRV_BACKUP_OUTPUT_DIR'/all_databases_*.zip 2>/dev/null | head -1)
 [ -n "\$z" ] && unzip -Z1 "\$z" 2>/dev/null | awk -F/ 'NF>1{print \$1}' | sort -u
 REMOTO
 }
@@ -883,7 +888,7 @@ bc_hestia_donde() {
     [[ -z "$f" ]] && continue
     hay=1
     bc_ok "        $f   ($(bc_age_days "$f") días)"
-  done < <( { find "$HESTIA_OUTPUT_DIR" -maxdepth 1 \( -name 'Restic_Configs_*.txt' -o -name 'rclone_*.conf' \)               -printf '%T@ %p
+  done < <( { find "$(bc_hestia_salida)" -maxdepth 1 \( -name 'Restic_Configs_*.txt' -o -name 'rclone_*.conf' \)               -printf '%T@ %p
 ' 2>/dev/null || true; } | sort -rn | cut -d' ' -f2- )
   if (( ! hay )); then
     bc_err "        NINGUNA. Rescátalas:  backupctl -p $BC_PROFILE hestia keys"
@@ -914,9 +919,9 @@ bc_hestia_donde() {
 # panel del proveedor aunque ya las tuvieras guardadas.
 bc_hestia_rclone_desde_repo() {
   local origen
-  origen="$( { find "$HESTIA_OUTPUT_DIR" -maxdepth 1 -name 'rclone_*.conf' -printf '%T@ %p
+  origen="$( { find "$(bc_hestia_salida)" -maxdepth 1 -name 'rclone_*.conf' -printf '%T@ %p
 ' 2>/dev/null || true; }              | sort -rn | head -1 | cut -d' ' -f2- )"
-  [[ -n "$origen" ]] || bc_die "no hay ningún rclone.conf rescatado en $HESTIA_OUTPUT_DIR. Rescátalo antes desde un servidor que ya lo tenga: backupctl hestia keys"
+  [[ -n "$origen" ]] || bc_die "no hay ningún rclone.conf rescatado en $(bc_hestia_salida). Rescátalo antes desde un servidor que ya lo tenga: backupctl hestia keys"
 
   bc_hestia_conectar
   trap 'bc_hestia_cerrar' RETURN

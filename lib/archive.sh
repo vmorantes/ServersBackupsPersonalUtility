@@ -151,7 +151,13 @@ bc_archive_status() {
   fi
 
   # --- MySQL -----------------------------------------------------------------
-  if bc_mysql_check >/dev/null 2>&1; then
+  # MySQL vive en el servidor. Intentar conectar desde aquí con sus
+  # credenciales daba «NO se puede conectar» y lo contaba como fallo, cuando
+  # lo único que pasa es que la base no está en esta máquina.
+  if (( ${BC_PERFIL_REMOTO:-0} )); then
+    bc_log "MySQL: está en $DEPLOY_HOST, no en este equipo."
+    bc_log "        Para verlo:  backupctl -p $BC_PROFILE remote status"
+  elif bc_mysql_check >/dev/null 2>&1; then
     local dbs
     dbs="$(bc_mysql_databases 2>/dev/null | grep -c . || echo 0)"
     bc_ok "MySQL: accesible como '$MYSQL_USER', $dbs bases de datos a respaldar."

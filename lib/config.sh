@@ -97,6 +97,52 @@ bc_config_load() {
 # -----------------------------------------------------------------------------
 # Todo tiene un valor razonable: env.sh solo necesita declarar lo que se aparte
 # de él. Así un perfil nuevo puede ser de tres líneas.
+# -----------------------------------------------------------------------------
+# ¿Este equipo ES el servidor que describe el perfil?
+# -----------------------------------------------------------------------------
+# El env.sh describe el servidor y viaja a él con `deploy`, así que sus rutas
+# son las DEL SERVIDOR: /home/admin/scripts/... Al usarlo desde otra máquina,
+# esas rutas no existen y todo lo que las tocaba fallaba de formas confusas:
+#   - `list` decía «no hay ningún respaldo» con los zips delante, en el repo
+#   - `logs` decía «no hay logs» igual
+#   - `hestia keys` moría con «Permiso denegado» al crear /home/admin
+#   - `shield` daba por perdido un servidor que respalda cada noche
+#
+# Operando desde fuera, lo que se descargue o se rescate va al directorio del
+# perfil dentro del repositorio, que es donde ya estaban los rescates y los
+# zips anteriores. No es un apaño: es su sitio, fuera del servidor que se
+# quiere poder perder.
+#
+# Criterio: hay un servidor declarado y el directorio que el perfil dice tener
+# no existe aquí. En el propio servidor sí existe, así que allí no se remapea
+# nada. El cambio nunca es silencioso: se anuncia con bc_debug y las órdenes
+# imprimen la ruta que usan.
+BC_PERFIL_REMOTO=0
+
+bc_config_rutas_de_este_equipo() {
+  BC_PERFIL_REMOTO=0
+  [[ -n "${DEPLOY_HOST:-}" ]] || return 0
+  [[ -d "$SCRIPTS_DIR" ]] && return 0
+  [[ -n "${BC_PROFILE_DIR:-}" && -d "$BC_PROFILE_DIR" ]] || return 0
+
+  BC_PERFIL_REMOTO=1
+  bc_debug "perfil remoto: las rutas locales se resuelven en $BC_PROFILE_DIR"
+
+  # Antes de remapear se conserva el valor original bajo BC_SRV_*: sigue siendo
+  # la ruta correcta EN EL SERVIDOR, y las consultas remotas la necesitan. Sin
+  # esto, shield preguntaba al servidor por la ruta del repositorio local y
+  # concluía que 81 bases estaban sin respaldar.
+  local d
+  for d in BACKUP_OUTPUT_DIR BACKUP_WORK_DIR HESTIA_OUTPUT_DIR LOG_DIR; do
+    printf -v "BC_SRV_$d" '%s' "${!d}"
+    # Solo se remapea lo que apunta dentro de SCRIPTS_DIR. Una ruta que el
+    # usuario haya puesto a mano en otro sitio se respeta.
+    if [[ "${!d}" == "$SCRIPTS_DIR"/* ]]; then
+      printf -v "$d" '%s' "$BC_PROFILE_DIR/${!d#"$SCRIPTS_DIR"/}"
+    fi
+  done
+}
+
 bc_config_apply_defaults() {
   USER_NAME="${USER_NAME:-$(id -un)}"
   SCRIPTS_DIR="${SCRIPTS_DIR:-$BC_PROFILE_DIR}"
@@ -114,6 +160,13 @@ bc_config_apply_defaults() {
   BACKUP_WORK_DIR="${BACKUP_WORK_DIR:-$SCRIPTS_DIR/output}"
   HESTIA_OUTPUT_DIR="${HESTIA_OUTPUT_DIR:-$SCRIPTS_DIR/output/HestiaCP}"
   LOG_DIR="${LOG_DIR:-$SCRIPTS_DIR/logs}"
+
+  bc_config_rutas_de_este_equipo
+  # Sin remapeo, la ruta del servidor y la local son la misma.
+  BC_SRV_BACKUP_OUTPUT_DIR="${BC_SRV_BACKUP_OUTPUT_DIR:-$BACKUP_OUTPUT_DIR}"
+  BC_SRV_BACKUP_WORK_DIR="${BC_SRV_BACKUP_WORK_DIR:-$BACKUP_WORK_DIR}"
+  BC_SRV_HESTIA_OUTPUT_DIR="${BC_SRV_HESTIA_OUTPUT_DIR:-$HESTIA_OUTPUT_DIR}"
+  BC_SRV_LOG_DIR="${BC_SRV_LOG_DIR:-$LOG_DIR}"
 
   BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
   LOG_RETENTION_DAYS="${LOG_RETENTION_DAYS:-30}"

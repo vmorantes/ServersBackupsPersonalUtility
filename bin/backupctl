@@ -51,7 +51,26 @@ BC_PROFILE_ARG=""
 # --- Manejo de errores -------------------------------------------------------
 trap 'rc=$?; bc_cleanup_all; exit $rc' EXIT
 trap 'BC_DELIBERATE_EXIT=1; bc_err "interrumpido por señal"; exit 130' INT TERM
-trap '(( BC_DELIBERATE_EXIT )) || bc_err "fallo no controlado en $0 línea $LINENO (orden: $BASH_COMMAND)"' ERR
+# Un `return N` o un `exit N` es una salida DECIDIDA por el código, que ya habrá
+# explicado el motivo por su cuenta: «no hay ningún respaldo», «no hay logs».
+# Gritar «fallo no controlado» encima de eso asusta sin informar, y esconde los
+# fallos de verdad entre ruido. Lo que delata un fallo real es una orden que
+# revienta: un grep sin coincidencias, un mkdir sin permisos, mysql caído.
+bc_trap_err() {
+  local orden="$1"
+  (( BC_DELIBERATE_EXIT )) && return 0
+  [[ "$orden" =~ ^(return|exit)([[:space:]]+[0-9]+)?$ ]] && return 0
+  # El número de línea dentro de una trampa apunta a la propia trampa y no
+  # dice nada útil. La pila de funciones sí: señala QUÉ estaba haciendo el
+  # programa cuando reventó, que es lo que hace falta para arreglarlo.
+  local pila="" f
+  for f in "${FUNCNAME[@]:1}"; do
+    [[ "$f" == "bc_trap_err" || "$f" == "main" ]] && continue
+    pila+="${pila:+ ← }$f"
+  done
+  bc_err "fallo no controlado${pila:+ en $pila} (orden: $orden)"
+}
+trap 'bc_trap_err "$BASH_COMMAND"' ERR
 
 bc_cleanup_all() {
   set +e
@@ -481,7 +500,9 @@ case "$BC_CMD" in
     ;;
 
   # Auxiliar interno: lo usa `migrate` por SSH para comparar recuentos.
-  exec-count) bc_mysql_table_count "${1:-}" ;;
+  exec-count)
+    (( ${BC_PERFIL_REMOTO:-0} )) && bc_die "MySQL está en $DEPLOY_HOST, no aquí. Usa: backupctl -p $BC_PROFILE remote exec-count ${1:-}"
+    bc_mysql_table_count "${1:-}" ;;
 
   *)
     bc_err "orden desconocida: '$BC_CMD'"

@@ -50,7 +50,7 @@ bc_shield_run() {
     fuente="$DEPLOY_HOST:$BACKUP_OUTPUT_DIR"
     # Edad en días del zip más reciente, calculada en el servidor.
     edad="$(bc_hestia_read "
-      z=\$(ls -t '$BACKUP_OUTPUT_DIR'/all_databases_*.zip 2>/dev/null | head -1)
+      z=\$(ls -t '$BC_SRV_BACKUP_OUTPUT_DIR'/all_databases_*.zip 2>/dev/null | head -1)
       [ -n \"\$z\" ] && echo \$(( ( \$(date +%s) - \$(stat -c %Y \"\$z\") ) / 86400 ))" || true)"
     [[ -n "$edad" ]] && en_zip="$(bc_hestia_respaldo_remoto || true)"
     en_mysql="$(bc_hestia_mysql_remoto || true)"
@@ -91,7 +91,7 @@ bc_shield_run() {
       if [[ -n "$faltan" ]]; then
         bc_log "        SIN RESPALDAR ($(grep -c . <<<"$faltan")):"
         sed 's/^/          - /' <<<"$faltan" | head -20
-        (( $(grep -c . <<<"$faltan") > 20 )) && bc_log "          ... y más"
+        (( $(grep -c . <<<"$faltan") > 20 )) && bc_log "          ... y más" || true
       fi
     fi
   fi
