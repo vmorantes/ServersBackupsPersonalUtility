@@ -233,7 +233,12 @@ def profile_meta(name):
     for ln in r.stdout.splitlines():
         parts = ln.split(None, 1)
         if len(parts) == 2 and parts[0].isupper():
-            meta[parts[0]] = parts[1].strip()
+            v = parts[1].strip()
+            # `config --show` escribe «(sin configurar)» donde no hay valor.
+            # Tomarlo tal cual daba por configurados los tres canales de aviso
+            # teniendo dos vacíos: justo el error que hace creer que estás
+            # cubierto cuando no lo estás.
+            meta[parts[0]] = "" if v == "(sin configurar)" else v
     return meta
 
 
@@ -383,7 +388,21 @@ echo "==USUARIOS=="
 ls /usr/local/hestia/data/users/ 2>/dev/null
 echo "==CLAVES=="
 for d in /usr/local/hestia/data/users/*/; do [ -f "$d/restic.conf" ] && basename "$d"; done
+echo "==CRONCTL=="
+grep -h backupctl /var/spool/cron/crontabs/* /etc/cron.d/* 2>/dev/null | grep -v '^#'
 echo "==FIN=="
+"""
+
+# Lo que depende de la ruta del perfil se pregunta aparte, porque esa ruta la
+# pone cada perfil y no puede ir en una constante.
+LECTURA_PERFIL = """
+echo "==CTL=="
+test -x '{path}/bin/backupctl' && '{path}/bin/backupctl' --version 2>/dev/null | head -1
+echo "==ZIPS=="
+ls -t '{salida}'/all_databases_*.zip 2>/dev/null | head -5 | while read -r z; do
+  echo "$(basename "$z")|$(stat -c %s "$z")|$(stat -c %Y "$z")"
+done
+echo "==FIN2=="
 """
 
 
@@ -420,6 +439,25 @@ def hestia_estado(name):
             sum(1 for x in f if x.startswith("Restic_Configs_")) +
             sum(1 for x in f if x.startswith("rclone_")))
 
+    # Lo local se rellena siempre, aunque el servidor no responda
+    r["local"] = {"zips": [], "dir": ""}
+    dl = meta.get("BACKUP_OUTPUT_DIR", "")
+    if not (dl and os.path.isdir(dl)):
+        dl = str(BC_ROOT / name / "output" / "mysql_backups")
+    r["local"]["dir"] = dl
+    if os.path.isdir(dl):
+        for f in sorted(os.listdir(dl), reverse=True):
+            if f.startswith("all_databases_") and f.endswith(".zip"):
+                ruta = os.path.join(dl, f)
+                r["local"]["zips"].append(
+                    {"archivo": f, "bytes": os.path.getsize(ruta),
+                     "epoch": int(os.path.getmtime(ruta))})
+    r["avisos"] = {c: bool(meta.get(c, "")) for c in
+                   ("NOTIFY_EMAIL", "NOTIFY_COMMAND", "HEALTHCHECK_URL")}
+    r["retencion"] = {c: meta.get(c, "") for c in
+                      ("BACKUP_RETENTION_DAYS", "LOG_RETENTION_DAYS",
+                       "RESTIC_RETENTION_DAYS", "BACKUP_KEEP_MIN")}
+
     if not host:
         r["detalle"] = "falta DEPLOY_HOST en la configuración"
         return r
@@ -446,6 +484,7 @@ def hestia_estado(name):
             if ln.strip():
                 bloques[actual].append(ln.rstrip())
 
+    r["cronctl"] = {"lineas": bloques.get("CRONCTL", [])}
     r["rclone"]["remotos"] = bloques.get("RCLONE", [])
     r["cron"]["lineas"]    = bloques.get("CRON", [])
     r["claves"]["usuarios"]  = bloques.get("USUARIOS", [])
@@ -454,6 +493,36 @@ def hestia_estado(name):
     campos = {"REPO": "repo", "SNAPSHOTS": "snapshots", "KEEP_DAILY": "diarias",
               "KEEP_WEEKLY": "semanales", "KEEP_MONTHLY": "mensuales",
               "KEEP_YEARLY": "anuales"}
+    # Segunda consulta: depende de las rutas del perfil
+    r["servidor"] = {"backupctl": "", "zips": []}
+    path = meta.get("DEPLOY_PATH", "/home/admin/scripts")
+    # La ruta DEL SERVIDOR, no la local: BACKUP_OUTPUT_DIR ya viene remapeada
+    # al repositorio cuando el perfil es remoto, y preguntar al servidor por
+    # ella devolvía cero respaldos teniendo tres.
+    salida = (meta.get("BACKUP_OUTPUT_DIR_SERVIDOR")
+              or meta.get("BACKUP_OUTPUT_DIR")
+              or path + "/output/mysql_backups")
+    try:
+        c2 = subprocess.run(
+            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", f"{user}@{host}",
+             LECTURA_PERFIL.format(path=path, salida=salida)],
+            capture_output=True, text=True, timeout=30)
+        if "==FIN2==" in (c2.stdout or ""):
+            b2, act = {}, None
+            for ln in c2.stdout.splitlines():
+                if ln.startswith("==") and ln.endswith("=="):
+                    act = ln.strip("="); b2[act] = []
+                elif act and ln.strip():
+                    b2[act].append(ln.rstrip())
+            r["servidor"]["backupctl"] = (b2.get("CTL") or [""])[0]
+            for ln in b2.get("ZIPS", []):
+                trozos = ln.split("|")
+                if len(trozos) == 3:
+                    r["servidor"]["zips"].append(
+                        {"archivo": trozos[0], "bytes": int(trozos[1]), "epoch": int(trozos[2])})
+    except Exception:
+        pass
+
     for ln in bloques.get("RESTIC", []):
         if "=" not in ln:
             continue

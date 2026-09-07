@@ -145,6 +145,7 @@
     </div>
 
     <div class="tab" data-tab="respaldar" hidden>
+      <div class="estado-real" id="est-respaldar">Leyendo el estado…</div>
       <p class="rotulo">Crear respaldos de bases de datos.</p>
       <div class="campos" id="form-backup">
         <label>Solo estas bases <span class="pista">opcional</span>
@@ -170,6 +171,7 @@
     </div>
 
     <div class="tab" data-tab="verificar" hidden>
+      <div class="estado-real" id="est-verificar">Leyendo el estado…</div>
       <p class="rotulo">Comprobar que un respaldo <strong>sirve</strong>.</p>
       <div class="campos" id="form-verify">
         <label>Respaldo <span class="pista">vacío = el más reciente</span>
@@ -206,6 +208,7 @@
     </div>
 
     <div class="tab" data-tab="restaurar" hidden>
+      <div class="estado-real" id="est-restaurar">Leyendo el estado…</div>
       <p class="rotulo rotulo-aviso"><strong>Escribe en la base de datos.</strong>
          Lo más seguro es restaurar <em>al lado</em>, con otro nombre, y comparar.</p>
       <div class="campos" id="form-restore">
@@ -232,6 +235,7 @@
     </div>
 
     <div class="tab" data-tab="retencion" hidden>
+      <div class="estado-real" id="est-retencion">Leyendo el estado…</div>
       <p class="rotulo rotulo-aviso">Borrar respaldos antiguos. <strong>Ensaya primero.</strong></p>
       <div class="acciones">
         <div class="accion"><button class="btn" data-act="retention-dry">Ensayo: qué se borraría</button>
@@ -249,6 +253,7 @@
     </div>
 
     <div class="tab" data-tab="servidor" hidden>
+      <div class="estado-real" id="est-servidor">Leyendo el estado…</div>
       <p class="rotulo">Acceso e instalación de backupctl <strong>en el servidor</strong>.</p>
       <div class="campos" id="form-deploy">
         <label>Destino <span class="pista">vacío = el del perfil</span>
@@ -344,6 +349,7 @@
     </div>
 
     <div class="tab" data-tab="programacion" hidden>
+      <div class="estado-real" id="est-programacion">Leyendo el estado…</div>
       <p class="rotulo">Que el respaldo de bases de datos se ejecute solo, y que
          un fallo te llegue.</p>
       <div class="campos" id="form-cron">
@@ -382,6 +388,7 @@
     </div>
 
     <div class="tab" data-tab="migrar" hidden>
+      <div class="estado-real" id="est-migrar">Leyendo el estado…</div>
       <p class="rotulo rotulo-aviso">Trasladar las bases a <strong>OTRA</strong> máquina,
          que debe tener backupctl desplegado. <strong>No es un respaldo.</strong></p>
       <div class="campos" id="form-migrate">

@@ -285,6 +285,14 @@ bc_config_show() {
     printf 'EXCLUDE_DBS\t%s\n' "$EXCLUDE_DBS"
     printf '\t\n'
     printf 'BACKUP_OUTPUT_DIR\t%s\n' "$BACKUP_OUTPUT_DIR"
+    # Con perfil remoto las rutas de arriba son las de ESTE equipo. Las del
+    # servidor se enseñan aparte para que quede claro que son dos sitios, y
+    # porque la interfaz las necesita para preguntar al servidor por las suyas.
+    if (( ${BC_PERFIL_REMOTO:-0} )); then
+      printf 'BACKUP_OUTPUT_DIR_SERVIDOR\t%s\n' "$BC_SRV_BACKUP_OUTPUT_DIR"
+      printf 'HESTIA_OUTPUT_DIR_SERVIDOR\t%s\n' "$BC_SRV_HESTIA_OUTPUT_DIR"
+      printf 'LOG_DIR_SERVIDOR\t%s\n' "$BC_SRV_LOG_DIR"
+    fi
     printf 'BACKUP_WORK_DIR\t%s\n' "$BACKUP_WORK_DIR"
     printf 'HESTIA_OUTPUT_DIR\t%s\n' "$HESTIA_OUTPUT_DIR"
     printf 'LOG_DIR\t%s\n' "$LOG_DIR"

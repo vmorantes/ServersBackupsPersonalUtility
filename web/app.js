@@ -406,6 +406,7 @@ async function cargarEstadoHestia(nombre) {
       'No se pudo leer el servidor' + (d.detalle ? ': ' + esc(d.detalle) : '') +
       '.<br>Sin saber qué hay configurado, cualquier botón que escriba podría pisar algo. Resuélvelo en la pestaña Servidor.'));
     marcarPisa(null);
+    pintarEstadoGeneral(d);
     return;
   }
 
@@ -477,6 +478,122 @@ async function cargarEstadoHestia(nombre) {
   }
 
   marcarPisa(d);
+  pintarEstadoGeneral(d);
+}
+
+// Las demás pestañas: qué hay ya, qué falta, y qué botón lo resuelve.
+function pintarEstadoGeneral(d) {
+  const cuando = (e) => {
+    const dias = Math.floor((Date.now() / 1000 - e) / 86400);
+    if (dias <= 0) return 'hoy';
+    if (dias === 1) return 'ayer';
+    return 'hace ' + dias + ' días';
+  };
+  const peso = (b) => (b / 1048576).toFixed(1) + ' MB';
+  const srv = (d.servidor && d.servidor.zips) || [];
+  const loc = (d.local && d.local.zips) || [];
+
+  // Sin conexión no se sabe qué hay en el servidor. Decir «no está programado»
+  // o «no hay respaldos» sería afirmar una ausencia que nadie comprobó: el
+  // mismo error, del revés, que dar por bueno un canal de avisos sin probarlo.
+  // Solo se afirma lo que sí se pudo mirar: lo que está en este equipo.
+  if (!d.conectado) {
+    const nose = (sel, que) => pintarEstado(sel, 'sin-datos',
+      '<strong>No se pudo leer el servidor</strong>' + (d.detalle ? ': ' + esc(d.detalle) : '') +
+      '.<br>No se sabe ' + que + '. Resuélvelo en la pestaña Servidor antes de fiarte de nada de aquí.');
+    nose('#est-respaldar',    'qué respaldos tiene');
+    nose('#est-programacion', 'si está programado');
+    nose('#est-servidor',     'si está instalado allí');
+    pintarEstado('#est-retencion', 'vacio',
+      'Política configurada en este perfil: ' +
+      esc((d.retencion || {}).BACKUP_RETENTION_DAYS || '?') + ' días de respaldos, mínimo ' +
+      esc((d.retencion || {}).BACKUP_KEEP_MIN || '?') + ' intocables. ' +
+      'No se pudo comprobar qué hay en el servidor.');
+    const t = loc.length
+      ? 'En este equipo hay ' + loc.length + ' respaldo(s) descargado(s); el más reciente, <code>' +
+        esc(loc[0].archivo) + '</code>. No se pudo ver los del servidor.'
+      : 'No hay respaldos en este equipo, y no se pudo consultar el servidor.';
+    ['#est-verificar', '#est-restaurar', '#est-migrar'].forEach(x => pintarEstado(x, 'sin-datos', t));
+    return;
+  }
+
+  // --- Respaldar ------------------------------------------------------------
+  if (srv.length) {
+    const u = srv[0];
+    let h = '<strong>Hay ' + srv.length + ' respaldo(s) en el servidor.</strong> El último, ' +
+            esc(cuando(u.epoch)) + ': <code>' + esc(u.archivo) + '</code> (' + peso(u.bytes) + ').';
+    const dias = Math.floor((Date.now() / 1000 - u.epoch) / 86400);
+    if (dias > 2) h += '<span class="aviso-pisa">Más de ' + dias + ' días. Si hay cron, podría estar parado: míralo en Programación.</span>';
+    h += '<br>' + (loc.length
+      ? 'Aquí tienes ' + loc.length + ' copia(s) descargada(s).'
+      : '<strong style="color:#d29922">Ninguna copia en este equipo.</strong> Todos viven en el servidor: si lo pierdes, los pierdes con él.');
+    pintarEstado('#est-respaldar', dias > 2 ? 'problema' : 'ok', h);
+  } else {
+    pintarEstado('#est-respaldar', 'sin-datos',
+      '<strong>No hay ningún respaldo de bases de datos en el servidor.</strong> ' +
+      'Pulsa «Respaldar en el servidor» aquí abajo para crear el primero, y luego ' +
+      'prográmalo en la pestaña Programación para que no dependa de que te acuerdes.');
+  }
+
+  // --- Programación ---------------------------------------------------------
+  const cctl = (d.cronctl && d.cronctl.lineas) || [];
+  const crst = (d.cron && d.cron.lineas) || [];
+  const av = d.avisos || {};
+  const canales = Object.keys(av).filter(k => av[k]);
+  let hp = '';
+  hp += cctl.length
+    ? '<strong>✓ Respaldo de bases de datos programado</strong> (' + cctl.length + ' tarea(s), visibles en el panel de HestiaCP):<dl>' +
+      cctl.map(l => '<dd>' + esc(l) + '</dd>').join('') + '</dl>'
+    : '<strong style="color:#f85149">✗ El respaldo de bases de datos NO está programado.</strong> ' +
+      'Solo corre cuando lo lanzas a mano. Pulsa «Programar en el servidor».<br>';
+  hp += crst.length
+    ? '<strong>✓ Respaldo Restic programado:</strong> <code>' + esc(crst[0]) + '</code><br>'
+    : '<strong style="color:#f85149">✗ Restic NO está programado.</strong> Actívalo en la pestaña HestiaCP.<br>';
+  hp += canales.length
+    ? '<strong>✓ Avisos por:</strong> ' + canales.map(c => '<code>' + esc(c) + '</code>').join(', ')
+    : '<strong style="color:#f85149">✗ Sin ningún canal de aviso.</strong> Un respaldo fallido no avisaría a nadie.';
+  if (canales.length && !av.HEALTHCHECK_URL) {
+    hp += '<span class="aviso-pisa">Sin <code>HEALTHCHECK_URL</code>: el correo avisa cuando un respaldo ' +
+          '<strong>corre y falla</strong>. Si el cron deja de ejecutarse no hay correo que mandar, y el silencio parece normal.</span>';
+  }
+  pintarEstado('#est-programacion',
+    (cctl.length && crst.length && canales.length) ? 'ok' : 'problema', hp);
+
+  // --- Servidor -------------------------------------------------------------
+  const ctl = (d.servidor && d.servidor.backupctl) || '';
+  pintarEstado('#est-servidor', ctl ? 'ok' : 'vacio', ctl
+    ? '<strong>✓ Instalado en el servidor:</strong> <code>' + esc(ctl) + '</code>. ' +
+      'Instalar de nuevo solo copia el código; el <code>env.sh</code> se compara antes y se avisa si difiere.'
+    : '<strong>No está instalado en el servidor.</strong> Sin él, el servidor no puede respaldarse solo: ' +
+      'las órdenes tendrían que salir siempre de este equipo. Empieza por «Ensayo: qué copiaría».');
+
+  // --- Retención ------------------------------------------------------------
+  const R = d.retencion || {};
+  pintarEstado('#est-retencion', 'ok',
+    '<strong>Política vigente</strong>, la misma que aplican las tareas automáticas:' +
+    '<dl>' +
+    '<dt>Respaldos</dt><dd>' + esc(R.BACKUP_RETENTION_DAYS || '?') + ' días</dd>' +
+    '<dt>Logs</dt><dd>' + esc(R.LOG_RETENTION_DAYS || '?') + ' días</dd>' +
+    '<dt>Claves Restic</dt><dd>' + esc(R.RESTIC_RETENTION_DAYS || '?') + ' días</dd>' +
+    '<dt>Mínimo intocable</dt><dd>' + esc(R.BACKUP_KEEP_MIN || '?') + ' respaldos, pase lo que pase</dd>' +
+    '</dl>' +
+    '<span class="aviso-pisa">Aplicar la retención <strong>borra archivos</strong>. El mínimo protege de ' +
+    'quedarte sin nada por una fecha mal puesta. Usa siempre antes el ensayo.</span>');
+
+  // --- Verificar / Restaurar / Migrar --------------------------------------
+  const ref = srv[0] || loc[0];
+  const texto = ref
+    ? 'Se trabajará sobre el respaldo más reciente salvo que elijas otro: <code>' +
+      esc(ref.archivo) + '</code>, de ' + esc(cuando(ref.epoch)) + '.'
+    : '<strong>No hay ningún respaldo todavía.</strong> Créalo primero en la pestaña Respaldar.';
+  const clase = ref ? 'ok' : 'vacio';
+  pintarEstado('#est-verificar', clase, texto +
+    '<br>Verificar <strong>no toca</strong> ni el respaldo ni tus bases: lee el archivo y comprueba que está entero.');
+  pintarEstado('#est-restaurar', ref ? 'problema' : 'vacio', texto +
+    '<span class="aviso-pisa">Restaurar <strong>SUSTITUYE</strong> los datos que hay ahora por los del respaldo. ' +
+    'Lo perdido desde esa fecha no vuelve. Haz antes un respaldo del estado actual.</span>');
+  pintarEstado('#est-migrar', clase, texto +
+    '<span class="aviso-pisa">Migrar <strong>escribe en el servidor de destino</strong>. Empieza siempre por el ensayo.</span>');
 }
 
 function pintarEstado(sel, clase, html) {
