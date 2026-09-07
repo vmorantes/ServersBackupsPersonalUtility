@@ -411,15 +411,28 @@ async function cargarEstadoHestia(nombre) {
   }
 
   // --- 1. Remoto de rclone --------------------------------------------------
+  // Antes de los remotos: ¿está la herramienta que hace falta para hablar con S3?
+  const H = d.herramientas || {};
+  let previo = '';
+  if (!H.rclone) {
+    previo = '<strong style="color:#f85149">✗ rclone NO está instalado en el servidor.</strong> ' +
+             'HestiaCP instala <code>restic</code> por su cuenta, pero rclone no, y sin él no se ' +
+             'puede llegar al almacenamiento S3. «Configurar el remoto» se ofrecerá a instalarlo.<br>';
+  } else {
+    previo = '✓ <code>' + esc(H.rclone) + '</code>' +
+             (H.restic ? ' · <code>' + esc(H.restic) + '</code>' : ' · restic lo instalará HestiaCP al registrar el host') +
+             '<br>';
+  }
+
   const rem = d.rclone.remotos || [];
   if (rem.length) {
-    pintarEstado('#est-rclone', 'ok',
+    pintarEstado('#est-rclone', H.rclone ? 'ok' : 'problema', previo +
       '<strong>Ya configurado.</strong> Remotos que existen en el servidor: ' +
       rem.map(x => '<code>' + esc(x) + '</code>').join(', ') +
       '<span class="aviso-pisa">«Configurar el remoto» <strong>reescribe</strong> el rclone.conf del servidor. ' +
       'Si usas un nombre que ya está en la lista, esas claves se sustituyen. Se guarda copia de la versión anterior.</span>');
   } else {
-    pintarEstado('#est-rclone', 'vacio',
+    pintarEstado('#est-rclone', H.rclone ? 'vacio' : 'problema', previo +
       'Todavía no hay ningún remoto de rclone en el servidor. Nada que pisar: puedes configurarlo con tranquilidad.');
   }
 

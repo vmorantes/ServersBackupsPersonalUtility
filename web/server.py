@@ -388,6 +388,10 @@ echo "==USUARIOS=="
 ls /usr/local/hestia/data/users/ 2>/dev/null
 echo "==CLAVES=="
 for d in /usr/local/hestia/data/users/*/; do [ -f "$d/restic.conf" ] && basename "$d"; done
+echo "==HERRAMIENTAS=="
+rclone version 2>/dev/null | head -1
+echo "|"
+restic version 2>/dev/null | head -1
 echo "==CRONCTL=="
 grep -h backupctl /var/spool/cron/crontabs/* /etc/cron.d/* 2>/dev/null | grep -v '^#'
 echo "==FIN=="
@@ -484,6 +488,13 @@ def hestia_estado(name):
             if ln.strip():
                 bloques[actual].append(ln.rstrip())
 
+    # rclone lo instala nadie: HestiaCP instala restic solo, pero no rclone, y
+    # sin él el registro del host de respaldo falla con un error que no señala
+    # la causa. Se enseña antes de ofrecer el botón.
+    herr = bloques.get("HERRAMIENTAS", [])
+    corte = herr.index("|") if "|" in herr else len(herr)
+    r["herramientas"] = {"rclone": " ".join(herr[:corte]),
+                         "restic": " ".join(herr[corte + 1:])}
     r["cronctl"] = {"lineas": bloques.get("CRONCTL", [])}
     r["rclone"]["remotos"] = bloques.get("RCLONE", [])
     r["cron"]["lineas"]    = bloques.get("CRON", [])

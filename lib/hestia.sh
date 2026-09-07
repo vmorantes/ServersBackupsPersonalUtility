@@ -211,6 +211,53 @@ bc_hestia_status() {
 # Se escribe la sección directamente en rclone.conf en lugar de lanzar
 # `rclone config`, que es interactivo y no se puede guionizar. El resultado es
 # idéntico y además es reproducible.
+# -----------------------------------------------------------------------------
+# rclone tiene que estar en el servidor ANTES de nada
+# -----------------------------------------------------------------------------
+# Comprobado leyendo v-add-backup-host-restic de HestiaCP 1.10.4:
+#
+#   - restic NO es problema: si falta, la propia orden hace `apt install restic`
+#     y luego `restic self-update`.
+#   - rclone SÍ: HestiaCP no lo instala. Y con un repositorio «rclone:...» la
+#     orden ejecuta `rclone lsd` y aborta con «Rclone repository does not exist»
+#     si no puede listarlo. Sin rclone, todo el montaje se para ahí.
+#
+# En un servidor recién instalado rclone no viene. Esto lo detecta y lo instala,
+# en vez de dejar que falle tres pasos más adelante con un error que no señala
+# la causa.
+bc_hestia_requiere_rclone() {
+  local version
+  version="$(bc_hestia_read "rclone version 2>/dev/null | head -1" || true)"
+  if [[ -n "$version" ]]; then
+    bc_ok "rclone presente en el servidor: $version"
+    return 0
+  fi
+
+  bc_warn "rclone NO está instalado en el servidor."
+  bc_log  "HestiaCP instala restic por su cuenta, pero rclone no. Sin él no se"
+  bc_log  "puede llegar al almacenamiento S3, y el registro del host fallaría"
+  bc_log  "con «Rclone repository does not exist», que no dice la causa real."
+
+  if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
+    bc_log "Simulación (--dry-run): no se instala nada."
+    return 1
+  fi
+  bc_confirm "¿Instalarlo ahora con apt?" y || {
+    bc_err "sin rclone no se puede continuar."
+    BC_DELIBERATE_EXIT=1
+    return 1
+  }
+
+  bc_log "Instalando rclone (apt-get install rclone)..."
+  bc_hestia_root "DEBIAN_FRONTEND=noninteractive apt-get update -qq && \
+                  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq rclone" \
+    || { bc_err "no se pudo instalar rclone."; BC_DELIBERATE_EXIT=1; return 1; }
+
+  version="$(bc_hestia_read "rclone version 2>/dev/null | head -1" || true)"
+  [[ -n "$version" ]] || { bc_err "rclone sigue sin responder tras instalarlo."; BC_DELIBERATE_EXIT=1; return 1; }
+  bc_ok "rclone instalado: $version"
+}
+
 bc_hestia_rclone() {
   bc_hestia_conectar
   trap 'bc_hestia_cerrar' RETURN
@@ -231,6 +278,8 @@ bc_hestia_rclone() {
       region="$(bc_ask "Región (vacío si no aplica)" "")"
     fi
   fi
+
+  bc_hestia_requiere_rclone || return 1
 
   [[ -n "$nombre" ]] || bc_die "hace falta el nombre del remoto."
   [[ "$nombre" =~ ^[A-Za-z0-9._-]+$ ]] || bc_die "nombre de remoto no válido."
@@ -333,6 +382,30 @@ bc_hestia_restic() {
     return 0
   fi
   bc_confirm "¿Registrarlo en HestiaCP?" y || { bc_log "Cancelado."; return 0; }
+
+  # v-add-backup-host-restic ejecuta `rclone lsd` sobre el repositorio y aborta
+  # con «Rclone repository does not exist» si no puede listarlo. Ese mensaje no
+  # distingue entre las tres causas posibles, así que se comprueban aquí antes,
+  # una por una, y se dice cuál es.
+  if [[ "$repo" == rclone:* ]]; then
+    bc_hestia_requiere_rclone || return 1
+    local ruta_rclone="${repo#rclone:}"
+    bc_log "Comprobando que el destino existe y responde..."
+    if ! bc_hestia_root "rclone lsd '$ruta_rclone'" >/dev/null 2>&1; then
+      bc_err "rclone no puede listar '$ruta_rclone'. HestiaCP rechazará el registro."
+      bc_log  "Las causas posibles, en orden:"
+      bc_log  "  1. El remoto '${ruta_rclone%%:*}' no está configurado en el servidor."
+      bc_log  "     Hazlo en el paso 1, «Configurar el remoto»."
+      bc_log  "  2. El bucket no existe todavía en tu proveedor. Créalo en su panel:"
+      bc_log  "     esto no lo puede hacer nadie desde aquí."
+      bc_log  "  3. Las claves o el endpoint son incorrectos."
+      bc_log  "Salida de rclone:"
+      bc_hestia_root "rclone lsd '$ruta_rclone' 2>&1 | head -5" | sed 's/^/        /' || true
+      BC_DELIBERATE_EXIT=1
+      return 1
+    fi
+    bc_ok "El destino responde."
+  fi
 
   bc_hestia_v "v-add-backup-host-restic '$repo' '$snaps' '$d' '$w' '$m' '$y'" \
     || bc_die "v-add-backup-host-restic falló. Revisa el repositorio y el remoto."
