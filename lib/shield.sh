@@ -75,7 +75,7 @@ bc_shield_run() {
   # === 2. Cuenta completa (Restic) ==========================================
   bc_sh_cab "2 · Cuenta completa (archivos, correo, DNS)"
   local conf repo
-  conf="$(bc_hestia_read "cat '$HESTIA_DIR/data/users/conf/restic.conf'" 2>/dev/null || true)"
+  conf="$(bc_hestia_read "cat '$HESTIA_CONF_RESTIC'" 2>/dev/null || true)"
   if [[ -z "$conf" ]]; then
     bc_sh_fail "Restic NO está configurado: los archivos web, el correo y la"
     bc_sh_fail "  configuración de HestiaCP no se respaldan en ningún sitio"

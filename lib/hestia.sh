@@ -24,10 +24,17 @@ BC_HESTIA_LOADED=1
 BC_HESTIA_REMOTO=0          # ¿hay que ir por SSH?
 BC_HESTIA_RCLONE_CONF="${BC_RCLONE_CONF:-/root/.config/rclone/rclone.conf}"
 
+# Configuración GLOBAL del host de respaldo: repositorio y retención. Está en
+# conf/, no bajo data/users/. Cada usuario tiene además su propio restic.conf
+# en data/users/<usuario>/ con SU clave de cifrado.
+HESTIA_CONF_RESTIC="${HESTIA_DIR:-/usr/local/hestia}/conf/restic.conf"
+
 # -----------------------------------------------------------------------------
 # Decidir dónde actuar y abrir la conexión si hace falta
 # -----------------------------------------------------------------------------
 bc_hestia_conectar() {
+  # Se recalcula aquí: al cargar el módulo, HESTIA_DIR todavía no está definido.
+  HESTIA_CONF_RESTIC="$HESTIA_DIR/conf/restic.conf"
   if [[ -d "$HESTIA_DIR" ]]; then
     BC_HESTIA_REMOTO=0
     bc_debug "HestiaCP local en $HESTIA_DIR"
@@ -109,7 +116,7 @@ bc_hestia_status() {
 
   # --- Host de respaldo Restic ----------------------------------------------
   local conf
-  conf="$(bc_hestia_read "cat '$HESTIA_DIR/data/users/conf/restic.conf'" || true)"
+  conf="$(bc_hestia_read "cat '$HESTIA_CONF_RESTIC'" || true)"
   if [[ -z "$conf" ]]; then
     bc_warn "Restic NO está configurado en este servidor."
     bc_log  "Móntalo con:  backupctl hestia setup"
@@ -361,7 +368,7 @@ bc_hestia_verify() {
   trap 'bc_hestia_cerrar' RETURN
 
   local repo
-  repo="$(bc_hestia_read "sed -n \"s/^REPO='\(.*\)'\$/\1/p\" '$HESTIA_DIR/data/users/conf/restic.conf'" || true)"
+  repo="$(bc_hestia_read "sed -n \"s/^REPO='\(.*\)'\$/\1/p\" '$HESTIA_CONF_RESTIC'" || true)"
   [[ -n "$repo" ]] || bc_die "Restic no está configurado. Móntalo con: backupctl hestia setup"
 
   bc_section "Verificación del repositorio Restic"
@@ -440,6 +447,31 @@ bc_hestia_keys() {
   bc_prune "$HESTIA_OUTPUT_DIR" 'rclone_*.conf'        "$RESTIC_RETENTION_DAYS" 2 "config rclone"  0
 }
 
+# -----------------------------------------------------------------------------
+# Última instantánea Restic de un usuario
+# -----------------------------------------------------------------------------
+# CADA USUARIO TIENE SU PROPIO REPOSITORIO, en <REPO><usuario>. El REPO del
+# archivo global es solo el prefijo común; HestiaCP le añade el nombre del
+# usuario. Por eso cada uno tiene también su propia clave: son repositorios
+# independientes, y con la clave de uno no se abre el de otro.
+#
+# Esto NO es lo mismo que v-list-user-backups, que lista los .tar tradicionales
+# y puede llevar años sin actualizarse aunque Restic funcione a diario.
+bc_hestia_restic_ultima() {
+  local u="$1" repo="$2"
+  [[ -n "$repo" ]] || { echo "?"; return 0; }
+  local clave
+  clave="$(bc_hestia_read "cat '$HESTIA_DIR/data/users/$u/restic.conf'" || true)"
+  [[ -n "$clave" ]] || { echo "sin clave"; return 0; }
+
+  local json
+  json="$(bc_hestia_read "RESTIC_PASSWORD='$clave' restic -r '${repo}${u}' snapshots --latest 1 --json 2>/dev/null" || true)"
+  if [[ -z "$json" || "$json" == "[]" ]]; then echo "ninguna"; return 0; fi
+  # La marca de tiempo llega en ISO-8601; basta con la fecha y la hora
+  sed -n 's/.*"time":"\([0-9-]*\)T\([0-9:]*\).*/\1 \2/p' <<<"$json" | head -1 \
+    || echo "?"
+}
+
 # =============================================================================
 # Usuarios de HestiaCP
 # =============================================================================
@@ -463,7 +495,12 @@ bc_hestia_users() {
   # se abren los respaldos de los demás, así que la cobertura se mira usuario a
   # usuario y no como una sola cosa.
   local filas; filas="$(mktemp)"
-  printf 'USUARIO\tDOMINIOS\tBASES\tCORREO\tCLAVE PROPIA\tÚLTIMO RESPALDO\n' > "$filas"
+  # El repositorio global es solo el prefijo: a cada usuario le corresponde
+  # <REPO><usuario>, que es un repositorio Restic independiente.
+  local repo_base
+  repo_base="$(bc_hestia_read "sed -n \"s/^REPO='\(.*\)'\$/\\1/p\" '$HESTIA_CONF_RESTIC'" || true)"
+
+  printf 'USUARIO\tDOMINIOS\tBASES\tCORREO\tCLAVE\tÚLTIMA INSTANTÁNEA\tÚLTIMO .tar\n' > "$filas"
   local u
   while IFS= read -r u; do
     u="$(awk '{print $1}' <<<"$u")"
@@ -479,8 +516,10 @@ bc_hestia_users() {
     # fecha en la última. Interesa la fecha, no el nombre del archivo.
     ult="$( { bc_hestia_read "$HESTIA_DIR/bin/v-list-user-backups $u plain" || true; } \
             | awk -F'\t' 'NF>1{print $NF}' | grep -E '^[0-9]{4}-' | sort -r | head -1 )"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "$u" "$dom" "$bd" "$mail" "$rst" "${ult:-ninguno}" >> "$filas"
+    local snap
+    snap="$(bc_hestia_restic_ultima "$u" "$repo_base")"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$u" "$dom" "$bd" "$mail" "$rst" "$snap" "${ult:-ninguno}" >> "$filas"
   done <<<"$lista"
 
   bc_table < "$filas"; rm -f "$filas"
@@ -492,8 +531,13 @@ bc_hestia_users() {
   bc_log "  le crea solo la primera vez que se le respalda."
   bc_log "  v-backup-users-restic respalda a todos; v-backup-user-restic <u>, a uno."
   echo
-  bc_log "  «CLAVE PROPIA = NO» solo significa que ese usuario aún no se ha"
-  bc_log "  respaldado nunca. No es un error si acabas de montarlo."
+  bc_log "  «CLAVE = NO» solo significa que ese usuario aún no se ha respaldado"
+  bc_log "  nunca. No es un error si acabas de montarlo."
+  echo
+  bc_warn "ÚLTIMA INSTANTÁNEA es lo que cuenta: son los respaldos de Restic."
+  bc_warn "ÚLTIMO .tar son los respaldos tradicionales de HestiaCP, que pueden"
+  bc_warn "llevar años sin actualizarse aunque Restic funcione a diario. No"
+  bc_warn "confundas una cosa con la otra."
   bc_warn "Hay que rescatar la clave de CADA usuario: con la de uno no se abren los"
   bc_warn "respaldos de los demás. «Traer las claves del servidor» las coge todas."
 }
