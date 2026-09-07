@@ -40,35 +40,59 @@ bc_shield_run() {
   fi
 
   # === 1. Bases de datos =====================================================
+  # Cuando el perfil apunta a otro servidor, los respaldos y MySQL están ALLÍ.
+  # La versión anterior miraba siempre las rutas locales y, desde el portátil,
+  # informaba «no hay ningún respaldo» de un servidor que respalda cada noche.
   bc_sh_cab "1 · Bases de datos"
-  local zip edad n_bd n_zip
-  zip="$(bc_backup_latest || true)"
-  if [[ -z "$zip" ]]; then
-    bc_sh_fail "no hay ningún respaldo de bases de datos en $BACKUP_OUTPUT_DIR"
-  else
-    edad="$(bc_age_days "$zip")"
-    n_zip="$(unzip -Z1 "$zip" 2>/dev/null | awk -F/ 'NF>1{print $1}' | sort -u | grep -c . || true)"
-    if   (( edad <= 1 )); then bc_sh_ok "último respaldo de hace $edad días, $n_zip bases"
-    elif (( edad <= 3 )); then bc_sh_warn "último respaldo de hace $edad días, $n_zip bases"
-    else bc_sh_fail "último respaldo de hace $edad días: el cron podría estar parado"; fi
+  local edad="" en_zip="" en_mysql="" fuente=""
 
-    # ¿Coincide con lo que hay ahora en MySQL? Una base nueva que nadie respalda
-    # es el fallo silencioso más caro de todos.
-    if bc_mysql_check >/dev/null 2>&1; then
-      n_bd="$(bc_mysql_databases 2>/dev/null | grep -c . || echo 0)"
-      if (( n_bd == n_zip )); then
-        bc_sh_ok "las $n_bd bases de datos del servidor están en el respaldo"
-      elif (( n_bd > n_zip )); then
-        bc_sh_fail "hay $n_bd bases en MySQL pero solo $n_zip en el último respaldo"
-        local faltan
-        faltan="$(comm -23 <(bc_mysql_databases | sort) \
-                           <(unzip -Z1 "$zip" 2>/dev/null | awk -F/ 'NF>1{print $1}' | sort -u) 2>/dev/null || true)"
-        [[ -n "$faltan" ]] && { bc_log "        SIN RESPALDAR:"; sed 's/^/          - /' <<<"$faltan"; }
-      else
-        bc_sh_warn "el respaldo tiene $n_zip bases y ahora hay $n_bd (¿alguna borrada?)"
-      fi
+  if (( remoto )); then
+    fuente="$DEPLOY_HOST:$BACKUP_OUTPUT_DIR"
+    # Edad en días del zip más reciente, calculada en el servidor.
+    edad="$(bc_hestia_read "
+      z=\$(ls -t '$BACKUP_OUTPUT_DIR'/all_databases_*.zip 2>/dev/null | head -1)
+      [ -n \"\$z\" ] && echo \$(( ( \$(date +%s) - \$(stat -c %Y \"\$z\") ) / 86400 ))" || true)"
+    [[ -n "$edad" ]] && en_zip="$(bc_hestia_respaldo_remoto || true)"
+    en_mysql="$(bc_hestia_mysql_remoto || true)"
+  else
+    fuente="$BACKUP_OUTPUT_DIR"
+    local zip; zip="$(bc_backup_latest || true)"
+    if [[ -n "$zip" ]]; then
+      edad="$(bc_age_days "$zip")"
+      en_zip="$(unzip -Z1 "$zip" 2>/dev/null | awk -F/ 'NF>1{print $1}' | sort -u || true)"
+    fi
+    bc_mysql_check >/dev/null 2>&1 && en_mysql="$(bc_mysql_databases 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$edad" ]]; then
+    bc_sh_fail "no hay ningún respaldo de bases de datos en $fuente"
+  else
+    local n_zip cuando; n_zip="$(grep -c . <<<"$en_zip" || true)"
+    case "$edad" in 0) cuando="de hoy" ;; 1) cuando="de ayer" ;; *) cuando="de hace $edad días" ;; esac
+    if   (( edad <= 1 )); then bc_sh_ok "último respaldo $cuando, $n_zip bases"
+    elif (( edad <= 3 )); then bc_sh_warn "último respaldo $cuando, $n_zip bases"
+    else bc_sh_fail "último respaldo $cuando: el cron podría estar parado"; fi
+  fi
+
+  # ¿Coincide con lo que hay AHORA en MySQL? Una base nueva que nadie respalda
+  # es el fallo silencioso más caro de todos.
+  if [[ -z "$en_mysql" ]]; then
+    bc_sh_warn "no se pudo consultar MySQL para comparar"
+  else
+    local n_bd n_zip2 faltan
+    n_bd="$(grep -c . <<<"$en_mysql" || true)"
+    n_zip2="$(grep -c . <<<"$en_zip" || true)"
+    faltan="$(comm -23 <(sort <<<"$en_mysql") <(sort -u <<<"$en_zip") 2>/dev/null || true)"
+    faltan="$(sed '/^$/d' <<<"$faltan")"
+    if [[ -z "$faltan" ]] && (( n_bd > 0 )); then
+      bc_sh_ok "las $n_bd bases de datos del servidor están en el respaldo"
     else
-      bc_sh_warn "no se pudo consultar MySQL para comparar"
+      bc_sh_fail "hay $n_bd bases en MySQL y $n_zip2 en el último respaldo"
+      if [[ -n "$faltan" ]]; then
+        bc_log "        SIN RESPALDAR ($(grep -c . <<<"$faltan")):"
+        sed 's/^/          - /' <<<"$faltan" | head -20
+        (( $(grep -c . <<<"$faltan") > 20 )) && bc_log "          ... y más"
+      fi
     fi
   fi
 
@@ -90,10 +114,12 @@ bc_shield_run() {
       *) bc_sh_ok "el repositorio está fuera del servidor" ;;
     esac
 
+    # Se busca en todos los crontabs: la entrada vive en el de hestiaweb, no en
+    # el de root. Ver bc_hestia_cron_donde.
     local cron
-    cron="$(bc_hestia_read "crontab -l" 2>/dev/null || true)"
-    if grep -q 'v-backup-users-restic' <<<"$cron"; then
-      bc_sh_ok "el cron de Restic está activo"
+    cron="$(bc_hestia_cron_donde)"
+    if [[ -n "$cron" ]]; then
+      bc_sh_ok "el cron de Restic está activo: ${cron##*:}"
     else
       bc_sh_fail "el cron de Restic NO está activo: configurado pero nunca se ejecuta"
       bc_log "        Actívalo:  backupctl hestia cron"

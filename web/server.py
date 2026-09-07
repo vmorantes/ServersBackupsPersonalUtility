@@ -386,19 +386,27 @@ def plan_pasos(name, destino, path, hay_ctl):
             return None
 
     # ¿Cron del respaldo de bases de datos?
-    c = remoto(f"crontab -l 2>/dev/null | grep -c backupctl || true")
-    cron_bd = bool(c and c.stdout.strip() not in ("", "0"))
+    # Se busca en TODOS los crontabs, no solo en el de quien entra por SSH (root).
+    # El de backupctl lo instala v-add-cron-job bajo el usuario del panel, así que
+    # `crontab -l` como root no lo veía nunca y daba un «no programado» falso.
+    c = remoto("grep -l backupctl /var/spool/cron/crontabs/* /etc/cron.d/* 2>/dev/null || true")
+    cron_bd = bool(c and c.stdout.strip())
     pasos.append({"titulo": "Respaldo de bases de datos programado", "hecho": cron_bd,
                   "hacer": "Pestaña Programación → «Programar en el servidor»."})
 
     # ¿Restic configurado y con cron?
-    c = remoto("cat /usr/local/hestia/data/users/conf/restic.conf 2>/dev/null || true")
+    # La configuración global está en conf/restic.conf, NO bajo data/users/.
+    c = remoto("cat /usr/local/hestia/conf/restic.conf 2>/dev/null || true")
     restic = bool(c and "REPO=" in (c.stdout or ""))
     pasos.append({"titulo": "Respaldos incrementales (Restic) configurados", "hecho": restic,
                   "hacer": "Pestaña HestiaCP → configurar el remoto y registrar el host."})
 
-    c = remoto("crontab -l 2>/dev/null | grep -c v-backup-users-restic || true")
-    cron_restic = bool(c and c.stdout.strip() not in ("", "0"))
+    # v-backup-users-restic es tarea del sistema (recorre todas las cuentas), así
+    # que va en el crontab de hestiaweb junto a las demás tareas de HestiaCP.
+    # Mirar solo `crontab -l` daba «cron no activo» en servidores que llevaban
+    # meses respaldando cada noche.
+    c = remoto("grep -l v-backup-users-restic /var/spool/cron/crontabs/* /etc/cron.d/* /etc/crontab 2>/dev/null || true")
+    cron_restic = bool(c and c.stdout.strip())
     pasos.append({"titulo": "Cron de Restic activo", "hecho": cron_restic,
                   "hacer": "Pestaña HestiaCP → «Activar su cron». HestiaCP no lo hace solo."})
 

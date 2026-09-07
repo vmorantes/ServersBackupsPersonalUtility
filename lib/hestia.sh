@@ -29,6 +29,11 @@ BC_HESTIA_RCLONE_CONF="${BC_RCLONE_CONF:-/root/.config/rclone/rclone.conf}"
 # en data/users/<usuario>/ con SU clave de cifrado.
 HESTIA_CONF_RESTIC="${HESTIA_DIR:-/usr/local/hestia}/conf/restic.conf"
 
+# Crontab de tareas propias de HestiaCP. Ahí pone el instalador v-backup-users,
+# v-update-sys-queue, etc. No es un usuario del panel: v-rebuild-cron-jobs no
+# lo toca, así que lo que se escriba aquí sobrevive.
+BC_HESTIA_CRONTAB_SIS="/var/spool/cron/crontabs/hestiaweb"
+
 # -----------------------------------------------------------------------------
 # Decidir dónde actuar y abrir la conexión si hace falta
 # -----------------------------------------------------------------------------
@@ -62,14 +67,35 @@ bc_hestia_cerrar() { (( BC_HESTIA_REMOTO )) && bc_ssh_close; return 0; }
 # procesa el primer elemento y termina. Es la causa de que la lista de usuarios
 # mostrara solo el primero de los tres.
 bc_hestia_read() {
+  local salida rc
+
+  # La salida se CAPTURA, no se deja salir directamente. La versión anterior
+  # hacía `orden && return 0` y, si la orden terminaba en código distinto de
+  # cero, la volvía a ejecutar con sudo: la primera salida ya se había impreso,
+  # así que se veía TODO DUPLICADO. Y un `grep` que no encuentra nada en el
+  # último archivo de un bucle ya devuelve 1, aunque haya encontrado antes.
   if (( BC_HESTIA_REMOTO )); then
-    bc_ssh "$*" 2>/dev/null < /dev/null && return 0
-    bc_ssh_sudo "$*" 2>/dev/null < /dev/null
+    salida="$(bc_ssh "$*" 2>/dev/null < /dev/null)" && rc=0 || rc=$?
   else
-    bash -c "$*" 2>/dev/null < /dev/null && return 0
-    [[ "$(id -u)" -eq 0 ]] && return 1
-    sudo -n bash -c "$*" 2>/dev/null < /dev/null
+    salida="$(bash -c "$*" 2>/dev/null < /dev/null)" && rc=0 || rc=$?
   fi
+
+  # Si dio salida, sirvió: da igual el código. Solo se reintenta con privilegios
+  # cuando no se obtuvo nada, que es el síntoma de un permiso denegado.
+  if (( rc == 0 )) || [[ -n "$salida" ]]; then
+    [[ -n "$salida" ]] && printf '%s\n' "$salida"
+    return 0
+  fi
+
+  if (( BC_HESTIA_REMOTO )); then
+    salida="$(bc_ssh_sudo "$*" 2>/dev/null < /dev/null)" || true
+  elif [[ "$(id -u)" -eq 0 ]]; then
+    return 1
+  else
+    salida="$(sudo -n bash -c "$*" 2>/dev/null < /dev/null)" || true
+  fi
+  [[ -n "$salida" ]] || return 1
+  printf '%s\n' "$salida"
 }
 
 # ESCRITURA: siempre elevado. Nunca se intenta sin sudo, porque un intento a
@@ -149,11 +175,11 @@ bc_hestia_status() {
   fi
 
   # --- Cron ------------------------------------------------------------------
-  local cron
-  cron="$(bc_hestia_read "crontab -l" || true)"
-  if grep -q 'v-backup-users-restic' <<<"$cron"; then
+  local donde
+  donde="$(bc_hestia_cron_donde)"
+  if [[ -n "$donde" ]]; then
     bc_ok "Cron de Restic activo:"
-    grep 'v-backup-users-restic' <<<"$cron" | sed 's/^/        /'
+    sed 's/^/        /' <<<"$donde"
   else
     bc_warn "el cron de Restic NO está activo: nunca se respaldará solo."
     bc_log  "Actívalo con:  backupctl hestia cron"
@@ -325,6 +351,45 @@ bc_hestia_restic() {
   fi
 }
 
+# -----------------------------------------------------------------------------
+# ¿Dónde está el cron de Restic?
+# -----------------------------------------------------------------------------
+# No basta con mirar `crontab -l`. Comprobado en un servidor real: la entrada
+# puede vivir en sitios muy distintos y ninguno es «el evidente».
+#
+#   /var/spool/cron/crontabs/hestiaweb   crontab interno de HestiaCP, donde
+#                                        están sus propios v-update-sys-queue.
+#                                        Es donde suele acabar si se añadió a
+#                                        mano siguiendo el estilo del panel.
+#   crontab de root                      si se añadió con `crontab -e` como root
+#   cron.conf de un usuario del panel    si se añadió desde la sección Cron
+#   /etc/cron.d/*                        si se puso como cron del sistema
+#
+# Mirar solo uno da un «NO está activo» falso en un servidor que lleva meses
+# respaldando cada noche. Se buscan todos.
+bc_hestia_cron_donde() {
+  local encontrado=""
+  local salida
+
+  # Crontabs de usuario, incluido el interno de HestiaCP
+  salida="$(bc_hestia_read "
+    for f in /var/spool/cron/crontabs/*; do
+      [ -f \"\$f\" ] || continue
+      grep -H 'v-backup-users\?-restic' \"\$f\" 2>/dev/null | grep -v '^#'
+    done" || true)"
+  [[ -n "$salida" ]] && encontrado+="$salida"$'\n'
+
+  # Crones del sistema
+  salida="$(bc_hestia_read "grep -rh 'v-backup-users\?-restic' /etc/cron.d/ /etc/crontab 2>/dev/null | grep -v '^#'" || true)"
+  [[ -n "$salida" ]] && encontrado+="$salida"$'\n'
+
+  # Los de la sección Cron del panel
+  salida="$(bc_hestia_read "grep -l 'restic' $HESTIA_DIR/data/users/*/cron.conf 2>/dev/null" || true)"
+  [[ -n "$salida" ]] && encontrado+="panel HestiaCP: $salida"$'\n'
+
+  sed '/^$/d' <<<"$encontrado"
+}
+
 # =============================================================================
 # Cron de Restic
 # =============================================================================
@@ -332,32 +397,94 @@ bc_hestia_cron() {
   bc_hestia_conectar
   trap 'bc_hestia_cerrar' RETURN
 
-  local hora="${BC_OPT_HOUR:-5}" minuto="${BC_OPT_MINUTE:-30}"
-  local admin="${BC_OPT_HESTIA_USER:-admin}"
+  local hora="${BC_OPT_HOUR:-5}" minuto="${BC_OPT_MINUTE:-45}"
 
   bc_section "Cron de respaldos Restic"
-  bc_warn "HestiaCP NO activa este cron al añadir el host de respaldo. Sin él,"
-  bc_warn "Restic queda configurado pero no se ejecuta nunca."
 
-  local actual
-  actual="$(bc_hestia_v "v-list-cron-jobs $admin plain" 2>/dev/null || true)"
-  if grep -q 'v-backup-users-restic' <<<"$actual"; then
-    bc_ok "ya existe un cron de v-backup-users-restic:"
-    grep 'v-backup-users-restic' <<<"$actual" | sed 's/^/        /'
+  # ---------------------------------------------------------------------------
+  # POR QUÉ ESTE CRON NO EXISTE SOLO  (comprobado en HestiaCP 1.10.4)
+  # ---------------------------------------------------------------------------
+  # v-add-backup-host-restic solo escribe conf/restic.conf y pone
+  # BACKUP_INCREMENTAL=yes. No programa nada: no hay ni una mención a
+  # v-backup-users-restic en bin/, func/ ni install/. Configurar el
+  # incremental deja el repositorio listo, pero NADIE lo llena.
+  #
+  # DÓNDE VA
+  # v-backup-users-restic recorre TODAS las cuentas: es una tarea del sistema,
+  # no de un usuario del panel. Por eso no se registra con v-add-cron-job (que
+  # la ataría a una cuenta) sino en el crontab de `hestiaweb`, que es donde el
+  # instalador pone v-backup-users, v-update-sys-queue y las demás tareas
+  # propias. Se sigue el mismo idioma que v-add-cron-restart-job:
+  #   comprobar con grep, añadir al final, chmod 600, chown hestiaweb.
+  #
+  # v-rebuild-cron-jobs actúa sobre un USUARIO del panel y regenera su crontab
+  # desde su cron.conf. hestiaweb no es un usuario del panel, así que esta
+  # línea NO la borra ningún rebuild.
+  # ---------------------------------------------------------------------------
+  bc_warn "HestiaCP NO programa este cron al configurar el respaldo incremental."
+  bc_warn "Sin él, Restic queda montado pero el repositorio no se llena nunca."
+
+  # Se busca en TODAS partes antes de añadir nada. Un segundo cron significaría
+  # dos respaldos simultáneos compitiendo por el mismo repositorio.
+  local existente
+  existente="$(bc_hestia_cron_donde)"
+  if [[ -n "$existente" ]]; then
+    bc_ok "Ya hay un cron de Restic. No se añade otro:"
+    sed 's/^/        /' <<<"$existente"
+    echo
+    bc_log "Para cambiar la hora, edítalo donde está. Añadir un segundo haría"
+    bc_log "que dos respaldos corrieran a la vez sobre el mismo repositorio."
     return 0
   fi
 
-  bc_log "Se registrará:  $minuto $hora * * *  v-backup-users-restic"
-  bc_log "A una hora distinta de los respaldos tradicionales, para no solaparlos."
+  local linea="$minuto $hora * * * sudo $HESTIA_DIR/bin/v-backup-users-restic"
+  bc_log "Se añadirá a $BC_HESTIA_CRONTAB_SIS :"
+  bc_log "    $linea"
+  bc_log "Los respaldos .tar de HestiaCP corren a las 05:10; esta hora no se solapa."
+
   if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
     bc_ok "Simulación (--dry-run): no se ha registrado nada."
     return 0
   fi
-  bc_confirm "¿Registrarlo para el usuario '$admin'?" y || { bc_log "Cancelado."; return 0; }
+  bc_confirm "¿Programar el respaldo Restic diario?" y || { bc_log "Cancelado."; return 0; }
 
-  bc_hestia_v "v-add-cron-job $admin '$minuto' '$hora' '*' '*' '*' 'v-backup-users-restic'" \
-    || bc_die "no se pudo registrar el cron."
-  bc_ok "Cron registrado. Aparecerá en el panel, en Cron."
+  local salida rc=0
+  salida="$(bc_hestia_root "
+    ct='$BC_HESTIA_CRONTAB_SIS'
+    [ -f \"\$ct\" ] || { echo 'SIN_CRONTAB'; exit 9; }
+    grep -q 'v-backup-users-restic' \"\$ct\" && { echo 'YA_ESTABA'; exit 0; }
+    # Si el archivo no termina en salto de línea, un >> pegaría la orden a la
+    # última existente y rompería las dos.
+    [ -s \"\$ct\" ] && [ -n \"\$(tail -c1 \"\$ct\")\" ] && printf '\n' >> \"\$ct\"
+    printf '%s\n' '$linea' >> \"\$ct\"
+    chmod 600 \"\$ct\"
+    chown hestiaweb:hestiaweb \"\$ct\"
+    echo 'HECHO'
+  " 2>&1)" || rc=$?
+
+  case "$salida" in
+    *SIN_CRONTAB*)
+      bc_die "no existe $BC_HESTIA_CRONTAB_SIS. ¿Es este un servidor con HestiaCP?" ;;
+    *YA_ESTABA*)
+      bc_ok "Ya estaba programado." ; return 0 ;;
+    *HECHO*)
+      : ;;
+    *)
+      bc_err "no se pudo programar el cron (código $rc)."
+      [[ -n "$salida" ]] && sed 's/^/        /' <<<"$salida"
+      return 1 ;;
+  esac
+
+  # Se relee del servidor: la confirmación vale si la escribe el servidor, no yo.
+  local comprobacion
+  comprobacion="$(bc_hestia_cron_donde)"
+  if [[ -n "$comprobacion" ]]; then
+    bc_ok "Respaldo Restic programado y verificado:"
+    sed 's/^/        /' <<<"$comprobacion"
+  else
+    bc_err "se escribió la línea pero no se vuelve a encontrar. Revísalo a mano."
+    return 1
+  fi
 }
 
 # =============================================================================
@@ -450,26 +577,35 @@ bc_hestia_keys() {
 # -----------------------------------------------------------------------------
 # Última instantánea Restic de un usuario
 # -----------------------------------------------------------------------------
-# CADA USUARIO TIENE SU PROPIO REPOSITORIO, en <REPO><usuario>. El REPO del
-# archivo global es solo el prefijo común; HestiaCP le añade el nombre del
-# usuario. Por eso cada uno tiene también su propia clave: son repositorios
-# independientes, y con la clave de uno no se abre el de otro.
+# Se usa la orden PROPIA de HestiaCP en lugar de invocar restic a mano.
 #
-# Esto NO es lo mismo que v-list-user-backups, que lista los .tar tradicionales
-# y puede llevar años sin actualizarse aunque Restic funcione a diario.
+# Razones, todas comprobadas en el código de HestiaCP 1.10.4:
+#   - La ruta del repositorio es "${REPO%/}/$user": cada usuario tiene el SUYO.
+#     Componerla por nuestra cuenta obliga a replicar ese detalle, y ya hubo un
+#     fallo histórico ahí (issue 5100 de HestiaCP, con y sin barra final).
+#   - La contraseña se pasa con --password-file, no por variable de entorno.
+#   - Si HestiaCP cambia el esquema, su orden sigue funcionando y la nuestra no.
+#
+# OJO con no confundir dos cosas distintas:
+#   v-list-user-backups          los .tar tradicionales
+#   v-list-user-backups-restic   las instantáneas de Restic   <- esto es lo real
 bc_hestia_restic_ultima() {
-  local u="$1" repo="$2"
-  [[ -n "$repo" ]] || { echo "?"; return 0; }
-  local clave
-  clave="$(bc_hestia_read "cat '$HESTIA_DIR/data/users/$u/restic.conf'" || true)"
-  [[ -n "$clave" ]] || { echo "sin clave"; return 0; }
+  local u="$1"
+  local salida
+  salida="$(bc_hestia_read "$HESTIA_DIR/bin/v-list-user-backups-restic $u plain" || true)"
+  [[ -n "$salida" ]] || { echo "no disponible"; return 0; }
 
-  local json
-  json="$(bc_hestia_read "RESTIC_PASSWORD='$clave' restic -r '${repo}${u}' snapshots --latest 1 --json 2>/dev/null" || true)"
-  if [[ -z "$json" || "$json" == "[]" ]]; then echo "ninguna"; return 0; fi
-  # La marca de tiempo llega en ISO-8601; basta con la fecha y la hora
-  sed -n 's/.*"time":"\([0-9-]*\)T\([0-9:]*\).*/\1 \2/p' <<<"$json" | head -1 \
-    || echo "?"
+  # Formato: ID  Fecha Hora  Host  Tags  Paths  Size, ordenado de vieja a nueva
+  local ultima
+  ultima="$(awk 'NF>=3 && $1 ~ /^[0-9a-f]{8}$/ {print $2" "$3}' <<<"$salida" | tail -1)"
+  [[ -n "$ultima" ]] && echo "$ultima" || echo "ninguna"
+}
+
+# Cuántas instantáneas tiene un usuario, para contrastarlo con SNAPSHOTS
+bc_hestia_restic_cuantas() {
+  local u="$1" salida
+  salida="$(bc_hestia_read "$HESTIA_DIR/bin/v-list-user-backups-restic $u plain" || true)"
+  awk 'NF>=3 && $1 ~ /^[0-9a-f]{8}$/' <<<"$salida" | grep -c . || true
 }
 
 # =============================================================================
@@ -497,10 +633,7 @@ bc_hestia_users() {
   local filas; filas="$(mktemp)"
   # El repositorio global es solo el prefijo: a cada usuario le corresponde
   # <REPO><usuario>, que es un repositorio Restic independiente.
-  local repo_base
-  repo_base="$(bc_hestia_read "sed -n \"s/^REPO='\(.*\)'\$/\\1/p\" '$HESTIA_CONF_RESTIC'" || true)"
-
-  printf 'USUARIO\tDOMINIOS\tBASES\tCORREO\tCLAVE\tÚLTIMA INSTANTÁNEA\tÚLTIMO .tar\n' > "$filas"
+  printf 'USUARIO\tDOMINIOS\tBASES\tCORREO\tCLAVE\tINSTANTÁNEAS\tÚLTIMA\tÚLTIMO .tar\n' > "$filas"
   local u
   while IFS= read -r u; do
     u="$(awk '{print $1}' <<<"$u")"
@@ -517,9 +650,10 @@ bc_hestia_users() {
     ult="$( { bc_hestia_read "$HESTIA_DIR/bin/v-list-user-backups $u plain" || true; } \
             | awk -F'\t' 'NF>1{print $NF}' | grep -E '^[0-9]{4}-' | sort -r | head -1 )"
     local snap
-    snap="$(bc_hestia_restic_ultima "$u" "$repo_base")"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "$u" "$dom" "$bd" "$mail" "$rst" "$snap" "${ult:-ninguno}" >> "$filas"
+    snap="$(bc_hestia_restic_ultima "$u")"
+    local n_snap; n_snap="$(bc_hestia_restic_cuantas "$u")"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$u" "$dom" "$bd" "$mail" "$rst" "${n_snap:-0}" "$snap" "${ult:-ninguno}" >> "$filas"
   done <<<"$lista"
 
   bc_table < "$filas"; rm -f "$filas"
