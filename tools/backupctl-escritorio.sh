@@ -94,7 +94,7 @@ SVG
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=backupctl
+Name=Respaldos HestiaCP
 GenericName=Respaldos de servidores
 Comment=Respaldo, verificación y migración de tus servidores HestiaCP
 Exec=$RAIZ/tools/backupctl-escritorio.sh lanzar
