@@ -102,6 +102,19 @@ bc_ssh_has_sudo() {
   bc_ssh "command -v sudo >/dev/null 2>&1" 2>/dev/null
 }
 
+# Igual que bc_ssh_sudo pero pasando la entrada estándar al otro lado, para
+# enviar contenido (una clave, un archivo de configuración) sin que aparezca en
+# la línea de órdenes, donde cualquiera con `ps` podría leerlo.
+bc_ssh_sudo_stdin() {
+  if bc_ssh "test \$(id -u) -eq 0" < /dev/null 2>/dev/null; then
+    bc_ssh "$@"
+  elif bc_ssh_can_sudo_nopass; then
+    bc_ssh "sudo -n bash -c $(printf '%q' "$*")"
+  else
+    return 1
+  fi
+}
+
 # Ejecuta algo como root en el servidor. Si hace falta contraseña de sudo, se
 # pide con terminal asignado en lugar de fallar en silencio.
 bc_ssh_sudo() {

@@ -32,7 +32,7 @@ export BC_ROOT BC_VERSION
 
 # --- Carga de la biblioteca --------------------------------------------------
 for _m in core config mysql notify retention backup verify restore archive \
-          restic doctor cron logs ssh sshkey deploy pull remote migrate setup web install hestia shield tui; do
+          restic doctor cron logs ssh sshkey deploy pull remote migrate setup web install hestia shield adoptar tui; do
   # shellcheck source=/dev/null
   source "$BC_ROOT/lib/$_m.sh" || { echo "ERROR: no se pudo cargar lib/$_m.sh" >&2; exit 2; }
 done
@@ -500,6 +500,26 @@ case "$BC_CMD" in
     ;;
 
   # Auxiliar interno: lo usa `migrate` por SSH para comparar recuentos.
+  adoptar)
+    # La prueba de fuego: resucitar usuarios en OTRO HestiaCP partiendo solo del
+    # almacenamiento remoto y de las claves rescatadas.
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --to)        BC_OPT_TO="${2:-}"; shift 2 ;;
+        --usuarios)  BC_OPT_USERS="${2:-}"; shift 2 ;;
+        --snapshot)  BC_OPT_SNAPSHOT="${2:-}"; shift 2 ;;
+        --inventario|--que-hay) BC_OPT_INVENTARIO=1; shift ;;
+        --dry-run|-n) BC_OPT_DRY=1; shift ;;
+        *) bc_die "opción desconocida para 'adoptar': $1" ;;
+      esac
+    done
+    if [[ "${BC_OPT_INVENTARIO:-0}" == "1" || -z "${BC_OPT_TO:-}" ]]; then
+      bc_adoptar_inventario
+    else
+      bc_adoptar_run
+    fi
+    ;;
+
   exec-count)
     (( ${BC_PERFIL_REMOTO:-0} )) && bc_die "MySQL está en $DEPLOY_HOST, no aquí. Usa: backupctl -p $BC_PROFILE remote exec-count ${1:-}"
     bc_mysql_table_count "${1:-}" ;;
