@@ -67,6 +67,22 @@ def _v_segments(v):
 #   forma "pos"        -> se añade como argumento posicional
 #   forma "--x"        -> se añade como "--x VALOR"
 #   forma "flag:--x"   -> se añade "--x" si el valor es verdadero
+# Un destino SSH: usuario@host o solo host. Se acota a lo que puede ser un
+# nombre de máquina o una IP, porque este valor acaba en una línea de órdenes.
+def _v_destino(v):
+    return bool(re.match(r"^(?:[A-Za-z0-9._-]{1,32}@)?[A-Za-z0-9._-]{1,253}$", v))
+
+
+# Lista de usuarios separada por comas, con los nombres que admite HestiaCP.
+def _v_usuarios(v):
+    return bool(re.match(r"^[A-Za-z0-9._-]{1,32}(?:,[A-Za-z0-9._-]{1,32})*$", v))
+
+
+# Una instantánea de restic: 8 caracteres hexadecimales, o «latest».
+def _v_snapshot(v):
+    return v == "latest" or bool(re.match(r"^[0-9a-f]{8,64}$", v))
+
+
 A = {
     # --- blindaje ----------------------------------------------------------
     "shield":        (["shield"], [], False),
@@ -87,6 +103,17 @@ A = {
     "remote-hestia-verify": (["remote", "hestia", "verify"], [], False),
     "remote-hestia-keys":   (["remote", "hestia", "keys"], [], True),
     "remote-hestia-cron":   (["remote", "hestia", "cron"], [], True),
+
+    # --- resucitar en otro HestiaCP ----------------------------------------
+    "adoptar-inventario": (["adoptar", "--inventario"], [], False),
+    "adoptar-dry": (["adoptar", "--dry-run"],
+                    [("destino", "--to", _v_destino),
+                     ("usuarios", "--usuarios", _v_usuarios),
+                     ("snapshot", "--snapshot", _v_snapshot)], False),
+    "adoptar": (["adoptar"],
+                [("destino", "--to", _v_destino),
+                 ("usuarios", "--usuarios", _v_usuarios),
+                 ("snapshot", "--snapshot", _v_snapshot)], True),
 
     # --- solo lectura ------------------------------------------------------
     "status":        (["status"], [], False),

@@ -65,6 +65,7 @@
       <button class="pestana" data-tab="servidor">Servidor</button>
       <button class="pestana" data-tab="hestia">HestiaCP</button>
       <button class="pestana" data-tab="programacion">Programación</button>
+      <button class="pestana" data-tab="resucitar">Resucitar</button>
       <button class="pestana" data-tab="migrar">Migrar</button>
       <button class="pestana" data-tab="config">Configuración</button>
       <button class="pestana" data-tab="registros">Registros</button>
@@ -383,6 +384,42 @@
         <div class="accion"><button class="btn btn-escribe" data-act="remote-notify"
                   data-confirmar="Se enviará un aviso de prueba desde el servidor.">Probar los avisos</button>
           <div class="accion-desc"><span class="escribe">Envía un aviso real.</span> Comprueba que un fallo te llegaría por correo, healthcheck o la orden configurada.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab" data-tab="resucitar" hidden>
+      <div class="estado-real" id="est-resucitar">Leyendo el estado…</div>
+      <h2>Resucitar usuarios en otro HestiaCP</h2>
+      <p class="ayuda">Para cuando el servidor de origen <strong>ya no existe</strong>.
+         Parte solo de dos archivos rescatados: el <code>rclone.conf</code>, que dice
+         cómo <strong>llegar</strong> al almacenamiento, y las claves, que dicen cómo
+         <strong>descifrarlo</strong>. Crea la cuenta en el servidor de destino y le
+         devuelve sus dominios, correo, bases de datos, crones y archivos.</p>
+
+      <div class="acciones">
+        <div class="accion"><button class="btn" data-act="adoptar-inventario">¿Qué se puede resucitar?</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Abre cada repositorio con su clave rescatada y dice cuántas instantáneas hay y de cuándo es la última. Si una clave no abriera, te enteras <strong>antes</strong> de necesitarla.</div>
+        </div>
+      </div>
+
+      <h3>Destino</h3>
+      <div class="campos" id="form-adoptar">
+        <label>Servidor de destino <span class="pista">usuario@host, normalmente root@…</span>
+          <input type="text" data-opt="destino" placeholder="root@servidor-nuevo" autocomplete="off"></label>
+        <label>Usuarios <span class="pista">separados por comas; vacío = todos los rescatados</span>
+          <input type="text" data-opt="usuarios" placeholder="naturalsurf,testing-admin" autocomplete="off"></label>
+        <label>Instantánea <span class="pista">«latest» o el identificador de 8 caracteres</span>
+          <input type="text" data-opt="snapshot" placeholder="latest" autocomplete="off"></label>
+      </div>
+
+      <div class="acciones">
+        <div class="accion"><button class="btn" data-act="adoptar-dry" data-form="#form-adoptar">Ensayo: qué haría</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Se conecta al destino, comprueba que hay HestiaCP, si falta <code>rclone</code> y si alguno de los usuarios ya existe allí. Enumera lo que haría, sin hacerlo.</div>
+        </div>
+        <div class="accion"><button class="btn btn-destruye" data-act="adoptar" data-form="#form-adoptar"
+                  data-confirmar="Se van a CREAR usuarios, dominios, correo y bases de datos en el servidor de destino.&#10;&#10;Un usuario que ya exista allí NO se toca: la orden se detiene antes de escribir nada.&#10;&#10;¿Continuar?">Resucitar en el destino</button>
+          <div class="accion-desc"><span class="destruye">Escribe mucho en el destino.</span> Crea cada cuenta y restaura todo lo suyo. <strong>No pisa cuentas existentes</strong>: si alguna ya está, se detiene antes de tocar nada. El <code>rclone.conf</code> del destino no se sustituye, se le añade el remoto. Y su configuración de respaldo propia se guarda y se devuelve al terminar, pase lo que pase.</div>
         </div>
       </div>
     </div>

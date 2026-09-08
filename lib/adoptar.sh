@@ -55,21 +55,40 @@ bc_ad_restaurar_conf() {
 # Lee las claves rescatadas. Devuelve, por la salida estándar, líneas
 # «usuario<TAB>clave», y por BC_AD_REPO el repositorio global rescatado.
 BC_AD_REPO=""
+
+# -----------------------------------------------------------------------------
+# Todas las claves rescatadas, no solo las del último rescate
+# -----------------------------------------------------------------------------
+# Cada rescate es una foto de los usuarios que existían ESE día. Cuando se borra
+# un usuario del servidor, los rescates posteriores dejan de incluirlo... pero su
+# repositorio sigue en el almacenamiento, entero, y su clave sigue estando en los
+# rescates anteriores.
+#
+# Mirar solo el archivo más reciente hacía desaparecer del inventario justo a los
+# usuarios que ya no existen en ningún sitio: los únicos que de verdad dependen
+# de esto. Comprobado con 'naturalsurf', borrado del servidor el 2026-09-08.
+#
+# Así que se recorren TODOS los rescates, del más antiguo al más nuevo, y para
+# cada usuario se queda la clave más reciente que se le conozca. Salida:
+#   usuario<TAB>clave<TAB>archivo-de-donde-salió
 bc_ad_leer_claves() {
   local dir; dir="$(bc_hestia_salida)"
-  local archivo
-  archivo="$( { find "$dir" -maxdepth 1 -name 'Restic_Configs_*.txt' -printf '%T@ %p\n' 2>/dev/null || true; } \
-              | sort -rn | head -1 | cut -d' ' -f2- )"
-  [[ -n "$archivo" ]] || { bc_err "no hay ninguna clave rescatada en $dir."; return 1; }
-  bc_log "Claves rescatadas: $archivo ($(bc_age_days "$archivo") días)" >&2
+  local -a archivos=()
+  mapfile -t archivos < <( { find "$dir" -maxdepth 1 -name 'Restic_Configs_*.txt' -printf '%T@ %p\n' 2>/dev/null || true; } \
+                           | sort -n | cut -d' ' -f2- )
+  (( ${#archivos[@]} > 0 )) || { bc_err "no hay ninguna clave rescatada en $dir." >&2; return 1; }
+  bc_log "Rescates leídos: ${#archivos[@]} (del más antiguo al más nuevo)" >&2
 
-  awk '
-    /^# [A-Za-z0-9._-]+:$/ { u = substr($2, 1, length($2)-1); next }
-    /^=+$/                 { u = ""; next }
-    /^#/                   { next }
-    NF == 0                { next }
-    u != "" && $0 !~ /=/    { print u "\t" $0; u = "" }
-  ' "$archivo"
+  local f
+  for f in "${archivos[@]}"; do
+    awk -v origen="$(basename "$f")" '
+      /^# [A-Za-z0-9._-]+:$/ { u = substr($2, 1, length($2)-1); next }
+      /^=+$/                 { u = ""; next }
+      /^#/                   { next }
+      NF == 0                { next }
+      u != "" && $0 !~ /=/    { print u "\t" $0 "\t" origen; u = "" }
+    ' "$f"
+  done | awk -F'\t' '{ ultimo[$1] = $0 } END { for (u in ultimo) print ultimo[u] }' | sort
 }
 
 # El repositorio se lee aparte y NO dentro de bc_ad_leer_claves: esa función se
@@ -78,10 +97,15 @@ bc_ad_leer_claves() {
 bc_ad_repo_rescatado() {
   local dir; dir="$(bc_hestia_salida)"
   local archivo
-  archivo="$( { find "$dir" -maxdepth 1 -name 'Restic_Configs_*.txt' -printf '%T@ %p\n' 2>/dev/null || true; } \
-              | sort -rn | head -1 | cut -d' ' -f2- )"
-  [[ -n "$archivo" ]] || return 1
-  sed -n "s/^REPO='\(.*\)'$/\1/p" "$archivo" | head -1
+  # Del más reciente hacia atrás: el primero que lo tenga. Un rescate posterior
+  # podría no incluirlo si la configuración global se hubiera borrado.
+  local f
+  while IFS= read -r f; do
+    local r; r="$(sed -n "s/^REPO='\(.*\)'$/\1/p" "$f" | head -1)"
+    [[ -n "$r" ]] && { printf '%s\n' "$r"; return 0; }
+  done < <( { find "$dir" -maxdepth 1 -name 'Restic_Configs_*.txt' -printf '%T@ %p\n' 2>/dev/null || true; } \
+            | sort -rn | cut -d' ' -f2- )
+  return 1
 }
 
 bc_ad_rclone_rescatado() {
@@ -118,23 +142,24 @@ bc_adoptar_inventario() {
 
   local filas="$tmp/filas"; : > "$filas"
   local u k n ultima
-  while IFS=$'\t' read -r u k; do
+  local origen
+  while IFS=$'\t' read -r u k origen; do
     [[ -n "$u" && -n "$k" ]] || continue
     printf '%s' "$k" > "$tmp/clave"; chmod 600 "$tmp/clave"
     local salida
     salida="$(RCLONE_CONFIG="$tmp/rclone.conf" RESTIC_PASSWORD_FILE="$tmp/clave" \
               restic -r "${BC_AD_REPO%/}/$u" snapshots --json 2>/dev/null || true)"
     if [[ -z "$salida" || "$salida" == "null" ]]; then
-      printf '%s\tNO SE PUDO ABRIR\t-\t-\n' "$u" >> "$filas"
+      printf '%s\tNO SE PUDO ABRIR\t-\t-\t%s\n' "$u" "${origen#Restic_Configs_}" >> "$filas"
       continue
     fi
     n="$(python3 -c 'import json,sys;print(len(json.load(sys.stdin)))' <<<"$salida" 2>/dev/null || echo 0)"
     ultima="$(python3 -c 'import json,sys;d=json.load(sys.stdin);print(d[-1]["time"][:19].replace("T"," ")+"  "+d[-1]["short_id"]) if d else print("-")' <<<"$salida" 2>/dev/null || echo '-')"
-    printf '%s\tsí\t%s\t%s\n' "$u" "$n" "$ultima" >> "$filas"
+    printf '%s\tsí\t%s\t%s\t%s\n' "$u" "$n" "$ultima" "${origen#Restic_Configs_}" >> "$filas"
   done <<<"$claves"
 
   {
-    printf 'USUARIO\tDESCIFRA\tINSTANTÁNEAS\tLA MÁS RECIENTE\n'
+    printf 'USUARIO\tDESCIFRA\tINSTANTÁNEAS\tLA MÁS RECIENTE\tCLAVE DE\n'
     cat "$filas"
   } | bc_table | sed 's/^/        /'
 
@@ -285,7 +310,7 @@ bc_adoptar_run() {
   bc_step "6 · Resucitar"
   local fallos=0 k snap
   for u in "${lista[@]}"; do
-    k="$(awk -F'\t' -v u="$u" '$1==u{print $2}' <<<"$claves")"
+    k="$(awk -F'\t' -v u="$u" '$1==u{print $2; exit}' <<<"$claves")"
     snap="${BC_OPT_SNAPSHOT:-latest}"
     echo
     bc_log "── $u  (instantánea: $snap)"
