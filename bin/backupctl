@@ -509,12 +509,16 @@ case "$BC_CMD" in
         --usuarios)  BC_OPT_USERS="${2:-}"; shift 2 ;;
         --snapshot)  BC_OPT_SNAPSHOT="${2:-}"; shift 2 ;;
         --como)      BC_OPT_COMO="${2:-}"; shift 2 ;;
+        --historial) BC_OPT_HISTORIAL=1; shift ;;
+        --cuantas)   BC_OPT_CUANTAS="${2:-}"; shift 2 ;;
         --inventario|--que-hay) BC_OPT_INVENTARIO=1; shift ;;
         --dry-run|-n) BC_OPT_DRY=1; shift ;;
         *) bc_die "opción desconocida para 'adoptar': $1" ;;
       esac
     done
-    if [[ "${BC_OPT_INVENTARIO:-0}" == "1" || -z "${BC_OPT_TO:-}" ]]; then
+    if [[ "${BC_OPT_HISTORIAL:-0}" == "1" ]]; then
+      bc_adoptar_historial
+    elif [[ "${BC_OPT_INVENTARIO:-0}" == "1" || -z "${BC_OPT_TO:-}" ]]; then
       bc_adoptar_inventario
     elif [[ -n "${BC_OPT_COMO:-}" ]]; then
       bc_adoptar_como

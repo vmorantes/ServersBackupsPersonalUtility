@@ -312,6 +312,10 @@ bc_adoptar_run() {
   for u in "${lista[@]}"; do
     k="$(awk -F'\t' -v u="$u" '$1==u{print $2; exit}' <<<"$claves")"
     snap="${BC_OPT_SNAPSHOT:-latest}"
+    if ! bc_ad_avisar_si_menguada "$BC_AD_REPO" "$u" "$snap" "$claves" "$rc"; then
+      bc_confirm "¿Restaurar '$u' de todas formas?" n \
+        || { bc_log "'$u' omitido."; continue; }
+    fi
     echo
     bc_log "── $u  (instantánea: $snap)"
     if bc_ssh_sudo "/usr/local/hestia/bin/v-restore-user-full-restic '$u' '$snap' '$k'"; then
@@ -563,6 +567,64 @@ bc_adoptar_bases() {
 # el árbol habría hecho justo eso.
 # =============================================================================
 
+# Comprobación obligatoria antes de restaurar: ¿la instantánea elegida tiene
+# menos que alguna anterior? Devuelve 1 si conviene detenerse.
+bc_ad_avisar_si_menguada() {
+  local repo="$1" u="$2" snap="$3" claves="$4" rc="$5"
+  bc_has_cmd restic || return 0
+  bc_ad_preparar "$u" "$claves" "$rc" || return 0
+
+  local ids
+  ids="$(RCLONE_CONFIG="$BC_AD_TMP/rclone.conf" RESTIC_PASSWORD_FILE="$BC_AD_TMP/clave" \
+         restic -r "${repo%/}/$u" snapshots --json 2>/dev/null \
+         | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+for s in d[-6:][::-1]: print(s['short_id'])
+" 2>/dev/null || true)"
+  [[ -n "$ids" ]] || { rm -rf "$BC_AD_TMP"; BC_AD_TMP=""; return 0; }
+
+  local elegida="$snap"
+  [[ "$elegida" == "latest" ]] && elegida="$(head -1 <<<"$ids")"
+
+  local filas; filas="$(mktemp)"
+  local id
+  while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
+    printf '%s\t%s\n' "$id" "$(bc_ad_contenido "$repo" "$u" "$id")" >> "$filas"
+  done <<<"$ids"
+  rm -rf "$BC_AD_TMP"; BC_AD_TMP=""
+
+  local act mejor_w mejor_m mejor_d act_w act_m act_d
+  act="$(awk -F'\t' -v s="$elegida" '$1 ~ "^"s {print; exit}' "$filas")"
+  [[ -n "$act" ]] || { rm -f "$filas"; return 0; }
+  act_w="$(cut -f3 <<<"$act")"; act_m="$(cut -f5 <<<"$act")"; act_d="$(cut -f6 <<<"$act")"
+  [[ "$act_w" =~ ^[0-9]+$ ]] || { rm -f "$filas"; return 0; }
+  mejor_w="$( { cut -f3 "$filas" | grep -E '^[0-9]+$' || true; } | sort -n | tail -1)"
+  mejor_m="$( { cut -f5 "$filas" | grep -E '^[0-9]+$' || true; } | sort -n | tail -1)"
+  mejor_d="$( { cut -f6 "$filas" | grep -E '^[0-9]+$' || true; } | sort -n | tail -1)"
+
+  if (( act_w < mejor_w )) || (( act_m < mejor_m )) || (( act_d < mejor_d )); then
+    local recomendada
+    recomendada="$(awk -F'\t' -v w="$mejor_w" '$3==w {print $1" ("$2")"; exit}' "$filas")"
+    echo
+    bc_err "LA INSTANTÁNEA ELEGIDA ESTÁ MENGUADA respecto a otras del mismo usuario:"
+    {
+      printf 'INSTANTÁNEA\tFECHA\tWEB\tDNS\tCORREO\tBASES\n'
+      cat "$filas"
+    } | bc_table | sed 's/^/        /'
+    bc_log "        Elegida: web $act_w · correo $act_m · bases $act_d"
+    bc_log "        La más completa: $recomendada"
+    bc_log "        Si borraste cosas a propósito, sigue. Si no, repite con:"
+    bc_log "            --snapshot ${recomendada%% *}"
+    rm -f "$filas"
+    return 1
+  fi
+  rm -f "$filas"
+  bc_ok "La instantánea elegida es la más completa del usuario."
+  return 0
+}
+
 bc_adoptar_como() {
   local destino="${BC_OPT_TO:-}"
   local viejo="${BC_OPT_USERS:-}"
@@ -608,6 +670,12 @@ bc_adoptar_como() {
   libre_mb="$(bc_ssh_sudo "df -Pm /home | awk 'NR==2{print \$4}'" < /dev/null | tr -d '\r')"
   bc_log "Espacio libre en /home del destino: ${libre_mb} MB"
 
+  # Antes de nada, incluido el ensayo: ¿la instantánea elegida está menguada?
+  # En el ensayo es donde más falta hace verlo, que es cuando aún se puede
+  # cambiar de instantánea sin haber tocado el destino.
+  local menguada=0
+  bc_ad_avisar_si_menguada "$BC_AD_REPO" "$viejo" "$snap" "$claves" "$rc" || menguada=1
+
   if (( seco )); then
     echo
     bc_ok "Simulación (--dry-run). Se haría, en este orden:"
@@ -621,6 +689,13 @@ bc_adoptar_como() {
     return 0
   fi
 
+  if (( menguada )); then
+    echo
+    bc_confirm "¿Restaurar de todas formas la instantánea menguada?" n \
+      || { bc_log "Cancelado. Vuelve con --snapshot <id>."; return 0; }
+  fi
+
+  echo
   bc_warn "Se va a CREAR la cuenta '$nuevo' en $destino con todo el contenido de '$viejo'."
   bc_confirm "¿Continuar?" n || { bc_log "Cancelado."; return 0; }
 
@@ -631,24 +706,34 @@ bc_adoptar_como() {
   local contrasena; contrasena="$(bc_gen_password 24)"
   bc_log "Trabajando en el destino. Esto puede tardar varios minutos..."
 
-  {
-    printf '%s\n' "$clave"
-    printf '%s\n' "$contrasena"
-    cat "$rc"
-  } | bc_ssh_sudo_stdin "bash -s '$viejo' '$nuevo' '$snap' '${BC_AD_REPO%/}'" <<'REMOTO'
-set -uo pipefail
-VIEJO="$1"; NUEVO="$2"; SNAP="$3"; REPO="$4"
-H=/usr/local/hestia
+  # Los secretos y el script NO pueden ir por el mismo canal: `bash -s` lee el
+  # script de la entrada estándar, así que un heredoc y una tubería sobre la
+  # misma orden se pisan —el heredoc gana y la tubería se pierde—. Se hace en
+  # dos pasos: primero los secretos a archivos del servidor, con permisos 600 y
+  # por la entrada estándar para que no aparezcan en la línea de órdenes; luego
+  # el script, que recibe la ruta del directorio de trabajo.
+  local ws
+  ws="$(bc_ssh_sudo "mktemp -d /root/.adoptar.XXXXXXXX" < /dev/null | tr -d '\r')"
+  [[ -n "$ws" ]] || bc_die "no se pudo crear el directorio de trabajo en el destino."
+  bc_ssh_sudo "chmod 700 '$ws'" < /dev/null || true
+  # shellcheck disable=SC2064
+  trap "bc_ssh_sudo \"rm -rf '$ws'\" </dev/null >/dev/null 2>&1 || true; bc_ssh_close" RETURN
 
-# Las tres primeras líneas de la entrada son la clave, la contraseña y luego el
-# rclone.conf entero.
-IFS= read -r CLAVE
-IFS= read -r PASS
-WS="$(mktemp -d /root/.adoptar.XXXXXXXX)"; chmod 700 "$WS"
-cat > "$WS/rclone.conf"; chmod 600 "$WS/rclone.conf"
-printf '%s' "$CLAVE" > "$WS/clave"; chmod 600 "$WS/clave"
-limpiar() { rm -rf "$WS"; }
-trap limpiar EXIT
+  printf '%s' "$clave"      | bc_ssh_sudo_stdin "umask 077; cat > '$ws/clave'"       || bc_die "no se pudo enviar la clave."
+  printf '%s' "$contrasena" | bc_ssh_sudo_stdin "umask 077; cat > '$ws/pass'"        || bc_die "no se pudo enviar la contraseña."
+  cat "$rc"                 | bc_ssh_sudo_stdin "umask 077; cat > '$ws/rclone.conf'" || bc_die "no se pudo enviar el acceso."
+
+  # bc_ssh_sudo_stdin y no bc_ssh_sudo: el segundo empieza comprobando `id -u`
+  # en el servidor, y esa comprobación LEE DE LA ENTRADA ESTÁNDAR. Se tragaba
+  # el script entero, `bash -s` recibía la nada, salía con cero, y la orden
+  # informaba de un traslado perfecto sin haber hecho absolutamente nada.
+  local rc_final=0
+  bc_ssh_sudo_stdin "bash -s '$viejo' '$nuevo' '$snap' '${BC_AD_REPO%/}' '$ws'" <<'REMOTO' || rc_final=$?
+set -uo pipefail
+VIEJO="$1"; NUEVO="$2"; SNAP="$3"; REPO="$4"; WS="$5"
+H=/usr/local/hestia
+CLAVE="$(cat "$WS/clave")"
+PASS="$(cat "$WS/pass")"
 
 export RCLONE_CONFIG="$WS/rclone.conf" RESTIC_PASSWORD_FILE="$WS/clave"
 R="${REPO%/}/$VIEJO"
@@ -677,7 +762,11 @@ for d in "$SRC"/* "$SRC"/.[!.]*; do
   case "$(basename "$d")" in backup) continue ;; esac
   cp -a "$d" "/home/$NUEVO/" 2>/dev/null || true
 done
-chown -R "$NUEVO:$NUEVO" "/home/$NUEVO"
+# /home/<usuario>/conf pertenece a root por diseño en HestiaCP: se excluye para
+# no llenar la salida de avisos que no son problemas.
+chown -R "$NUEVO:$NUEVO" "/home/$NUEVO" 2>/dev/null || true
+find "/home/$NUEVO" -maxdepth 1 ! -name conf ! -path "/home/$NUEVO" \
+  -exec chown -R "$NUEVO:$NUEVO" {} + 2>/dev/null || true
 
 echo "[4/6] Colocando la configuración..."
 UD="$H/data/users/$NUEVO"
@@ -695,51 +784,91 @@ if [ -f "$B/hestia/user.conf" ]; then
   done
 fi
 [ -d "$B/hestia/ssl" ] && cp -a "$B/hestia/ssl" "$UD/" 2>/dev/null || true
-for tipo in web dns mail; do
-  [ -f "$B/hestia/$tipo.conf" ] && cp "$B/hestia/$tipo.conf" "$UD/$tipo.conf"
-done
-# Los .conf por objeto viven en el respaldo bajo <tipo>/<nombre>/hestia/
+# Dentro del respaldo, cada objeto guarda DOS .conf con papeles distintos:
+#
+#   <tipo>/<obj>/hestia/<tipo>.conf   la LÍNEA de ese objeto para la lista del
+#                                     usuario  ->  va a  $UD/<tipo>.conf
+#   <tipo>/<obj>/hestia/<obj>.conf    el CONTENIDO del objeto (los registros
+#                                     DNS, los alias web)  ->  va a
+#                                     $UD/<tipo>/<obj>.conf
+#
+# Los tenía cruzados: la lista de dominios acababa llena de registros DNS y
+# v-rebuild-user se quejaba de un «dns/.conf» que no existía.
 for tipo in web dns mail; do
   [ -d "$B/$tipo" ] || continue
   : > "$UD/$tipo.conf.nuevo"
+  mkdir -p "$UD/$tipo"
   for obj in "$B/$tipo"/*/; do
     [ -d "$obj" ] || continue
     n="$(basename "$obj")"
-    f="$obj/hestia/$n.conf"
-    [ -f "$f" ] && cat "$f" >> "$UD/$tipo.conf.nuevo"
+    [ -f "$obj/hestia/$tipo.conf" ] && cat "$obj/hestia/$tipo.conf" >> "$UD/$tipo.conf.nuevo"
+    [ -f "$obj/hestia/$n.conf" ]    && cp  "$obj/hestia/$n.conf" "$UD/$tipo/$n.conf"
   done
   if [ -s "$UD/$tipo.conf.nuevo" ]; then mv "$UD/$tipo.conf.nuevo" "$UD/$tipo.conf"
   else rm -f "$UD/$tipo.conf.nuevo"; fi
-done
-# Las claves DNS y los datos de zona
-for obj in "$B/dns"/*/; do
-  [ -d "$obj" ] || continue
-  n="$(basename "$obj")"
-  [ -f "$obj/hestia/dns.conf" ] && { mkdir -p "$UD/dns"; cp "$obj/hestia/dns.conf" "$UD/dns/$n.conf"; }
 done
 [ -f "$B/cron/cron.conf" ] && cp "$B/cron/cron.conf" "$UD/cron.conf"
 chown -R "$NUEVO:$NUEVO" "$UD" 2>/dev/null || true
 
 echo "[5/6] Bases de datos..."
+FALLO_DB=0
 if [ -n "${DB:-}" ]; then
   IFS=',' read -ra BASES <<< "$DB"
   for b in "${BASES[@]}"; do
     [ -n "$b" ] || continue
     dconf="$B/db/$b/hestia/db.conf"
     dump="$(ls "$B/db/$b/"*.sql.zst "$B/db/$b/"*.sql.gz "$B/db/$b/"*.sql 2>/dev/null | head -1)"
-    dbuser="$(grep -oP "^DB='[^']*' DBUSER='\K[^']*" "$dconf" 2>/dev/null || echo "${b}")"
+    # v-add-database CONCATENA:  database="$user"_"$2"  y  dbuser="$user"_"$3".
+    # Hay que pasarle el SUFIJO, no el nombre completo. El sufijo se obtiene
+    # quitando el prefijo del usuario viejo:
+    #     naturalsurf_platform  con usuario  naturalsurf  ->  platform
+    # y con el usuario nuevo pasa a llamarse  <nuevo>_platform.
+    sufijo="${b#${VIEJO}_}"
+    [ "$sufijo" = "$b" ] && sufijo="$b"     # no llevaba el prefijo: se usa entero
+    dbuser_viejo="$(grep -oP "DBUSER='\K[^']*" "$dconf" 2>/dev/null || echo "$b")"
+    sufijo_user="${dbuser_viejo#${VIEJO}_}"
+    [ "$sufijo_user" = "$dbuser_viejo" ] && sufijo_user="$dbuser_viejo"
     charset="$(grep -oP "CHARSET='\K[^']*" "$dconf" 2>/dev/null || echo utf8mb4)"
+    nueva="${NUEVO}_${sufijo}"
+    nuevo_dbuser="${NUEVO}_${sufijo_user}"
+
+    # MySQL no admite usuarios de más de 32 caracteres, y HestiaCP lo rechaza
+    # con un error a mitad de faena. Se comprueba antes.
+    if [ ${#nuevo_dbuser} -gt 32 ]; then
+      echo "    AVISO: el usuario MySQL '$nuevo_dbuser' tendría ${#nuevo_dbuser} caracteres (máximo 32)."
+      echo "           Elige un nombre de cuenta más corto con --como."
+      FALLO_DB=1
+      continue
+    fi
     dbpass="$(head -c 200 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 20)"
-    echo "    $b (usuario $dbuser, $charset)"
-    $H/bin/v-add-database "$NUEVO" "$b" "$dbuser" "$dbpass" mysql localhost "$charset" \
-      || { echo "    AVISO: no se pudo dar de alta '$b'"; continue; }
+    echo "    $b  ->  $nueva  (usuario $nuevo_dbuser, $charset)"
+    $H/bin/v-add-database "$NUEVO" "$sufijo" "$sufijo_user" "$dbpass" mysql localhost "$charset" \
+      || { echo "    AVISO: no se pudo dar de alta '$nueva'"; FALLO_DB=1; continue; }
     if [ -n "$dump" ]; then
+      # El USE de la cabecera apunta a la base ORIGINAL: si no se quita, el
+      # volcado entero se aplicaría allí y no en la nueva.
       case "$dump" in
         *.zst) zstd -dc "$dump" ;;
         *.gz)  gzip -dc "$dump" ;;
         *)     cat "$dump" ;;
-      esac | sed -E 's/^USE `[^`]*`;$//' | mysql "$b" \
-        && echo "    datos importados" || echo "    AVISO: fallo importando '$b'"
+      # El USE de la cabecera apunta a la base ORIGINAL. Y el DEFINER de vistas
+      # y rutinas apunta al usuario MySQL del servidor viejo, que en el destino
+      # no existe: MySQL corta la importación con «ERROR 1449 ... definer does
+      # not exist». Nuestro propio volcado ya limpia los DEFINER al generarse;
+      # el de HestiaCP no, así que se limpian aquí, igual que hace
+      # bc_strip_definers en lib/mysql.sh.
+      esac | sed -E \
+              -e 's/^USE `[^`]*`;$//' \
+              -e 's/DEFINER=`[^`]*`@`[^`]*`[[:space:]]*//g' \
+              -e "s/DEFINER='[^']*'@'[^']*'[[:space:]]*//g" \
+              -e 's#/\*![0-9]{5} DEFINER=[^*]*\*/##g' \
+              -e 's/SQL SECURITY DEFINER/SQL SECURITY INVOKER/g' \
+           | mysql "$nueva" \
+        && echo "    datos importados en '$nueva'" \
+        || { echo "    AVISO: fallo importando en '$nueva'"; FALLO_DB=1; }
+      n_tablas="$(mysql -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$nueva'" 2>/dev/null || echo 0)"
+      echo "    '$nueva' tiene $n_tablas tablas"
+      [ "${n_tablas:-0}" -eq 0 ] && { echo "    AVISO: '$nueva' quedó VACÍA"; FALLO_DB=1; }
     fi
   done
 fi
@@ -747,11 +876,19 @@ fi
 echo "[6/6] Reconstruyendo la cuenta..."
 $H/bin/v-rebuild-user "$NUEVO" yes || echo "AVISO: v-rebuild-user devolvió error"
 $H/bin/v-update-user-counters "$NUEVO" >/dev/null 2>&1 || true
+# Marca en disco, no solo en pantalla: es lo que comprueba quien llama.
+# Si alguna base falló, NO se marca: un usuario sin sus datos no es un éxito.
+[ "${FALLO_DB:-0}" -eq 0 ] && touch "$WS/LISTO"
 echo "LISTO"
 REMOTO
 
-  local rc_final=$?
   echo
+  # El código de salida no basta: una tubería vacía también sale con cero. Se
+  # exige la marca que solo escribe el script tras completar los seis pasos.
+  if (( rc_final == 0 )) && ! bc_ssh_sudo "test -f '$ws/LISTO'" < /dev/null 2>/dev/null; then
+    bc_err "El script del destino no llegó al final: no se hizo el traslado."
+    rc_final=1
+  fi
   if (( rc_final != 0 )); then
     bc_err "El traslado terminó con errores. La cuenta '$nuevo' puede haber quedado a medias."
     bc_log "Revísala en el panel, o elimínala con: v-delete-user $nuevo"
@@ -762,5 +899,132 @@ REMOTO
   bc_warn "Contraseña del panel para '$nuevo': $contrasena"
   bc_log  "Apúntala ahora: no se guarda en ninguna parte."
   bc_log  "Comprueba dominios, correo y bases en el panel antes de dar por buena la migración."
+  return 0
+}
+
+# =============================================================================
+# La instantánea más reciente NO siempre es la que quieres
+# =============================================================================
+# Comprobado en el servidor de pruebas, y por poco no se ve:
+#
+#   53b3d6c5  2026-09-08   web:1   correo:0   bases:14   <- la más reciente
+#   2dd24c3a  2026-09-07   web:23  correo:6   bases:14
+#   4c7261e4  2026-09-06   web:23  correo:6   bases:14
+#
+# Se habían borrado los dominios el día 8, y el respaldo de esa madrugada
+# recogió fielmente el servidor ya vaciado. Restaurar con «latest» habría
+# devuelto UN dominio de 23 y ningún buzón, sin un solo aviso: para la
+# herramienta, un respaldo correcto de un servidor vacío es indistinguible de
+# un respaldo correcto de un servidor lleno.
+#
+# Por eso se compara siempre con las anteriores. Un descenso brusco no es
+# necesariamente un error —a veces se borra a propósito— pero tiene que
+# saltar a la vista ANTES de restaurar, no después.
+# =============================================================================
+
+# Prepara un directorio temporal con el acceso y la clave de un usuario.
+# Deja en BC_AD_TMP la ruta; quien llama se encarga de borrarla.
+BC_AD_TMP=""
+bc_ad_preparar() {
+  local usuario="$1" claves="$2" rc="$3"
+  BC_AD_TMP="$(mktemp -d)"; chmod 700 "$BC_AD_TMP"
+  cp "$rc" "$BC_AD_TMP/rclone.conf"; chmod 600 "$BC_AD_TMP/rclone.conf"
+  local k; k="$(awk -F'\t' -v u="$usuario" '$1==u{print $2; exit}' <<<"$claves")"
+  [[ -n "$k" ]] || return 1
+  printf '%s' "$k" > "$BC_AD_TMP/clave"; chmod 600 "$BC_AD_TMP/clave"
+}
+
+# Qué contiene una instantánea, según el backup.conf que HestiaCP guarda dentro.
+# Salida: fecha<TAB>nweb<TAB>ndns<TAB>ncorreo<TAB>nbases
+bc_ad_contenido() {
+  local repo="$1" u="$2" snap="$3"
+  local c
+  c="$(RCLONE_CONFIG="$BC_AD_TMP/rclone.conf" RESTIC_PASSWORD_FILE="$BC_AD_TMP/clave" \
+       restic -r "${repo%/}/$u" dump "$snap" "/home/$u/backup/backup.conf" 2>/dev/null || true)"
+  [[ -n "$c" ]] || { printf '?\t?\t?\t?\t?\n'; return 0; }
+  local campo valor
+  local -a n=()
+  for campo in WEB DNS MAIL DB; do
+    valor="$(tr ' ' '\n' <<<"$c" | grep "^$campo=" | cut -d\' -f2)"
+    n+=("$( { tr ',' '\n' <<<"$valor" | grep -c . || true; } )")
+  done
+  local fecha; fecha="$(tr ' ' '\n' <<<"$c" | grep '^DATE=' | cut -d\' -f2)"
+  printf '%s\t%s\t%s\t%s\t%s\n' "${fecha:-?}" "${n[0]}" "${n[1]}" "${n[2]}" "${n[3]}"
+}
+
+# Historial de un usuario: qué había en cada una de las últimas instantáneas.
+bc_adoptar_historial() {
+  local usuario="${BC_OPT_USERS:-}"
+  local cuantas="${BC_OPT_CUANTAS:-8}"
+
+  local claves; claves="$(bc_ad_leer_claves)" || return 1
+  BC_AD_REPO="$(bc_ad_repo_rescatado || true)"
+  [[ -n "$BC_AD_REPO" ]] || { bc_err "el rescate no dice cuál es el repositorio."; return 1; }
+  local rc; rc="$(bc_ad_rclone_rescatado)"
+  [[ -n "$rc" ]] || { bc_err "no hay rclone.conf rescatado."; return 1; }
+  bc_require_cmd restic rclone
+
+  local -a usuarios=()
+  if [[ -n "$usuario" ]]; then
+    local u
+    for u in ${usuario//,/ }; do usuarios+=("$u"); done
+  else
+    mapfile -t usuarios < <(cut -f1 <<<"$claves")
+  fi
+
+  local u
+  for u in "${usuarios[@]}"; do
+    bc_section "Historial de '$u'"
+    bc_ad_preparar "$u" "$claves" "$rc" || { bc_err "no hay clave de '$u'."; continue; }
+    # shellcheck disable=SC2064
+    trap "rm -rf '$BC_AD_TMP'" RETURN
+
+    local ids
+    ids="$(RCLONE_CONFIG="$BC_AD_TMP/rclone.conf" RESTIC_PASSWORD_FILE="$BC_AD_TMP/clave" \
+           restic -r "${BC_AD_REPO%/}/$u" snapshots --json 2>/dev/null \
+           | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+for s in d[-int('$cuantas'):][::-1]: print(s['short_id'])
+" 2>/dev/null || true)"
+    if [[ -z "$ids" ]]; then
+      bc_err "no se pudo abrir el repositorio de '$u'."
+      rm -rf "$BC_AD_TMP"; continue
+    fi
+
+    local filas; filas="$(mktemp)"
+    local id linea
+    while IFS= read -r id; do
+      [[ -n "$id" ]] || continue
+      linea="$(bc_ad_contenido "$BC_AD_REPO" "$u" "$id")"
+      printf '%s\t%s\n' "$id" "$linea" >> "$filas"
+    done <<<"$ids"
+
+    {
+      printf 'INSTANTÁNEA\tFECHA\tWEB\tDNS\tCORREO\tBASES\n'
+      cat "$filas"
+    } | bc_table | sed 's/^/        /'
+
+    # ¿La más reciente tiene menos que alguna anterior?
+    local top_w top_m top_d act_w act_m act_d
+    act_w="$(head -1 "$filas" | cut -f3)"; act_m="$(head -1 "$filas" | cut -f5)"; act_d="$(head -1 "$filas" | cut -f6)"
+    top_w="$( { cut -f3 "$filas" | grep -E '^[0-9]+$' || true; } | sort -n | tail -1)"
+    top_m="$( { cut -f5 "$filas" | grep -E '^[0-9]+$' || true; } | sort -n | tail -1)"
+    top_d="$( { cut -f6 "$filas" | grep -E '^[0-9]+$' || true; } | sort -n | tail -1)"
+    local mejor; mejor="$(awk -F'\t' -v w="$top_w" '$3==w {print $1"  ("$2")"; exit}' "$filas")"
+
+    echo
+    if [[ "$act_w" =~ ^[0-9]+$ ]] && { (( act_w < top_w )) || (( act_m < top_m )) || (( act_d < top_d )); }; then
+      bc_err "LA MÁS RECIENTE TIENE MENOS QUE UNA ANTERIOR."
+      bc_log "        ahora: web $act_w · correo $act_m · bases $act_d"
+      bc_log "        antes: web $top_w · correo $top_m · bases $top_d"
+      bc_log "        Si se borró algo a propósito, todo en orden. Si no, restaura desde:"
+      bc_log "            --snapshot $mejor"
+      BC_DELIBERATE_EXIT=1
+    else
+      bc_ok "La más reciente es la más completa: se puede usar «latest» con confianza."
+    fi
+    rm -rf "$BC_AD_TMP"; BC_AD_TMP=""
+  done
   return 0
 }
