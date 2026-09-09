@@ -413,6 +413,53 @@
           <input type="text" data-opt="snapshot" placeholder="latest" autocomplete="off"></label>
       </div>
 
+      <h3>Con otro nombre</h3>
+      <p class="ayuda">Para acopiar cuentas de varios clientes en un mismo VPS, donde
+         los choques de nombre son la norma. HestiaCP no sabe renombrar cuentas, así que
+         la cuenta se crea con el nombre nuevo y se le devuelven sus dominios, correo,
+         bases y archivos. <strong>Los dominios NO se renombran</strong>: son nombres DNS.</p>
+      <div class="campos" id="form-como">
+        <label>Servidor de destino <input type="text" data-opt="destino" placeholder="root@servidor-nuevo" autocomplete="off"></label>
+        <label>Usuario de origen <input type="text" data-opt="usuarios" placeholder="naturalsurf" autocomplete="off"></label>
+        <label>Nombre nuevo <span class="pista">minúsculas; cuanto más corto mejor, por el límite de 32 de MySQL</span>
+          <input type="text" data-opt="como" placeholder="cliente_j_naturalsurf" autocomplete="off"></label>
+        <label>Instantánea <span class="pista">«latest» o el identificador</span>
+          <input type="text" data-opt="snapshot" placeholder="latest" autocomplete="off"></label>
+      </div>
+      <div class="acciones">
+        <div class="accion"><button class="btn" data-act="adoptar-historial" data-form="#form-como">Ver el historial de instantáneas</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Qué contenía cada instantánea: dominios, correo y bases. <strong>Avisa si la más reciente tiene menos que una anterior</strong>, que es lo que pasa cuando se borró algo antes del último respaldo.</div>
+        </div>
+        <div class="accion"><button class="btn" data-act="adoptar-como-dry" data-form="#form-como">Ensayo: traer con otro nombre</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Comprueba el destino, avisa si la instantánea está menguada y enumera los pasos.</div>
+        </div>
+        <div class="accion"><button class="btn btn-destruye" data-act="adoptar-como" data-form="#form-como"
+                  data-confirmar="Se CREARÁ una cuenta nueva en el servidor de destino con todo el contenido del usuario de origen.&#10;&#10;¿Continuar?">Traer con otro nombre</button>
+          <div class="accion-desc"><span class="destruye">Crea una cuenta y escribe mucho en el destino.</span> Si el nombre ya existe allí, se detiene antes de tocar nada.</div>
+        </div>
+      </div>
+
+      <h3>Bases que HestiaCP no conoce</h3>
+      <p class="ayuda">Las creadas a mano en MySQL no salen en el panel ni viajan en el
+         respaldo de la cuenta. En el servidor de pruebas eran <strong>65 de 80</strong>.
+         Registrarlas las hace visibles y administrables, <strong>sin crearlas ni
+         renombrarlas</strong>: los datos y las credenciales que ya usan tus aplicaciones
+         no se tocan.</p>
+      <div class="campos" id="form-registrar">
+        <label>Servidor <input type="text" data-opt="destino" placeholder="root@servidor" autocomplete="off"></label>
+        <label>Cuenta de HestiaCP <span class="pista">bajo la que aparecerán</span>
+          <input type="text" data-opt="usuario_hestia" placeholder="admin" autocomplete="off"></label>
+      </div>
+      <div class="acciones">
+        <div class="accion"><button class="btn" data-act="adoptar-registrar-dry" data-form="#form-registrar">Ensayo: cuáles registraría</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Lista las bases que existen en MySQL y el panel no ve. Excluye las del sistema.</div>
+        </div>
+        <div class="accion"><button class="btn btn-escribe" data-act="adoptar-registrar" data-form="#form-registrar"
+                  data-confirmar="Se crearán usuarios MySQL y se registrarán las bases en el panel.&#10;&#10;Ninguna base se crea, borra ni renombra.&#10;&#10;¿Continuar?">Registrarlas en el panel</button>
+          <div class="accion-desc"><span class="escribe">Escribe en HestiaCP y crea usuarios MySQL.</span> No crea, borra ni renombra ninguna base: solo las hace visibles.</div>
+        </div>
+      </div>
+
       <div class="acciones">
         <div class="accion"><button class="btn" data-act="adoptar-dry" data-form="#form-adoptar">Ensayo: qué haría</button>
           <div class="accion-desc"><span class="no-toca">No toca nada.</span> Se conecta al destino, comprueba que hay HestiaCP, si falta <code>rclone</code> y si alguno de los usuarios ya existe allí. Enumera lo que haría, sin hacerlo.</div>

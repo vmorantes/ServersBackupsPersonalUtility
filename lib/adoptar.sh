@@ -755,24 +755,84 @@ CONTACTO="$(grep -oP "^CONTACT='\K[^']*" "$B/hestia/user.conf" 2>/dev/null || tr
 [ -n "$CONTACTO" ] || CONTACTO="$NUEVO@localhost"
 $H/bin/v-add-user "$NUEVO" "$PASS" "$CONTACTO" || { echo "FALLO: v-add-user"; exit 1; }
 
-echo "[3/6] Copiando archivos a /home/$NUEVO ..."
-# El directorio backup/ no se copia: es el envoltorio del respaldo, no del usuario.
+echo "[3/7] Preparando dominios..."
+# ---------------------------------------------------------------------------
+# Los dominios se crean ANTES de poner los archivos.
+# ---------------------------------------------------------------------------
+# v-add-web-domain se niega si la carpeta ya existe («Web domain folder should
+# not exist»). Copiando primero, la creación fallaba y el sitio quedaba con sus
+# archivos en disco pero invisible para el panel: sin vhost, sin servir nada.
+#
+# Y si el respaldo no trae la configuración de los dominios —pasa cuando el
+# usuario tenía WEB='*' en backup-excludes.conf, que excluye los dominios del
+# respaldo de HestiaCP— se reconstruyen a partir de las carpetas que sí
+# viajaron dentro del /home. Es la diferencia entre recuperar los archivos y
+# recuperar el sitio.
+lista_dominios() {   # $1: web|mail
+  local tipo="$1" desde_conf="$2"
+  if [ -n "$desde_conf" ]; then
+    echo "$desde_conf" | tr ',' '\n' | grep -v '^$'
+  elif [ -d "$SRC/$tipo" ]; then
+    ls -1 "$SRC/$tipo" 2>/dev/null
+  fi
+}
+WEBDOMS="$(lista_dominios web "${WEB:-}")"
+MAILDOMS="$(lista_dominios mail "${MAIL:-}")"
+[ -z "${WEB:-}" ] && [ -n "$WEBDOMS" ] && \
+  echo "    AVISO: el respaldo no traía la configuración de los dominios web."
+[ -z "${WEB:-}" ] && [ -n "$WEBDOMS" ] && \
+  echo "           Se reconstruyen desde las carpetas: $(echo $WEBDOMS | tr '\n' ' ')"
+
+for dom in $WEBDOMS; do
+  [ -n "$dom" ] || continue
+  $H/bin/v-add-web-domain "$NUEVO" "$dom" >/dev/null 2>&1 \
+    && echo "    web: $dom" \
+    || echo "    AVISO: no se pudo crear el dominio web '$dom'"
+done
+for dom in $MAILDOMS; do
+  [ -n "$dom" ] || continue
+  $H/bin/v-add-mail-domain "$NUEVO" "$dom" >/dev/null 2>&1 \
+    && echo "    correo: $dom" \
+    || echo "    AVISO: no se pudo crear el dominio de correo '$dom'"
+done
+
+echo "[4/7] Colocando archivos en /home/$NUEVO ..."
+# `mv` y no `cp`: es el mismo sistema de archivos, así que renombrar es
+# instantáneo y NO ocupa el doble. Copiando, un usuario de 11 GB pedía 22 GB
+# libres y llenaba el disco del servidor a mitad de faena.
 for d in "$SRC"/* "$SRC"/.[!.]*; do
   [ -e "$d" ] || continue
-  case "$(basename "$d")" in backup) continue ;; esac
-  cp -a "$d" "/home/$NUEVO/" 2>/dev/null || true
+  n="$(basename "$d")"
+  case "$n" in
+    backup) continue ;;                 # envoltorio del respaldo, no del usuario
+    conf)   continue ;;                 # lo genera HestiaCP al reconstruir
+    web|mail)
+      # Su estructura ya la creó v-add-*-domain: se vuelca el contenido dentro
+      for sub in "$d"/*; do
+        [ -e "$sub" ] || continue
+        dom="$(basename "$sub")"
+        if [ -d "/home/$NUEVO/$n/$dom" ]; then
+          for x in "$sub"/*; do
+            [ -e "$x" ] || continue
+            rm -rf "/home/$NUEVO/$n/$dom/$(basename "$x")"
+            mv "$x" "/home/$NUEVO/$n/$dom/"
+          done
+        else
+          mv "$sub" "/home/$NUEVO/$n/"
+        fi
+      done
+      continue ;;
+  esac
+  rm -rf "/home/$NUEVO/$n"
+  mv "$d" "/home/$NUEVO/$n"
 done
-# /home/<usuario>/conf pertenece a root por diseño en HestiaCP: se excluye para
+# /home/<usuario>/conf pertenece a root por diseño: se excluye del chown para
 # no llenar la salida de avisos que no son problemas.
-chown -R "$NUEVO:$NUEVO" "/home/$NUEVO" 2>/dev/null || true
 find "/home/$NUEVO" -maxdepth 1 ! -name conf ! -path "/home/$NUEVO" \
   -exec chown -R "$NUEVO:$NUEVO" {} + 2>/dev/null || true
 
-echo "[4/6] Colocando la configuración..."
+echo "[5/7] Colocando la configuración..."
 UD="$H/data/users/$NUEVO"
-# El user.conf trae los límites, plantillas y el paquete del original. Se
-# conservan los contadores que acaba de calcular v-add-user: los del original
-# se refieren a otro servidor.
 if [ -f "$B/hestia/user.conf" ]; then
   cp "$B/hestia/user.conf" "$UD/user.conf.original"
   for k in PACKAGE WEB_TEMPLATE BACKEND_TEMPLATE PROXY_TEMPLATE DNS_TEMPLATE \
@@ -784,17 +844,13 @@ if [ -f "$B/hestia/user.conf" ]; then
   done
 fi
 [ -d "$B/hestia/ssl" ] && cp -a "$B/hestia/ssl" "$UD/" 2>/dev/null || true
+
 # Dentro del respaldo, cada objeto guarda DOS .conf con papeles distintos:
-#
-#   <tipo>/<obj>/hestia/<tipo>.conf   la LÍNEA de ese objeto para la lista del
-#                                     usuario  ->  va a  $UD/<tipo>.conf
-#   <tipo>/<obj>/hestia/<obj>.conf    el CONTENIDO del objeto (los registros
-#                                     DNS, los alias web)  ->  va a
-#                                     $UD/<tipo>/<obj>.conf
-#
-# Los tenía cruzados: la lista de dominios acababa llena de registros DNS y
-# v-rebuild-user se quejaba de un «dns/.conf» que no existía.
-for tipo in web dns mail; do
+#   <tipo>/<obj>/hestia/<tipo>.conf   su LÍNEA para la lista del usuario
+#   <tipo>/<obj>/hestia/<obj>.conf    su CONTENIDO (registros DNS, alias web)
+# El web y el correo ya se crearon arriba; aquí se recupera lo que el respaldo
+# sí traiga, que es más fiel que lo reconstruido.
+for tipo in dns web mail; do
   [ -d "$B/$tipo" ] || continue
   : > "$UD/$tipo.conf.nuevo"
   mkdir -p "$UD/$tipo"
@@ -810,7 +866,7 @@ done
 [ -f "$B/cron/cron.conf" ] && cp "$B/cron/cron.conf" "$UD/cron.conf"
 chown -R "$NUEVO:$NUEVO" "$UD" 2>/dev/null || true
 
-echo "[5/6] Bases de datos..."
+echo "[6/7] Bases de datos..."
 FALLO_DB=0
 if [ -n "${DB:-}" ]; then
   IFS=',' read -ra BASES <<< "$DB"
@@ -818,45 +874,40 @@ if [ -n "${DB:-}" ]; then
     [ -n "$b" ] || continue
     dconf="$B/db/$b/hestia/db.conf"
     dump="$(ls "$B/db/$b/"*.sql.zst "$B/db/$b/"*.sql.gz "$B/db/$b/"*.sql 2>/dev/null | head -1)"
+
     # v-add-database CONCATENA:  database="$user"_"$2"  y  dbuser="$user"_"$3".
-    # Hay que pasarle el SUFIJO, no el nombre completo. El sufijo se obtiene
-    # quitando el prefijo del usuario viejo:
-    #     naturalsurf_platform  con usuario  naturalsurf  ->  platform
+    # Hay que pasarle el SUFIJO, no el nombre completo:
+    #   naturalsurf_platform  con usuario  naturalsurf  ->  platform
     # y con el usuario nuevo pasa a llamarse  <nuevo>_platform.
     sufijo="${b#${VIEJO}_}"
-    [ "$sufijo" = "$b" ] && sufijo="$b"     # no llevaba el prefijo: se usa entero
-    dbuser_viejo="$(grep -oP "DBUSER='\K[^']*" "$dconf" 2>/dev/null || echo "$b")"
+    [ "$sufijo" = "$b" ] && sufijo="$b"
+    dbuser_viejo="$(grep -oP "DBUSER='\\K[^']*" "$dconf" 2>/dev/null || echo "$b")"
     sufijo_user="${dbuser_viejo#${VIEJO}_}"
     [ "$sufijo_user" = "$dbuser_viejo" ] && sufijo_user="$dbuser_viejo"
-    charset="$(grep -oP "CHARSET='\K[^']*" "$dconf" 2>/dev/null || echo utf8mb4)"
+    charset="$(grep -oP "CHARSET='\\K[^']*" "$dconf" 2>/dev/null || echo utf8mb4)"
     nueva="${NUEVO}_${sufijo}"
     nuevo_dbuser="${NUEVO}_${sufijo_user}"
 
     # MySQL no admite usuarios de más de 32 caracteres, y HestiaCP lo rechaza
-    # con un error a mitad de faena. Se comprueba antes.
+    # a mitad de faena. Se comprueba antes.
     if [ ${#nuevo_dbuser} -gt 32 ]; then
       echo "    AVISO: el usuario MySQL '$nuevo_dbuser' tendría ${#nuevo_dbuser} caracteres (máximo 32)."
       echo "           Elige un nombre de cuenta más corto con --como."
-      FALLO_DB=1
-      continue
+      FALLO_DB=1; continue
     fi
     dbpass="$(head -c 200 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 20)"
     echo "    $b  ->  $nueva  (usuario $nuevo_dbuser, $charset)"
     $H/bin/v-add-database "$NUEVO" "$sufijo" "$sufijo_user" "$dbpass" mysql localhost "$charset" \
       || { echo "    AVISO: no se pudo dar de alta '$nueva'"; FALLO_DB=1; continue; }
     if [ -n "$dump" ]; then
-      # El USE de la cabecera apunta a la base ORIGINAL: si no se quita, el
-      # volcado entero se aplicaría allí y no en la nueva.
+      # El USE apunta a la base ORIGINAL: sin quitarlo, el volcado entero se
+      # aplicaría allí. Y el DEFINER de vistas y rutinas apunta al usuario
+      # MySQL del servidor viejo, que aquí no existe: MySQL corta con
+      # «ERROR 1449 ... definer does not exist».
       case "$dump" in
         *.zst) zstd -dc "$dump" ;;
         *.gz)  gzip -dc "$dump" ;;
         *)     cat "$dump" ;;
-      # El USE de la cabecera apunta a la base ORIGINAL. Y el DEFINER de vistas
-      # y rutinas apunta al usuario MySQL del servidor viejo, que en el destino
-      # no existe: MySQL corta la importación con «ERROR 1449 ... definer does
-      # not exist». Nuestro propio volcado ya limpia los DEFINER al generarse;
-      # el de HestiaCP no, así que se limpian aquí, igual que hace
-      # bc_strip_definers en lib/mysql.sh.
       esac | sed -E \
               -e 's/^USE `[^`]*`;$//' \
               -e 's/DEFINER=`[^`]*`@`[^`]*`[[:space:]]*//g' \
@@ -873,11 +924,27 @@ if [ -n "${DB:-}" ]; then
   done
 fi
 
-echo "[6/6] Reconstruyendo la cuenta..."
+echo "[7/7] Reconstruyendo la cuenta..."
 $H/bin/v-rebuild-user "$NUEVO" yes || echo "AVISO: v-rebuild-user devolvió error"
+$H/bin/v-rebuild-web-domains "$NUEVO" yes >/dev/null 2>&1 || true
+$H/bin/v-rebuild-dns-domains "$NUEVO" yes >/dev/null 2>&1 || true
 $H/bin/v-update-user-counters "$NUEVO" >/dev/null 2>&1 || true
+$H/bin/v-update-user-disk "$NUEVO" >/dev/null 2>&1 || true
+echo "  web:   $($H/bin/v-list-web-domains "$NUEVO" plain 2>/dev/null | wc -l)"
+echo "  dns:   $($H/bin/v-list-dns-domains "$NUEVO" plain 2>/dev/null | wc -l)"
+echo "  correo:$($H/bin/v-list-mail-domains "$NUEVO" plain 2>/dev/null | wc -l)"
+echo "  bases: $($H/bin/v-list-databases "$NUEVO" plain 2>/dev/null | wc -l)"
 # Marca en disco, no solo en pantalla: es lo que comprueba quien llama.
 # Si alguna base falló, NO se marca: un usuario sin sus datos no es un éxito.
+# La marca solo si además están todas las bases que anunciaba el respaldo: un
+# usuario sin sus datos no es un traslado correcto, y al borrar sin querer este
+# bloque la orden llegó a informar de un éxito con CERO bases restauradas.
+ESPERADAS=$( { echo "${DB:-}" | tr ',' '\n' | grep -c . ; } || echo 0)
+LOGRADAS=$($H/bin/v-list-databases "$NUEVO" plain 2>/dev/null | grep -c . || echo 0)
+if [ "$ESPERADAS" -gt 0 ] && [ "$LOGRADAS" -lt "$ESPERADAS" ]; then
+  echo "AVISO: el respaldo tenía $ESPERADAS base(s) y solo hay $LOGRADAS."
+  FALLO_DB=1
+fi
 [ "${FALLO_DB:-0}" -eq 0 ] && touch "$WS/LISTO"
 echo "LISTO"
 REMOTO
@@ -1026,5 +1093,147 @@ for s in d[-int('$cuantas'):][::-1]: print(s['short_id'])
     fi
     rm -rf "$BC_AD_TMP"; BC_AD_TMP=""
   done
+  return 0
+}
+
+# =============================================================================
+# Que las bases que HestiaCP no conoce dejen de ser invisibles
+# =============================================================================
+# En el servidor de pruebas, HestiaCP conocía 14 bases de 80. Las otras 66 se
+# habían creado a mano en MySQL. `adoptar-bases` las lleva a otro servidor con
+# sus datos intactos... y allí siguen siendo invisibles: no salen en el panel,
+# no se respaldan con la cuenta, y nadie se acuerda de ellas.
+#
+# Registrarlas es reproducir lo que hace v-add-database SIN volver a crear la
+# base: un usuario MySQL con permisos, y una línea en data/users/<u>/db.conf.
+# El campo MD5 no se calcula: HestiaCP lo LEE del propio MySQL con
+# SHOW CREATE USER, así que aquí se hace igual.
+#
+# v-add-database no sirve para esto: crea la base (y falla si existe) y además
+# obliga a llamarla <usuario>_<sufijo>. Una base que ya se llama 'augustoangel'
+# no puede adoptarse por esa vía sin renombrarla, y renombrarla rompería la
+# aplicación que la usa.
+# =============================================================================
+
+bc_adoptar_registrar() {
+  local destino="${BC_OPT_TO:-}"
+  local uh="${BC_OPT_HESTIA_USER:-}"
+  local pedidas="${BC_OPT_DBS:-}"
+  local seco="${BC_OPT_DRY:-0}"
+
+  [[ -n "$destino" ]] || bc_die "indica el servidor: --to root@servidor"
+  [[ -n "$uh"      ]] || bc_die "indica bajo qué cuenta de HestiaCP registrarlas: --usuario-hestia <cuenta>"
+
+  bc_section "Registrar en el panel las bases que HestiaCP no conoce"
+  bc_log "No se crea ni se borra ninguna base: solo se hacen visibles y"
+  bc_log "administrables desde el panel, bajo la cuenta '$uh'."
+
+  bc_require_cmd ssh
+  bc_ssh_init "$destino" || bc_die "no se pudo conectar a $destino."
+  trap 'bc_ssh_close' RETURN
+  bc_ssh_sudo "test -d /usr/local/hestia/data/users/$uh" >/dev/null 2>&1 \
+    || bc_die "en $destino no existe la cuenta de HestiaCP '$uh'."
+
+  local desconocidas
+  desconocidas="$(bc_ssh_sudo "bash -s '$uh'" < /dev/null <<'REMOTO' 2>/dev/null || true
+H=/usr/local/hestia
+conocidas="$(cat $H/data/users/*/db.conf 2>/dev/null | grep -oP "^DB='\K[^']+" | sort -u)"
+# roundcube es la base del webmail y phpmyadmin la del gestor: son del
+# sistema, no de ningún cliente. Registrarlas bajo una cuenta las pondría a
+# merced de quien administre esa cuenta.
+mysql -N -e "SELECT schema_name FROM information_schema.schemata
+             WHERE schema_name NOT IN ('information_schema','performance_schema',
+                                       'mysql','sys','phpmyadmin','roundcube','test')" \
+  | while IFS= read -r b; do
+      [ -n "$b" ] || continue
+      grep -qx "$b" <<< "$conocidas" || echo "$b"
+    done
+REMOTO
+)"
+  desconocidas="$(sed '/^$/d' <<<"$desconocidas")"
+
+  if [[ -z "$desconocidas" ]]; then
+    bc_ok "No hay ninguna base fuera del panel: todo lo que hay en MySQL ya se conoce."
+    return 0
+  fi
+
+  local -a lista=()
+  if [[ -n "$pedidas" ]]; then
+    local b
+    for b in ${pedidas//,/ }; do
+      grep -qx "$b" <<<"$desconocidas" || bc_die "'$b' no está entre las desconocidas, o no existe."
+      lista+=("$b")
+    done
+  else
+    mapfile -t lista <<<"$desconocidas"
+  fi
+
+  bc_warn "$(grep -c . <<<"$desconocidas") base(s) existen en MySQL y el panel no las ve."
+  bc_log "Se registrarán ${#lista[@]}:"
+  printf '        - %s\n' "${lista[@]}"
+
+  if (( seco )); then
+    echo
+    bc_ok "Simulación (--dry-run): no se ha registrado nada."
+    return 0
+  fi
+  bc_confirm "¿Registrarlas bajo la cuenta '$uh'?" n || { bc_log "Cancelado."; return 0; }
+
+  # La lista va como ARGUMENTOS y el script por la entrada estándar: `bash -s`
+  # lee el script de ahí, así que meter la lista por el mismo sitio se la
+  # comería. Es el mismo error que ya me costó un traslado en falso.
+  local args; args="$(printf '%q ' "${lista[@]}")"
+  bc_ssh_sudo_stdin "bash -s '$uh' $args" <<'REMOTO' 2>&1 | sed 's/^/        /'
+set -uo pipefail
+UH="$1"; shift
+H=/usr/local/hestia
+UD="$H/data/users/$UH"
+
+for b in "$@"; do
+  [ -n "$b" ] || continue
+
+  # El usuario MySQL no puede pasar de 32 caracteres. Si el nombre de la base
+  # ya los ocupa, se recorta y se avisa: mejor un nombre feo que ninguna base.
+  dbuser="$b"
+  if [ ${#dbuser} -gt 32 ]; then
+    dbuser="$(printf '%s' "$b" | cut -c1-26)_$(printf '%s' "$b" | md5sum | cut -c1-5)"
+    echo "$b: el usuario MySQL se acorta a '$dbuser' (el nombre pasaba de 32)"
+  fi
+
+  if grep -q "^DB='$b' " "$UD/db.conf" 2>/dev/null; then
+    echo "$b: ya estaba registrado, no se toca"
+    continue
+  fi
+
+  pass="$(head -c 200 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 20)"
+  mysql -e "CREATE USER IF NOT EXISTS \`$dbuser\`@'localhost' IDENTIFIED BY '$pass'" 2>/dev/null     || { echo "$b: no se pudo crear el usuario MySQL '$dbuser'"; continue; }
+  mysql -e "GRANT ALL PRIVILEGES ON \`$b\`.* TO \`$dbuser\`@'localhost'" 2>/dev/null     || { echo "$b: no se pudieron dar permisos a '$dbuser'"; continue; }
+  mysql -e "FLUSH PRIVILEGES" 2>/dev/null || true
+
+  # HestiaCP no calcula este hash: lo LEE del propio MySQL. Se hace igual, y
+  # se acepta cualquiera de los formatos que devuelve MySQL o MariaDB.
+  crea="$(mysql -N -e "SHOW CREATE USER \`$dbuser\`@'localhost'" 2>/dev/null || true)"
+  md5="$(grep -oP "(?<=AS ')[^']+" <<< "$crea" | head -1)"
+  [ -n "$md5" ] || md5="$(grep -oP '\*[A-F0-9]{40}' <<< "$crea" | head -1)"
+  [ -n "$md5" ] || md5=""
+
+  charset="$(mysql -N -e "SELECT default_character_set_name FROM information_schema.schemata WHERE schema_name='$b'" 2>/dev/null || echo utf8mb4)"
+  t="$(date +'%T')"; d="$(date +'%F')"
+  printf "DB='%s' DBUSER='%s' MD5='%s' HOST='localhost' TYPE='mysql' CHARSET='%s' U_DISK='0' SUSPENDED='no' TIME='%s' DATE='%s'\n"     "$b" "$dbuser" "$md5" "$(printf '%s' "$charset" | tr '[:lower:]' '[:upper:]')" "$t" "$d" >> "$UD/db.conf"
+  chmod 660 "$UD/db.conf"
+  n="$(mysql -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$b'" 2>/dev/null || echo '?')"
+  echo "$b: registrado (usuario $dbuser, $n tablas)"
+done
+chown "$UH:$UH" "$UD/db.conf" 2>/dev/null || true
+REMOTO
+
+  bc_ssh_sudo "/usr/local/hestia/bin/v-update-user-counters '$uh'" < /dev/null >/dev/null 2>&1 || true
+  local n
+  n="$(bc_ssh_sudo "/usr/local/hestia/bin/v-list-databases '$uh' plain" < /dev/null 2>/dev/null | grep -c . || true)"
+  echo
+  bc_ok "La cuenta '$uh' tiene ahora $n base(s) visibles en el panel."
+  bc_log "Cada una con su propio usuario MySQL. Las contraseñas se pueden cambiar"
+  bc_log "desde el panel; las aplicaciones que ya usaban esas bases siguen con sus"
+  bc_log "credenciales de siempre, que no se han tocado."
   return 0
 }

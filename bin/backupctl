@@ -527,6 +527,21 @@ case "$BC_CMD" in
     fi
     ;;
 
+  adoptar-registrar)
+    # Hace visibles en el panel las bases que HestiaCP no conoce, sin crearlas
+    # ni renombrarlas.
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --to)             BC_OPT_TO="${2:-}"; shift 2 ;;
+        --usuario-hestia) BC_OPT_HESTIA_USER="${2:-}"; shift 2 ;;
+        --bases)          BC_OPT_DBS="${2:-}"; shift 2 ;;
+        --dry-run|-n)     BC_OPT_DRY=1; shift ;;
+        *) bc_die "opción desconocida para 'adoptar-registrar': $1" ;;
+      esac
+    done
+    bc_adoptar_registrar
+    ;;
+
   adoptar-bases)
     # Las bases que HestiaCP no conoce viven solo en el zip de backupctl.
     while [[ $# -gt 0 ]]; do
