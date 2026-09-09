@@ -508,6 +508,7 @@ case "$BC_CMD" in
         --to)        BC_OPT_TO="${2:-}"; shift 2 ;;
         --usuarios)  BC_OPT_USERS="${2:-}"; shift 2 ;;
         --snapshot)  BC_OPT_SNAPSHOT="${2:-}"; shift 2 ;;
+        --como)      BC_OPT_COMO="${2:-}"; shift 2 ;;
         --inventario|--que-hay) BC_OPT_INVENTARIO=1; shift ;;
         --dry-run|-n) BC_OPT_DRY=1; shift ;;
         *) bc_die "opción desconocida para 'adoptar': $1" ;;
@@ -515,9 +516,27 @@ case "$BC_CMD" in
     done
     if [[ "${BC_OPT_INVENTARIO:-0}" == "1" || -z "${BC_OPT_TO:-}" ]]; then
       bc_adoptar_inventario
+    elif [[ -n "${BC_OPT_COMO:-}" ]]; then
+      bc_adoptar_como
     else
       bc_adoptar_run
     fi
+    ;;
+
+  adoptar-bases)
+    # Las bases que HestiaCP no conoce viven solo en el zip de backupctl.
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --to)       BC_OPT_TO="${2:-}"; shift 2 ;;
+        --zip)      BC_OPT_ZIP="${2:-}"; shift 2 ;;
+        --bases)    BC_OPT_DBS="${2:-}"; shift 2 ;;
+        --prefijo)  BC_OPT_PREFIJO="${2:-}"; shift 2 ;;
+        --solo-desconocidas) BC_OPT_SOLO_DESCONOCIDAS=1; shift ;;
+        --dry-run|-n) BC_OPT_DRY=1; shift ;;
+        *) bc_die "opción desconocida para 'adoptar-bases': $1" ;;
+      esac
+    done
+    bc_adoptar_bases
     ;;
 
   exec-count)

@@ -336,3 +336,431 @@ bc_adoptar_run() {
   bc_log  "Comprueba en el panel: dominios, correo y bases de datos."
   return 0
 }
+
+# =============================================================================
+# Las bases de datos que HestiaCP NO conoce
+# =============================================================================
+# El respaldo de HestiaCP solo incluye las bases que están registradas en su
+# panel. En el servidor de pruebas eran 14 de 80: las otras 66 se habían creado
+# a mano en MySQL y no existen en NINGUNA instantánea de Restic.
+#
+# Esas viven solo en el zip de backupctl, que vuelca todo lo que hay en MySQL.
+# Esta orden las lleva a otro servidor, y de paso permite renombrarlas: una base
+# puede llamarse distinto en el destino sin tocar el respaldo de origen.
+#
+# El SQL viaja por la entrada estándar de un `mysql` remoto: no se deja ningún
+# archivo intermedio en el servidor de destino.
+# =============================================================================
+
+# Las bases que HestiaCP conoce, según el rescate. Sirve para no duplicar: las
+# que HestiaCP conoce llegan solas al restaurar el usuario.
+bc_ad_bases_de_hestia() {
+  local destino="$1"
+  bc_ssh_sudo "cat /usr/local/hestia/data/users/*/db.conf 2>/dev/null | grep -oP \"^DB='\\K[^']+\"" < /dev/null 2>/dev/null || true
+}
+
+bc_adoptar_bases() {
+  local destino="${BC_OPT_TO:-}"
+  local pedidas="${BC_OPT_DBS:-}"
+  local prefijo="${BC_OPT_PREFIJO:-}"
+  local seco="${BC_OPT_DRY:-0}"
+
+  [[ -n "$destino" ]] || bc_die "indica el servidor de destino: --to root@servidor"
+
+  local zip_path
+  zip_path="$(bc_backup_resolve "${BC_OPT_ZIP:-}")" \
+    || bc_die "no se encontró el respaldo. Mira cuáles hay con: backupctl -p $BC_PROFILE list"
+
+  bc_section "Llevar bases de datos a $destino"
+  bc_log "Respaldo de origen: $zip_path"
+  bc_require_cmd unzip
+
+  # --- Qué hay en el zip ------------------------------------------------------
+  local -a en_zip=()
+  mapfile -t en_zip < <(unzip -Z1 "$zip_path" 2>/dev/null | awk -F/ 'NF>1{print $1}' | sort -u)
+  (( ${#en_zip[@]} > 0 )) || bc_die "el respaldo no contiene ninguna base de datos."
+  bc_ok "El respaldo contiene ${#en_zip[@]} bases de datos."
+
+  # --- Conectar ---------------------------------------------------------------
+  bc_require_cmd ssh
+  bc_ssh_init "$destino" || bc_die "no se pudo conectar a $destino."
+  trap 'bc_ssh_close' RETURN
+  bc_ssh_sudo "mysql -e 'SELECT 1'" >/dev/null 2>&1 \
+    || bc_die "no se puede usar MySQL como root en $destino."
+  bc_ok "MySQL accesible en el destino."
+
+  # El prefijo de privilegios se decide UNA vez y se guarda. bc_ssh_sudo empieza
+  # comprobando `id -u` en el servidor, y esa comprobación LEE DE LA ENTRADA
+  # ESTÁNDAR: al enviarle un volcado SQL por tubería se comía el principio y
+  # mysql recibía una sentencia cortada por la mitad. El error que salía
+  # («syntax error near...») no apuntaba ni de lejos a la causa.
+  local sudo_pre=""
+  bc_ssh "test \$(id -u) -eq 0" < /dev/null 2>/dev/null || sudo_pre="sudo -n "
+
+  # --- Cuáles ------------------------------------------------------------------
+  local -a lista=()
+  if [[ -n "$pedidas" ]]; then
+    local b
+    for b in ${pedidas//,/ }; do
+      printf '%s\n' "${en_zip[@]}" | grep -qx "$b" || bc_die "'$b' no está en el respaldo."
+      lista+=("$b")
+    done
+  elif [[ "${BC_OPT_SOLO_DESCONOCIDAS:-0}" == "1" ]]; then
+    # Las que HestiaCP ya restaurará por su cuenta se excluyen para no duplicar
+    local conocidas; conocidas="$(bc_ad_bases_de_hestia "$destino")"
+    local b
+    for b in "${en_zip[@]}"; do
+      grep -qx "$b" <<<"$conocidas" || lista+=("$b")
+    done
+    bc_log "HestiaCP ya conoce $(grep -c . <<<"$conocidas" || true) en el destino; se omiten."
+  else
+    lista=("${en_zip[@]}")
+  fi
+  bc_log "Se llevarán ${#lista[@]} base(s)."
+  [[ -n "$prefijo" ]] && bc_log "Se renombrarán con el prefijo: $prefijo"
+
+  # --- Cuáles chocarían -------------------------------------------------------
+  local ya
+  ya="$(bc_ssh_sudo "mysql -N -e \"SELECT schema_name FROM information_schema.schemata\"" < /dev/null 2>/dev/null || true)"
+  local -a choques=()
+  local b destino_b
+  for b in "${lista[@]}"; do
+    destino_b="${prefijo}${b}"
+    grep -qx "$destino_b" <<<"$ya" && choques+=("$destino_b")
+  done
+  if (( ${#choques[@]} > 0 )); then
+    bc_err "Estas bases YA EXISTEN en el destino y se sobrescribirían:"
+    printf '        - %s\n' "${choques[@]}" >&2
+    bc_log "Usa --prefijo para llevarlas con otro nombre, o --bases para elegir."
+    if (( ! seco )); then
+      bc_confirm "¿Continuar de todas formas y escribir encima?" n || { bc_log "Cancelado."; return 0; }
+    fi
+  fi
+
+  if (( seco )); then
+    echo
+    bc_ok "Simulación (--dry-run). Se llevarían:"
+    for b in "${lista[@]}"; do printf '        %s  ->  %s\n' "$b" "${prefijo}${b}"; done
+    return 0
+  fi
+
+  bc_confirm "¿Llevar ${#lista[@]} base(s) a $destino?" n || { bc_log "Cancelado."; return 0; }
+
+  # --- Traslado ---------------------------------------------------------------
+  local tmp; tmp="$(mktemp -d)"; chmod 700 "$tmp"
+  # shellcheck disable=SC2064
+  trap "rm -rf '$tmp'; bc_ssh_close" RETURN
+
+  local fallos=0 hechas=0 seg
+  for b in "${lista[@]}"; do
+    destino_b="${prefijo}${b}"
+    echo
+    bc_log "── $b  ->  $destino_b"
+    rm -rf "${tmp:?}/x"; mkdir -p "$tmp/x"
+    if ! unzip -qq "$zip_path" "$b/*" -d "$tmp/x" 2>/dev/null; then
+      bc_err "   no se pudo extraer del respaldo."; fallos=$((fallos+1)); continue
+    fi
+
+    # El CREATE DATABASE se rehace aquí para poder cambiar el nombre; se
+    # conservan el juego de caracteres y la colación originales, que es donde
+    # se pierden los acentos y los emojis si uno los da por supuestos.
+    # database.sql viaja comprimido dentro del zip, como todos los segmentos.
+    local charset colacion cabecera=""
+    if [[ -f "$tmp/x/$b/database.sql.gz" ]]; then
+      cabecera="$(gzip -dc "$tmp/x/$b/database.sql.gz" 2>/dev/null || true)"
+    elif [[ -f "$tmp/x/$b/database.sql" ]]; then
+      cabecera="$(cat "$tmp/x/$b/database.sql" 2>/dev/null || true)"
+    fi
+    charset="$( { sed -n 's/.*CHARACTER SET \([A-Za-z0-9_]*\).*/\1/p' <<<"$cabecera" || true; } | head -1)"
+    colacion="$( { sed -n 's/.*COLLATE \([A-Za-z0-9_]*\).*/\1/p'      <<<"$cabecera" || true; } | head -1)"
+    charset="${charset:-utf8mb4}"; colacion="${colacion:-utf8mb4_general_ci}"
+    bc_log "   juego de caracteres: $charset / $colacion"
+
+    if ! bc_ssh_sudo "mysql -e \"CREATE DATABASE IF NOT EXISTS \\\`$destino_b\\\` CHARACTER SET $charset COLLATE $colacion\"" < /dev/null; then
+      bc_err "   no se pudo crear '$destino_b' en el destino."; fallos=$((fallos+1)); continue
+    fi
+
+    local error=0
+    for seg in database tables data views functions others; do
+      [[ -f "$tmp/x/$b/$seg.sql.gz" ]] || continue
+      [[ "$seg" == "database" ]] && continue   # ya la hemos creado, con el nombre nuevo
+      # ---------------------------------------------------------------------
+      # El `USE` de la cabecera hay que quitarlo, SIEMPRE.
+      # ---------------------------------------------------------------------
+      # Cada segmento empieza con  USE `nombre_original`;  Si se envía tal cual
+      # a `mysql <destino>`, el USE manda: el SQL entero se aplica a la base
+      # ORIGINAL y no a la nueva. Sin ningún error, porque para MySQL es una
+      # orden perfectamente válida.
+      #
+      # Comprobado a mi costa: en la primera prueba esto recreó las tablas de
+      # 'augustoangel' en el servidor de origen, vaciándola, mientras informaba
+      # de que la base de destino estaba vacía. Con el nombre original presente
+      # en el destino —lo normal al migrar entre servidores parecidos— habría
+      # arrasado la base buena creyendo que escribía en la nueva.
+      if ! gzip -dc "$tmp/x/$b/$seg.sql.gz" \
+           | sed -E 's/^USE `[^`]*`;$//' \
+           | bc_ssh "${sudo_pre}mysql --default-character-set=$charset '$destino_b'"; then
+        bc_err "   falló el segmento $seg"; error=1
+      fi
+    done
+    if (( error )); then fallos=$((fallos+1)); continue; fi
+
+    # Comprobación posterior: lo que cuenta es lo que hay en el destino, no que
+    # las órdenes salieran sin error. Una base creada y vacía es un fallo que
+    # antes se contaba como éxito, y es justo el que no se nota hasta que hace
+    # falta el dato.
+    local n esperadas
+    n="$(bc_ssh_sudo "mysql -N -e \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$destino_b'\"" < /dev/null 2>/dev/null | tr -d '\r')"
+    esperadas="$( { gzip -dc "$tmp/x/$b/tables.sql.gz" 2>/dev/null | grep -c '^CREATE TABLE' || true; } )"
+    if [[ "${n:-0}" -eq 0 ]] && [[ "${esperadas:-0}" -gt 0 ]]; then
+      bc_err "   '$destino_b' quedó VACÍA y el respaldo tiene $esperadas tablas."
+      fallos=$((fallos+1)); continue
+    fi
+    if [[ "${esperadas:-0}" -gt 0 ]] && [[ "${n:-0}" -lt "$esperadas" ]]; then
+      bc_warn "   '$destino_b' con $n tablas, pero el respaldo tiene $esperadas."
+      fallos=$((fallos+1)); continue
+    fi
+    bc_ok "   '$destino_b' con $n tablas (el respaldo tiene $esperadas)."
+    hechas=$((hechas+1))
+  done
+
+  echo
+  bc_log "Llevadas: $hechas. Con fallos: $fallos."
+  if (( fallos )); then
+    bc_err "Terminado con fallos. Las que sí pasaron están completas."
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+  bc_ok "Las $hechas bases están en $destino."
+  bc_warn "Falta darles usuario y permisos: estas bases no las conoce HestiaCP,"
+  bc_warn "igual que no las conocía en el origen. Créales su usuario MySQL donde"
+  bc_warn "haga falta, o regístralas en el panel con v-add-database."
+  return 0
+}
+
+# =============================================================================
+# Resucitar CON OTRO NOMBRE
+# =============================================================================
+# v-restore-user-full-restic restaura siempre con el nombre original: todas sus
+# rutas internas son "/home/$user/...". Y HestiaCP no sabe renombrar cuentas:
+# v-change-user-name cambia el nombre de pila del contacto, no la cuenta.
+#
+# Pero al abrir una instantánea se ve que el nombre del usuario apenas está
+# dentro de los archivos:
+#
+#   hestia/user.conf     NO lo contiene: la cuenta se identifica por su CARPETA
+#   dns/<d>/hestia/*.conf NO lo contiene: solo el dominio
+#   pam/passwd            sí, y de ahí solo se usa el uid antiguo
+#   db/<b>/hestia/db.conf sí, en DB= y DBUSER=, por el prefijo <usuario>_
+#
+# Y HestiaCP reconstruye una cuenta entera desde data/users/<u>/*.conf con
+# v-rebuild-user. Así que renombrar es: crear la cuenta con el nombre nuevo,
+# dejarle sus archivos y sus .conf, dar de alta sus bases, y reconstruir.
+#
+# Los DOMINIOS no se tocan: son nombres DNS, no del usuario. Que un dominio
+# contenga el nombre viejo —naturalsurf.co para el usuario naturalsurf— es una
+# coincidencia, y renombrarlo rompería el sitio. Un reemplazo a lo bruto sobre
+# el árbol habría hecho justo eso.
+# =============================================================================
+
+bc_adoptar_como() {
+  local destino="${BC_OPT_TO:-}"
+  local viejo="${BC_OPT_USERS:-}"
+  local nuevo="${BC_OPT_COMO:-}"
+  local snap="${BC_OPT_SNAPSHOT:-latest}"
+  local seco="${BC_OPT_DRY:-0}"
+
+  [[ -n "$destino" ]] || bc_die "indica el destino: --to root@servidor"
+  [[ -n "$viejo"   ]] || bc_die "indica el usuario de origen: --usuarios <nombre>"
+  [[ -n "$nuevo"   ]] || bc_die "indica el nombre nuevo: --como <nombre>"
+  [[ "$viejo" != *,* ]] || bc_die "con --como solo se puede traer un usuario a la vez."
+  [[ "$nuevo" =~ ^[a-z_][a-z0-9_-]{0,30}$ ]] \
+    || bc_die "'$nuevo' no vale como nombre de cuenta: minúsculas, dígitos, guiones y _."
+
+  bc_section "Traer '$viejo' a $destino con el nombre '$nuevo'"
+
+  # --- Material --------------------------------------------------------------
+  local claves; claves="$(bc_ad_leer_claves)" || return 1
+  BC_AD_REPO="$(bc_ad_repo_rescatado || true)"
+  [[ -n "$BC_AD_REPO" ]] || bc_die "el rescate no dice cuál es el repositorio."
+  local clave; clave="$(awk -F'\t' -v u="$viejo" '$1==u{print $2; exit}' <<<"$claves")"
+  [[ -n "$clave" ]] || bc_die "no hay clave rescatada de '$viejo'."
+  local rc; rc="$(bc_ad_rclone_rescatado)"
+  [[ -n "$rc" ]] || bc_die "no hay rclone.conf rescatado."
+  bc_ok "Clave y acceso disponibles para '$viejo'."
+
+  # --- Destino ---------------------------------------------------------------
+  bc_require_cmd ssh
+  bc_ssh_init "$destino" || bc_die "no se pudo conectar a $destino."
+  trap 'bc_ssh_close' RETURN
+  bc_ssh_sudo "test -x /usr/local/hestia/bin/v-add-user" >/dev/null 2>&1 \
+    || bc_die "en $destino no hay HestiaCP."
+
+  if bc_ssh_sudo "test -d /usr/local/hestia/data/users/$nuevo" >/dev/null 2>&1; then
+    bc_err "'$nuevo' YA EXISTE en $destino. No se toca nada."
+    bc_log "Elige otro nombre con --como."
+    BC_DELIBERATE_EXIT=1; return 1
+  fi
+  bc_ok "'$nuevo' está libre en el destino."
+
+  # Espacio: hace falta el árbol extraído además de la copia final
+  local libre_mb
+  libre_mb="$(bc_ssh_sudo "df -Pm /home | awk 'NR==2{print \$4}'" < /dev/null | tr -d '\r')"
+  bc_log "Espacio libre en /home del destino: ${libre_mb} MB"
+
+  if (( seco )); then
+    echo
+    bc_ok "Simulación (--dry-run). Se haría, en este orden:"
+    bc_log "  1. v-add-user '$nuevo' <contraseña generada> <contacto>"
+    bc_log "  2. restic restore de '$viejo' ($snap) a un directorio temporal"
+    bc_log "  3. mover sus archivos a /home/$nuevo/ (los dominios NO se renombran)"
+    bc_log "  4. copiar user.conf, web, dns y mail a data/users/$nuevo/"
+    bc_log "  5. dar de alta cada base con v-add-database e importar su volcado"
+    bc_log "  6. v-rebuild-user '$nuevo' yes"
+    bc_log "Nada de esto se ha ejecutado."
+    return 0
+  fi
+
+  bc_warn "Se va a CREAR la cuenta '$nuevo' en $destino con todo el contenido de '$viejo'."
+  bc_confirm "¿Continuar?" n || { bc_log "Cancelado."; return 0; }
+
+  # --- Ejecución en el destino ----------------------------------------------
+  # Va como un script por la entrada estándar: meterlo entrecomillado en la
+  # orden de ssh sería una fuente inagotable de errores de escapado, y además
+  # dejaría la clave Restic a la vista de cualquier `ps`.
+  local contrasena; contrasena="$(bc_gen_password 24)"
+  bc_log "Trabajando en el destino. Esto puede tardar varios minutos..."
+
+  {
+    printf '%s\n' "$clave"
+    printf '%s\n' "$contrasena"
+    cat "$rc"
+  } | bc_ssh_sudo_stdin "bash -s '$viejo' '$nuevo' '$snap' '${BC_AD_REPO%/}'" <<'REMOTO'
+set -uo pipefail
+VIEJO="$1"; NUEVO="$2"; SNAP="$3"; REPO="$4"
+H=/usr/local/hestia
+
+# Las tres primeras líneas de la entrada son la clave, la contraseña y luego el
+# rclone.conf entero.
+IFS= read -r CLAVE
+IFS= read -r PASS
+WS="$(mktemp -d /root/.adoptar.XXXXXXXX)"; chmod 700 "$WS"
+cat > "$WS/rclone.conf"; chmod 600 "$WS/rclone.conf"
+printf '%s' "$CLAVE" > "$WS/clave"; chmod 600 "$WS/clave"
+limpiar() { rm -rf "$WS"; }
+trap limpiar EXIT
+
+export RCLONE_CONFIG="$WS/rclone.conf" RESTIC_PASSWORD_FILE="$WS/clave"
+R="${REPO%/}/$VIEJO"
+
+echo "[1/6] Trayendo la instantánea..."
+mkdir -p "$WS/arbol"
+restic -r "$R" restore "$SNAP" --target "$WS/arbol" || { echo "FALLO: restic restore"; exit 1; }
+SRC="$WS/arbol/home/$VIEJO"
+[ -d "$SRC" ] || { echo "FALLO: la instantánea no contiene /home/$VIEJO"; exit 1; }
+B="$SRC/backup"
+[ -f "$B/backup.conf" ] || { echo "FALLO: falta backup.conf en la instantánea"; exit 1; }
+
+# shellcheck disable=SC1090
+eval "$(cat "$B/backup.conf")"
+echo "    web='$WEB'  dns='$DNS'  mail='$MAIL'  db='$DB'"
+
+echo "[2/6] Creando la cuenta '$NUEVO'..."
+CONTACTO="$(grep -oP "^CONTACT='\K[^']*" "$B/hestia/user.conf" 2>/dev/null || true)"
+[ -n "$CONTACTO" ] || CONTACTO="$NUEVO@localhost"
+$H/bin/v-add-user "$NUEVO" "$PASS" "$CONTACTO" || { echo "FALLO: v-add-user"; exit 1; }
+
+echo "[3/6] Copiando archivos a /home/$NUEVO ..."
+# El directorio backup/ no se copia: es el envoltorio del respaldo, no del usuario.
+for d in "$SRC"/* "$SRC"/.[!.]*; do
+  [ -e "$d" ] || continue
+  case "$(basename "$d")" in backup) continue ;; esac
+  cp -a "$d" "/home/$NUEVO/" 2>/dev/null || true
+done
+chown -R "$NUEVO:$NUEVO" "/home/$NUEVO"
+
+echo "[4/6] Colocando la configuración..."
+UD="$H/data/users/$NUEVO"
+# El user.conf trae los límites, plantillas y el paquete del original. Se
+# conservan los contadores que acaba de calcular v-add-user: los del original
+# se refieren a otro servidor.
+if [ -f "$B/hestia/user.conf" ]; then
+  cp "$B/hestia/user.conf" "$UD/user.conf.original"
+  for k in PACKAGE WEB_TEMPLATE BACKEND_TEMPLATE PROXY_TEMPLATE DNS_TEMPLATE \
+           WEB_DOMAINS WEB_ALIASES DNS_DOMAINS DNS_RECORDS MAIL_DOMAINS \
+           MAIL_ACCOUNTS RATE_LIMIT DATABASES CRON_JOBS DISK_QUOTA BANDWIDTH \
+           NS SHELL LANGUAGE; do
+    v="$(grep -oP "^$k='\K[^']*" "$B/hestia/user.conf" 2>/dev/null || true)"
+    [ -n "$v" ] && $H/bin/v-change-user-config-value "$NUEVO" "$k" "$v" >/dev/null 2>&1
+  done
+fi
+[ -d "$B/hestia/ssl" ] && cp -a "$B/hestia/ssl" "$UD/" 2>/dev/null || true
+for tipo in web dns mail; do
+  [ -f "$B/hestia/$tipo.conf" ] && cp "$B/hestia/$tipo.conf" "$UD/$tipo.conf"
+done
+# Los .conf por objeto viven en el respaldo bajo <tipo>/<nombre>/hestia/
+for tipo in web dns mail; do
+  [ -d "$B/$tipo" ] || continue
+  : > "$UD/$tipo.conf.nuevo"
+  for obj in "$B/$tipo"/*/; do
+    [ -d "$obj" ] || continue
+    n="$(basename "$obj")"
+    f="$obj/hestia/$n.conf"
+    [ -f "$f" ] && cat "$f" >> "$UD/$tipo.conf.nuevo"
+  done
+  if [ -s "$UD/$tipo.conf.nuevo" ]; then mv "$UD/$tipo.conf.nuevo" "$UD/$tipo.conf"
+  else rm -f "$UD/$tipo.conf.nuevo"; fi
+done
+# Las claves DNS y los datos de zona
+for obj in "$B/dns"/*/; do
+  [ -d "$obj" ] || continue
+  n="$(basename "$obj")"
+  [ -f "$obj/hestia/dns.conf" ] && { mkdir -p "$UD/dns"; cp "$obj/hestia/dns.conf" "$UD/dns/$n.conf"; }
+done
+[ -f "$B/cron/cron.conf" ] && cp "$B/cron/cron.conf" "$UD/cron.conf"
+chown -R "$NUEVO:$NUEVO" "$UD" 2>/dev/null || true
+
+echo "[5/6] Bases de datos..."
+if [ -n "${DB:-}" ]; then
+  IFS=',' read -ra BASES <<< "$DB"
+  for b in "${BASES[@]}"; do
+    [ -n "$b" ] || continue
+    dconf="$B/db/$b/hestia/db.conf"
+    dump="$(ls "$B/db/$b/"*.sql.zst "$B/db/$b/"*.sql.gz "$B/db/$b/"*.sql 2>/dev/null | head -1)"
+    dbuser="$(grep -oP "^DB='[^']*' DBUSER='\K[^']*" "$dconf" 2>/dev/null || echo "${b}")"
+    charset="$(grep -oP "CHARSET='\K[^']*" "$dconf" 2>/dev/null || echo utf8mb4)"
+    dbpass="$(head -c 200 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 20)"
+    echo "    $b (usuario $dbuser, $charset)"
+    $H/bin/v-add-database "$NUEVO" "$b" "$dbuser" "$dbpass" mysql localhost "$charset" \
+      || { echo "    AVISO: no se pudo dar de alta '$b'"; continue; }
+    if [ -n "$dump" ]; then
+      case "$dump" in
+        *.zst) zstd -dc "$dump" ;;
+        *.gz)  gzip -dc "$dump" ;;
+        *)     cat "$dump" ;;
+      esac | sed -E 's/^USE `[^`]*`;$//' | mysql "$b" \
+        && echo "    datos importados" || echo "    AVISO: fallo importando '$b'"
+    fi
+  done
+fi
+
+echo "[6/6] Reconstruyendo la cuenta..."
+$H/bin/v-rebuild-user "$NUEVO" yes || echo "AVISO: v-rebuild-user devolvió error"
+$H/bin/v-update-user-counters "$NUEVO" >/dev/null 2>&1 || true
+echo "LISTO"
+REMOTO
+
+  local rc_final=$?
+  echo
+  if (( rc_final != 0 )); then
+    bc_err "El traslado terminó con errores. La cuenta '$nuevo' puede haber quedado a medias."
+    bc_log "Revísala en el panel, o elimínala con: v-delete-user $nuevo"
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+  bc_ok "'$viejo' está en $destino como '$nuevo'."
+  bc_warn "Contraseña del panel para '$nuevo': $contrasena"
+  bc_log  "Apúntala ahora: no se guarda en ninguna parte."
+  bc_log  "Comprueba dominios, correo y bases en el panel antes de dar por buena la migración."
+  return 0
+}
