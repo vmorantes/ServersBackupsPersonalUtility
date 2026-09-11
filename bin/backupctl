@@ -475,6 +475,7 @@ case "$BC_CMD" in
         --hour)   BC_OPT_HOUR="${2:-}"; shift 2 ;;
         --minute) BC_OPT_MINUTE="${2:-}"; shift 2 ;;
         --repo)   BC_OPT_REPO="${2:-}"; shift 2 ;;
+        --ruta-compartida) BC_OPT_RUTA_COMPARTIDA=1; shift ;;
         --name)   BC_OPT_RC_NAME="${2:-}"; shift 2 ;;
         --type)   BC_OPT_RC_TYPE="${2:-}"; shift 2 ;;
         --endpoint) BC_OPT_RC_ENDPOINT="${2:-}"; shift 2 ;;

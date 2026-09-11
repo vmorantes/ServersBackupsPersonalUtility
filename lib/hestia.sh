@@ -405,24 +405,48 @@ bc_hestia_restic() {
       return 1
     fi
     bc_ok "El destino responde."
+
+    # -----------------------------------------------------------------------
+    # ¿Esa ruta ya la usa otro servidor?
+    # -----------------------------------------------------------------------
+    # Dentro de la ruta, HestiaCP guarda un repositorio por cuenta. Si ya hay
+    # carpetas y NO es la ruta que este mismo servidor tiene registrada, lo
+    # normal es que sean de otro servidor. Compartirla es destructivo: tras
+    # cada respaldo cada uno ejecuta `restic forget --prune` con su política,
+    # y las cuentas con el mismo nombre acabarían en el mismo repositorio.
+    # Con la interfaz todo se confirma solo, así que aquí no se pregunta: se
+    # rechaza, y solo se permite a propósito con --ruta-compartida.
+    local ocupantes actual
+    ocupantes="$( { bc_hestia_root "rclone lsd '$ruta_rclone' 2>/dev/null" || true; } | awk '{print $NF}' | sed '/^$/d')"
+    actual="$(bc_hestia_read "sed -n \"s/^REPO='\\(.*\\)'$/\\1/p\" '$HESTIA_CONF_RESTIC'" || true)"
+    if [[ -n "$ocupantes" && "${actual%/}" != "${repo%/}" && "${BC_OPT_RUTA_COMPARTIDA:-0}" != "1" ]]; then
+      bc_err "Esa ruta YA CONTIENE repositorios que este servidor no tiene registrados:"
+      sed 's/^/          - /' <<<"$ocupantes" >&2
+      bc_log "Si son de otro servidor, compartirla haría que la retención de uno"
+      bc_log "borrara las copias del otro. Usa otro bucket u otra ruta."
+      bc_log "Si de verdad es a propósito (este servidor continúa esos respaldos):"
+      bc_log "    backupctl -p $BC_PROFILE hestia restic --repo '$repo' --ruta-compartida"
+      BC_DELIBERATE_EXIT=1
+      return 1
+    fi
   fi
 
   bc_hestia_v "v-add-backup-host-restic '$repo' '$snaps' '$d' '$w' '$m' '$y'" \
     || bc_die "v-add-backup-host-restic falló. Revisa el repositorio y el remoto."
   bc_ok "Host de respaldo registrado."
 
-  # HestiaCP no inicializa el repositorio: la primera vez hay que hacerlo
-  bc_log "Comprobando que el repositorio existe..."
-  if ! bc_hestia_root "restic -r '$repo' snapshots >/dev/null 2>&1"; then
-    bc_warn "el repositorio no está inicializado todavía."
-    if bc_confirm "¿Inicializarlo ahora (restic init)?" y; then
-      bc_hestia_root "restic -r '$repo' init" \
-        && bc_ok "repositorio inicializado." \
-        || bc_warn "no se pudo inicializar. Hazlo a mano: restic init -r '$repo'"
-    fi
-  else
-    bc_ok "El repositorio ya existe."
-  fi
+  # NO se inicializa nada aquí. La ruta registrada NO es un repositorio: HestiaCP
+  # guarda un repositorio POR USUARIO en "${REPO%/}/<usuario>", cada uno con la
+  # clave de ese usuario, y v-backup-user-restic ejecuta `restic init` sobre él
+  # la primera vez que lo respalda (comprobado en HestiaCP 1.10.4).
+  #
+  # La versión anterior hacía `restic init` sobre la ruta global: sin contraseña
+  # fallaba, y el mensaje mandaba a hacer a mano algo que no hay que hacer. Con
+  # contraseña, habría dejado un repositorio huérfano encima de los de los
+  # usuarios.
+  bc_log "Cada cuenta tendrá su propio repositorio en ${repo%/}/<usuario>."
+  bc_log "HestiaCP los crea solo la primera vez que las respalde: tras activar el"
+  bc_log "cron, al día siguiente deberían aparecer en «Configuración de Restic»."
 }
 
 # -----------------------------------------------------------------------------

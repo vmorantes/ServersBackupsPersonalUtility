@@ -293,6 +293,13 @@ bc_adoptar_run() {
     return 1
   fi
 
+  # Los dominios de cada cuenta tampoco pueden existir ya en el destino.
+  local uu
+  for uu in "${lista[@]}"; do
+    bc_ad_conflictos "$BC_AD_REPO" "$uu" "${BC_OPT_SNAPSHOT:-latest}" "$claves" "$rc" \
+      || { BC_DELIBERATE_EXIT=1; return 1; }
+  done
+
   # --- 4. Herramientas -------------------------------------------------------
   bc_step "3 · Herramientas en el destino"
   local v_rclone
@@ -457,6 +464,13 @@ bc_adoptar_bases() {
   if [[ -n "$pedidas" ]]; then
     local b
     for b in ${pedidas//,/ }; do
+      # Las bases de configuración mueren con su servidor: cada HestiaCP tiene
+      # las suyas, y traer las de otro machacaría las del destino o lo dejaría
+      # con usuarios y permisos que no le corresponden. Ni pidiéndolas.
+      case "$b" in
+        roundcube|phpmyadmin|mysql|sys|information_schema|performance_schema|test)
+          bc_die "'$b' es una base de configuración del servidor: no se migra nunca." ;;
+      esac
       printf '%s\n' "${en_zip[@]}" | grep -qx "$b" || bc_die "'$b' no está en el respaldo."
       lista+=("$b")
     done
@@ -471,9 +485,10 @@ bc_adoptar_bases() {
   else
     lista=("${en_zip[@]}")
   fi
-  # Las bases del sistema no son de ningún cliente: roundcube es el webmail y
-  # phpmyadmin el gestor. El zip las trae porque vuelca todo MySQL, pero en el
-  # destino ya existen las suyas. Solo viajan si se piden por su nombre.
+  # Las bases de configuración no son de ningún cliente: roundcube es el
+  # webmail, phpmyadmin el gestor, mysql y sys el propio motor. El zip las trae
+  # porque vuelca todo MySQL, pero mueren con su servidor: el destino tiene las
+  # suyas. No viajan nunca, ni pidiéndolas por nombre (ver el bucle de arriba).
   if [[ -z "$pedidas" ]]; then
     local -a sin_sistema=()
     for b in "${lista[@]}"; do
@@ -703,6 +718,46 @@ for s in d[-6:][::-1]: print(s['short_id'])
   return 0
 }
 
+# -----------------------------------------------------------------------------
+# ¿Algún dominio de la cuenta existe ya en el destino?
+# -----------------------------------------------------------------------------
+# Se lee el backup.conf de la instantánea desde este equipo y se pregunta al
+# destino con v-search-domain-owner. Va ANTES de escribir nada y también en el
+# ensayo, que es cuando sirve enterarse. El script remoto repite la
+# comprobación sobre el árbol completo, carpetas incluidas, antes de crear la
+# cuenta: esta es la vista previa, aquella la barrera.
+bc_ad_conflictos() {
+  local repo="$1" u="$2" snap="$3" claves="$4" rc="$5"
+  bc_has_cmd restic || return 0
+  bc_ad_preparar "$u" "$claves" "$rc" || return 0
+  local c
+  c="$(RCLONE_CONFIG="$BC_AD_TMP/rclone.conf" RESTIC_PASSWORD_FILE="$BC_AD_TMP/clave" \
+       restic -r "${repo%/}/$u" dump "$snap" "/home/$u/backup/backup.conf" 2>/dev/null || true)"
+  rm -rf "$BC_AD_TMP"; BC_AD_TMP=""
+  [[ -n "$c" ]] || return 0
+  local doms campo
+  doms="$(for campo in WEB DNS MAIL; do tr ' ' '\n' <<<"$c" | grep "^$campo=" | cut -d\' -f2 | tr ',' '\n'; done | sed '/^$/d' | sort -u)"
+  [[ -n "$doms" ]] || return 0
+  local args; args="$(printf '%q ' $doms)"
+  local salida
+  salida="$(bc_ssh_sudo_stdin "bash -s $args" 2>/dev/null <<'REMOTO' || true
+for d in "$@"; do
+  o="$(/usr/local/hestia/bin/v-search-domain-owner "$d" 2>/dev/null | head -1)"
+  [ -n "$o" ] && printf '%s\t%s\n' "$d" "$o"
+done
+REMOTO
+)"
+  if [[ -n "$salida" ]]; then
+    bc_err "Estos dominios de '$u' YA EXISTEN en el destino:"
+    awk -F'\t' '{printf "        - %s  (cuenta %s)\n", $1, $2}' <<<"$salida" >&2
+    bc_log "Traer la cuenta los duplicaría: chocarían en el servidor web, el DNS y el"
+    bc_log "correo, y arrastrarían a las cuentas que ya están. No se ha tocado nada."
+    return 1
+  fi
+  bc_ok "Ninguno de sus $(grep -c . <<<"$doms") dominios existe ya en el destino."
+  return 0
+}
+
 bc_adoptar_como() {
   local destino="${BC_OPT_TO:-}"
   local viejo="${BC_OPT_USERS:-}"
@@ -754,6 +809,7 @@ bc_adoptar_como() {
   # cambiar de instantánea sin haber tocado el destino.
   local menguada=0
   bc_ad_avisar_si_menguada "$BC_AD_REPO" "$viejo" "$snap" "$claves" "$rc" || menguada=1
+  bc_ad_conflictos "$BC_AD_REPO" "$viejo" "$snap" "$claves" "$rc" || { BC_DELIBERATE_EXIT=1; return 1; }
 
   if (( seco )); then
     echo
@@ -828,6 +884,28 @@ B="$SRC/backup"
 # shellcheck disable=SC1090
 eval "$(cat "$B/backup.conf")"
 echo "    web='$WEB'  dns='$DNS'  mail='$MAIL'  db='$DB'"
+
+# ---------------------------------------------------------------------------
+# Ningún dominio de esta cuenta puede existir ya en el destino.
+# ---------------------------------------------------------------------------
+# HestiaCP lo comprueba en sus propias órdenes (is_domain_new), pero aquí las
+# configuraciones se colocan directamente, así que la comprobación va aquí,
+# antes de crear NADA. Un dominio repetido en dos cuentas choca en el servidor
+# web, en el DNS y en el correo, y arrastra a las cuentas que ya estaban.
+# Se miran también las carpetas: son los dominios que se reconstruirían.
+CANDIDATOS="$( { echo "${WEB:-},${DNS:-},${MAIL:-}" | tr ',' '\n'; ls -1 "$SRC/web" 2>/dev/null; ls -1 "$SRC/mail" 2>/dev/null; } | grep -v '^$' | sort -u)"
+CONFLICTOS=""
+for dom in $CANDIDATOS; do
+  duenio="$($H/bin/v-search-domain-owner "$dom" 2>/dev/null | head -1)"
+  [ -n "$duenio" ] && CONFLICTOS="${CONFLICTOS}    - $dom  (cuenta '$duenio')
+"
+done
+if [ -n "$CONFLICTOS" ]; then
+  echo "CONFLICTO: estos dominios ya existen en el destino. No se ha creado nada:"
+  printf '%s' "$CONFLICTOS"
+  touch "$WS/CONFLICTO"
+  exit 3
+fi
 
 echo "[2/6] Creando la cuenta '$NUEVO'..."
 CONTACTO="$(grep -oP "^CONTACT='\K[^']*" "$B/hestia/user.conf" 2>/dev/null || true)"
@@ -938,11 +1016,52 @@ for tipo in dns web mail; do
     n="$(basename "$obj")"
     [ -f "$obj/hestia/$tipo.conf" ] && cat "$obj/hestia/$tipo.conf" >> "$UD/$tipo.conf.nuevo"
     [ -f "$obj/hestia/$n.conf" ]    && cp  "$obj/hestia/$n.conf" "$UD/$tipo/$n.conf"
+    # Las claves DKIM del correo. Sin ellas HestiaCP genera otras, y la firma de
+    # los mensajes deja de coincidir con el registro DKIM publicado en el DNS:
+    # el correo empieza a caer en spam o a ser rechazado, sin ningún error.
+    if [ "$tipo" = mail ]; then
+      for ext in pem pub; do
+        [ -f "$obj/hestia/$n.$ext" ] && cp "$obj/hestia/$n.$ext" "$UD/mail/$n.$ext"
+      done
+    fi
   done
   if [ -s "$UD/$tipo.conf.nuevo" ]; then mv "$UD/$tipo.conf.nuevo" "$UD/$tipo.conf"
   else rm -f "$UD/$tipo.conf.nuevo"; fi
 done
 [ -f "$B/cron/cron.conf" ] && cp "$B/cron/cron.conf" "$UD/cron.conf"
+
+# ---------------------------------------------------------------------------
+# La IP del servidor viejo no existe aquí.
+# ---------------------------------------------------------------------------
+# Las líneas de dominio del respaldo llevan IP='<ip del origen>'. La
+# restauración nativa de HestiaCP la sustituye (get_user_ip, en func/ip.sh);
+# colocándolas a mano, hay que hacerlo aquí. Si no, el servidor web intentaría
+# escuchar en una dirección que esta máquina no tiene y podría no arrancar,
+# arrastrando a TODAS las cuentas del destino. En el banco de pruebas no se
+# veía porque origen y destino eran la misma máquina, con la misma IP.
+# Se elige como HestiaCP: la primera IP de la cuenta, y la pública si hay NAT.
+IP_LOCAL="$($H/bin/v-list-user-ips "$NUEVO" plain 2>/dev/null | awk 'NR==1{print $1}')"
+[ -n "$IP_LOCAL" ] || IP_LOCAL="$($H/bin/v-list-sys-ips plain 2>/dev/null | awk 'NR==1{print $1}')"
+[ -n "$IP_LOCAL" ] || { echo "FALLO: no se pudo averiguar la IP de este servidor"; exit 1; }
+IP_PUBLICA="$(grep '^NAT' "$H/data/ips/$IP_LOCAL" 2>/dev/null | cut -f2 -d"'")"
+[ -n "$IP_PUBLICA" ] || IP_PUBLICA="$IP_LOCAL"
+IPS_VIEJAS="$(cat "$B"/web/*/hestia/web.conf "$B"/dns/*/hestia/dns.conf "$B"/mail/*/hestia/mail.conf 2>/dev/null | grep -oP "IP='\K[^']+" | sort -u)"
+for vieja in $IPS_VIEJAS; do
+  [ "$vieja" = "$IP_LOCAL" ] && continue
+  v_re="$(printf '%s' "$vieja" | sed 's/\./\\./g')"
+  echo "    IP del origen $vieja  ->  $IP_LOCAL (pública $IP_PUBLICA)"
+  for f in "$UD/web.conf" "$UD/dns.conf" "$UD/mail.conf"; do
+    [ -f "$f" ] && sed -i "s/IP='$v_re'/IP='$IP_LOCAL'/g" "$f"
+  done
+  for f in "$UD"/dns/*.conf; do
+    [ -f "$f" ] || continue
+    sed -i "s/VALUE='$v_re'/VALUE='$IP_PUBLICA'/g" "$f"
+    # También dentro del SPF: «v=spf1 ip4:<ip vieja> -all» autorizaría solo al
+    # servidor viejo, y el correo que salga del nuevo fallaría el SPF. El
+    # [^0-9] final impide tocar una IP más larga que empiece igual.
+    sed -i -E "s/ip4:${v_re}([^0-9]|\$)/ip4:${IP_PUBLICA}\1/g" "$f"
+  done
+done
 chown -R "$NUEVO:$NUEVO" "$UD" 2>/dev/null || true
 
 echo "[6/7] Bases de datos..."
@@ -1068,6 +1187,13 @@ echo "LISTO"
 REMOTO
 
   echo
+  if bc_ssh_sudo "test -f '$ws/CONFLICTO'" < /dev/null 2>/dev/null; then
+    echo
+    bc_err "No se ha tocado nada en $destino: hay dominios de '$viejo' que ya existen allí."
+    bc_log "Resuélvelo en el destino, o trae otra cuenta, y repite."
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
   # El código de salida no basta: una tubería vacía también sale con cero. Se
   # exige la marca que solo escribe el script tras completar los seis pasos.
   if (( rc_final == 0 )) && ! bc_ssh_sudo "test -f '$ws/LISTO'" < /dev/null 2>/dev/null; then

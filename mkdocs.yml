@@ -91,6 +91,7 @@ nav:
       - 6. Migrar en serio: paso-a-paso/migrar.md
   - HestiaCP:
       - Blindar un HestiaCP: hestiacp/respaldos-incrementales.md
+      - "Migrar, independizar y blindar": hestiacp/tres-escenarios.md
       - El protocolo a mano: hestiacp/protocolo-manual.md
   - Operación:
       - Respaldar: operacion/respaldar.md
