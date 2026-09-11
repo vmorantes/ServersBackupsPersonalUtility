@@ -178,6 +178,57 @@ bc_adoptar_inventario() {
 # -----------------------------------------------------------------------------
 # Resucitar en un servidor de destino
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# restic en el destino, y en una versión que sepa leer el repositorio
+# -----------------------------------------------------------------------------
+# Los repositorios que crea HestiaCP con restic moderno usan el FORMATO v2
+# (compresión), comprobado con `restic cat config`. Ese formato exige restic
+# 0.14 o superior.
+#
+# En Ubuntu 22.04, `apt install restic` da la 0.12.1, que NO lo lee. En un
+# servidor limpio la resurrección se paraba al primer paso con un error de
+# formato que no dice la causa. HestiaCP lo resuelve con `apt install` +
+# `restic self-update` dentro de v-add-backup-host-restic, y en el servidor de
+# pruebas se ve el resultado: el paquete de apt figura instalado y el binario
+# es la 0.18.1. Aquí se hace lo mismo, y se COMPRUEBA la versión después en
+# vez de darla por buena.
+bc_ad_asegurar_restic() {
+  local seco="${1:-0}" v num ma mi
+  v="$(bc_ssh_sudo "restic version 2>/dev/null | head -1" < /dev/null | tr -d '\r')"
+  if [[ -z "$v" ]]; then
+    bc_warn "restic NO está en el destino."
+    if (( seco )); then
+      bc_log "Simulación: se instalaría con apt y se actualizaría con «restic self-update»."
+      return 0
+    fi
+    bc_confirm "¿Instalarlo en el destino?" y || bc_die "sin restic no se puede leer el almacenamiento."
+    bc_ssh_sudo "DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq restic" < /dev/null \
+      || bc_die "no se pudo instalar restic en el destino."
+    v="$(bc_ssh_sudo "restic version 2>/dev/null | head -1" < /dev/null | tr -d '\r')"
+  fi
+  num="$(grep -oP 'restic \K[0-9]+\.[0-9]+' <<<"$v" || true)"
+  IFS=. read -r ma mi <<<"${num:-0.0}"
+  if (( ma == 0 && mi < 14 )); then
+    bc_warn "restic $num en el destino: NO lee el formato v2 de tus repositorios (hace falta 0.14+)."
+    if (( seco )); then
+      bc_log "Simulación: se actualizaría con «restic self-update»."
+      return 0
+    fi
+    bc_ssh_sudo "restic self-update" < /dev/null >/dev/null 2>&1 || true
+    v="$(bc_ssh_sudo "restic version 2>/dev/null | head -1" < /dev/null | tr -d '\r')"
+    num="$(grep -oP 'restic \K[0-9]+\.[0-9]+' <<<"$v" || true)"
+    IFS=. read -r ma mi <<<"${num:-0.0}"
+    if (( ma == 0 && mi < 14 )); then
+      bc_err "No se pudo actualizar restic en el destino (sigue en $num)."
+      bc_log "Instala a mano el binario oficial de https://github.com/restic/restic/releases"
+      bc_log "y repite. No se ha escrito nada en el destino."
+      BC_DELIBERATE_EXIT=1
+      return 1
+    fi
+  fi
+  bc_ok "restic en el destino: $v"
+}
+
 bc_adoptar_run() {
   local destino="${BC_OPT_TO:-}"
   local pedidos="${BC_OPT_USERS:-}"
@@ -260,9 +311,9 @@ bc_adoptar_run() {
   else
     bc_ok "rclone: $v_rclone"
   fi
-  bc_ssh_sudo "command -v restic >/dev/null" >/dev/null 2>&1 \
-    && bc_ok "restic presente" \
-    || bc_log "restic no está: HestiaCP lo instalará solo la primera vez que haga falta."
+  # «HestiaCP lo instalará solo» era falso: solo lo hace v-add-backup-host-restic,
+  # que este flujo no llama. Y aunque lo hiciera, la versión de apt no basta.
+  bc_ad_asegurar_restic "$seco" || return 1
 
   if (( seco )); then
     echo
@@ -420,6 +471,22 @@ bc_adoptar_bases() {
   else
     lista=("${en_zip[@]}")
   fi
+  # Las bases del sistema no son de ningún cliente: roundcube es el webmail y
+  # phpmyadmin el gestor. El zip las trae porque vuelca todo MySQL, pero en el
+  # destino ya existen las suyas. Solo viajan si se piden por su nombre.
+  if [[ -z "$pedidas" ]]; then
+    local -a sin_sistema=()
+    for b in "${lista[@]}"; do
+      case "$b" in
+        roundcube|phpmyadmin|mysql|sys|information_schema|performance_schema|test) ;;
+        *) sin_sistema+=("$b") ;;
+      esac
+    done
+    if (( ${#sin_sistema[@]} < ${#lista[@]} )); then
+      bc_log "Se omiten $(( ${#lista[@]} - ${#sin_sistema[@]} )) base(s) del sistema (roundcube, phpmyadmin...)."
+    fi
+    lista=("${sin_sistema[@]}")
+  fi
   bc_log "Se llevarán ${#lista[@]} base(s)."
   [[ -n "$prefijo" ]] && bc_log "Se renombrarán con el prefijo: $prefijo"
 
@@ -432,13 +499,24 @@ bc_adoptar_bases() {
     destino_b="${prefijo}${b}"
     grep -qx "$destino_b" <<<"$ya" && choques+=("$destino_b")
   done
+  # Una base que ya existe en el destino NO se toca nunca. Antes se preguntaba
+  # «¿escribir encima?», y bastaba una confirmación automática —la de la
+  # interfaz, o un --yes— para machacar la base de otro cliente, o la de
+  # roundcube del propio servidor, que el zip también trae.
   if (( ${#choques[@]} > 0 )); then
-    bc_err "Estas bases YA EXISTEN en el destino y se sobrescribirían:"
+    bc_warn "Estas bases YA EXISTEN en el destino. No se tocan:"
     printf '        - %s\n' "${choques[@]}" >&2
-    bc_log "Usa --prefijo para llevarlas con otro nombre, o --bases para elegir."
-    if (( ! seco )); then
-      bc_confirm "¿Continuar de todas formas y escribir encima?" n || { bc_log "Cancelado."; return 0; }
+    bc_log "Para traerlas igualmente, usa --prefijo y llegarán con otro nombre."
+    local -a quedan=()
+    for b in "${lista[@]}"; do
+      printf '%s\n' "${choques[@]}" | grep -qx "${prefijo}${b}" || quedan+=("$b")
+    done
+    lista=("${quedan[@]}")
+    if (( ${#lista[@]} == 0 )); then
+      bc_ok "No queda ninguna base por llevar."
+      return 0
     fi
+    bc_log "Se llevarán las ${#lista[@]} restantes."
   fi
 
   if (( seco )); then
@@ -664,6 +742,7 @@ bc_adoptar_como() {
     BC_DELIBERATE_EXIT=1; return 1
   fi
   bc_ok "'$nuevo' está libre en el destino."
+  bc_ad_asegurar_restic "$seco" || return 1
 
   # Espacio: hace falta el árbol extraído además de la copia final
   local libre_mb
@@ -683,7 +762,7 @@ bc_adoptar_como() {
     bc_log "  2. restic restore de '$viejo' ($snap) a un directorio temporal"
     bc_log "  3. mover sus archivos a /home/$nuevo/ (los dominios NO se renombran)"
     bc_log "  4. copiar user.conf, web, dns y mail a data/users/$nuevo/"
-    bc_log "  5. dar de alta cada base con v-add-database e importar su volcado"
+    bc_log "  5. recrear cada base con su MISMO nombre, usuario y contraseña, e importarla"
     bc_log "  6. v-rebuild-user '$nuevo' yes"
     bc_log "Nada de esto se ha ejecutado."
     return 0
@@ -875,30 +954,69 @@ if [ -n "${DB:-}" ]; then
     dconf="$B/db/$b/hestia/db.conf"
     dump="$(ls "$B/db/$b/"*.sql.zst "$B/db/$b/"*.sql.gz "$B/db/$b/"*.sql 2>/dev/null | head -1)"
 
-    # v-add-database CONCATENA:  database="$user"_"$2"  y  dbuser="$user"_"$3".
-    # Hay que pasarle el SUFIJO, no el nombre completo:
-    #   naturalsurf_platform  con usuario  naturalsurf  ->  platform
-    # y con el usuario nuevo pasa a llamarse  <nuevo>_platform.
-    sufijo="${b#${VIEJO}_}"
-    [ "$sufijo" = "$b" ] && sufijo="$b"
+    # -----------------------------------------------------------------------
+    # Se CONSERVAN el nombre de la base, su usuario y su contraseña.
+    # -----------------------------------------------------------------------
+    # Lo que se renombra es la CUENTA, no sus bases. Las aplicaciones del
+    # cliente —wp-config.php, .env, configuration.php— tienen escritos el
+    # nombre de la base, el usuario y la contraseña. Si cambia cualquiera de
+    # los tres, el sitio pierde la conexión a sus datos aunque todo esté en su
+    # sitio.
+    #
+    # La versión anterior creaba <nuevo>_<sufijo> con una contraseña al azar:
+    # el panel se veía perfecto y todos los sitios con base de datos quedaban
+    # caídos. Ahora se recrea el usuario con el MISMO hash que guarda el
+    # respaldo (*<40 hex>, mysql_native_password), así que la contraseña que
+    # tienen escrita las aplicaciones sigue valiendo sin que nadie la conozca.
+    #
+    # v-add-database no sirve para esto: obliga a llamar a la base
+    # <cuenta>_<sufijo> y genera la contraseña. Se hace lo mismo que hace él
+    # por dentro —crear, dar permisos, apuntar en db.conf— sin esas dos cosas.
     dbuser_viejo="$(grep -oP "DBUSER='\\K[^']*" "$dconf" 2>/dev/null || echo "$b")"
-    sufijo_user="${dbuser_viejo#${VIEJO}_}"
-    [ "$sufijo_user" = "$dbuser_viejo" ] && sufijo_user="$dbuser_viejo"
+    hash="$(grep -oP "MD5='\\K[^']*" "$dconf" 2>/dev/null || true)"
     charset="$(grep -oP "CHARSET='\\K[^']*" "$dconf" 2>/dev/null || echo utf8mb4)"
-    nueva="${NUEVO}_${sufijo}"
-    nuevo_dbuser="${NUEVO}_${sufijo_user}"
+    nueva="$b"
 
-    # MySQL no admite usuarios de más de 32 caracteres, y HestiaCP lo rechaza
-    # a mitad de faena. Se comprueba antes.
-    if [ ${#nuevo_dbuser} -gt 32 ]; then
-      echo "    AVISO: el usuario MySQL '$nuevo_dbuser' tendría ${#nuevo_dbuser} caracteres (máximo 32)."
-      echo "           Elige un nombre de cuenta más corto con --como."
+    # Nada se escribe encima: si el nombre ya está ocupado en el destino, esa
+    # base se salta y se dice. Pisarla destruiría la de otro cliente.
+    if [ -n "$(mysql -N -e "SELECT 1 FROM information_schema.schemata WHERE schema_name='$b'" 2>/dev/null)" ]; then
+      echo "    AVISO: la base '$b' YA EXISTE en el destino. No se toca."
+      echo "           Tráela con otro nombre desde el zip:  adoptar-bases --bases $b --prefijo <algo>_"
+      echo "           y cambia el nombre en la configuración de su aplicación."
       FALLO_DB=1; continue
     fi
-    dbpass="$(head -c 200 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 20)"
-    echo "    $b  ->  $nueva  (usuario $nuevo_dbuser, $charset)"
-    $H/bin/v-add-database "$NUEVO" "$sufijo" "$sufijo_user" "$dbpass" mysql localhost "$charset" \
-      || { echo "    AVISO: no se pudo dar de alta '$nueva'"; FALLO_DB=1; continue; }
+    if [ -n "$(mysql -N -e "SELECT 1 FROM mysql.user WHERE user='$dbuser_viejo'" 2>/dev/null)" ]; then
+      echo "    AVISO: el usuario MySQL '$dbuser_viejo' YA EXISTE en el destino. '$b' no se toca."
+      FALLO_DB=1; continue
+    fi
+
+    echo "    $b  (usuario $dbuser_viejo, $charset)"
+    mysql -e "CREATE DATABASE \`$b\` CHARACTER SET $(printf '%s' "$charset" | tr '[:upper:]' '[:lower:]')" \
+      || { echo "    AVISO: no se pudo crear '$b'"; FALLO_DB=1; continue; }
+
+    creado=0
+    if [ "${hash:0:1}" = "*" ] && [ ${#hash} -eq 41 ]; then
+      # Sintaxis de MariaDB primero, de MySQL 8 después: la que acepte el servidor.
+      mysql -e "CREATE USER '$dbuser_viejo'@'localhost' IDENTIFIED BY PASSWORD '$hash'" 2>/dev/null && creado=1
+      [ $creado -eq 0 ] && mysql -e "CREATE USER '$dbuser_viejo'@'localhost' IDENTIFIED WITH mysql_native_password AS '$hash'" 2>/dev/null && creado=1
+      [ $creado -eq 1 ] && echo "    contraseña original conservada"
+    fi
+    if [ $creado -eq 0 ]; then
+      # Sin hash utilizable no hay forma de conservarla: se genera una y se
+      # dice, porque la aplicación dejará de conectar hasta que se cambie.
+      nuevapass="$(head -c 200 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 20)"
+      mysql -e "CREATE USER '$dbuser_viejo'@'localhost' IDENTIFIED BY '$nuevapass'" \
+        || { echo "    AVISO: no se pudo crear el usuario '$dbuser_viejo'"; FALLO_DB=1; continue; }
+      hash="$(mysql -N -e "SHOW CREATE USER '$dbuser_viejo'@'localhost'" 2>/dev/null | grep -oP '\*[A-F0-9]{40}' | head -1)"
+      echo "    AVISO: el respaldo no traía un hash utilizable. Contraseña NUEVA para '$dbuser_viejo': $nuevapass"
+      echo "           Ponla en la configuración de la aplicación o el sitio no conectará."
+    fi
+    mysql -e "GRANT ALL PRIVILEGES ON \`$b\`.* TO '$dbuser_viejo'@'localhost'; FLUSH PRIVILEGES"
+
+    t="$(date +'%T')"; d="$(date +'%F')"
+    printf "DB='%s' DBUSER='%s' MD5='%s' HOST='localhost' TYPE='mysql' CHARSET='%s' U_DISK='0' SUSPENDED='no' TIME='%s' DATE='%s'\n" \
+      "$b" "$dbuser_viejo" "$hash" "$(printf '%s' "$charset" | tr '[:lower:]' '[:upper:]')" "$t" "$d" >> "$UD/db.conf"
+    chmod 660 "$UD/db.conf"
     if [ -n "$dump" ]; then
       # El USE apunta a la base ORIGINAL: sin quitarlo, el volcado entero se
       # aplicaría allí. Y el DEFINER de vistas y rutinas apunta al usuario

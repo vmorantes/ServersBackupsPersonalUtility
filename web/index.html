@@ -445,6 +445,23 @@
          Registrarlas las hace visibles y administrables, <strong>sin crearlas ni
          renombrarlas</strong>: los datos y las credenciales que ya usan tus aplicaciones
          no se tocan.</p>
+      <div class="campos" id="form-bases">
+        <label>Servidor de destino <input type="text" data-opt="destino" placeholder="root@servidor-nuevo" autocomplete="off"></label>
+        <label>Respaldo de bases <span class="pista">vacío = el más reciente de este equipo</span>
+          <input type="text" data-opt="zip" placeholder="all_databases_AAAAMMDD_HHMMSS.zip" autocomplete="off"></label>
+        <label>Prefijo <span class="pista">opcional; solo si quieres que lleguen con otro nombre</span>
+          <input type="text" data-opt="prefijo" placeholder="" autocomplete="off"></label>
+      </div>
+      <div class="acciones">
+        <div class="accion"><button class="btn" data-act="adoptar-bases-dry" data-form="#form-bases">Ensayo: qué bases llevaría</button>
+          <div class="accion-desc"><span class="no-toca">No toca nada.</span> Lista las bases del zip que el destino no conoce todavía. Omite las del sistema (roundcube, phpmyadmin) y las que ya existan allí.</div>
+        </div>
+        <div class="accion"><button class="btn btn-escribe" data-act="adoptar-bases" data-form="#form-bases"
+                  data-confirmar="Se crearán en el destino las bases que HestiaCP no conoce, con sus datos.&#10;&#10;Ninguna base existente se toca.&#10;&#10;¿Continuar?">Llevar las bases al destino</button>
+          <div class="accion-desc"><span class="escribe">Crea bases en el destino.</span> Solo las que no existen allí: una base con el mismo nombre se salta y se dice, nunca se pisa. Hazlo <strong>después</strong> de resucitar las cuentas.</div>
+        </div>
+      </div>
+
       <div class="campos" id="form-registrar">
         <label>Servidor <input type="text" data-opt="destino" placeholder="root@servidor" autocomplete="off"></label>
         <label>Cuenta de HestiaCP <span class="pista">bajo la que aparecerán</span>
