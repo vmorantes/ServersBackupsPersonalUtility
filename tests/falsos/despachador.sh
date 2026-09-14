@@ -14,6 +14,13 @@
 #
 # Sin guion, nunca inventa un éxito: falla con un mensaje claro.
 # =============================================================================
+set -u
+
+if [[ -z "${BANCO_TMP:-}" || ! -d "$BANCO_TMP" ]]; then
+  echo "falso $(basename "$0"): \$BANCO_TMP no está definido o no es un directorio; no se registra nada." >&2
+  exit 96
+fi
+
 orden="$(basename "$0")"
 
 mkdir -p "$BANCO_TMP/registro"

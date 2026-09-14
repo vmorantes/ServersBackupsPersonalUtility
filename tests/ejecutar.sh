@@ -17,9 +17,16 @@ fi
 RAIZ="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 T="$(mktemp -d -t backupctl-pruebas.XXXXXX)"
+if [[ -z "$T" || ! -d "$T" ]]; then
+  echo "tests/ejecutar.sh: mktemp -d no devolvió un directorio utilizable." >&2
+  exit 2
+fi
 trap 'rm -rf "$T"' EXIT
 
-ORDENES_PELIGROSAS=(ssh scp rsync mysql mysqldump sudo crontab restic rclone mail curl)
+ORDENES_PELIGROSAS=(
+  ssh scp sftp sshpass ssh-keygen ssh-copy-id rsync
+  mysql mysqldump sudo crontab restic rclone mail curl
+)
 
 mkdir -p "$T/bin" "$T/home" "$T/tmp"
 for orden in "${ORDENES_PELIGROSAS[@]}"; do
