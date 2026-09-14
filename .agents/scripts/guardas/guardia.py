@@ -243,8 +243,29 @@ def revisar_backupctl(args):
     )
 
 
+def sin_redirecciones(args):
+    """
+    Quita las redirecciones, que no son argumentos de la orden. shlex parte
+    '2>&1' en '2', '>&', '1' y '>/dev/null' en '>', '/dev/null': cada operador
+    se lleva su destino (el token siguiente) y el descriptor numérico que lo
+    precede, si lo hay.
+    """
+    limpios = []
+    i = 0
+    while i < len(args):
+        if re.fullmatch(r"[<>&]+", args[i]):
+            if limpios and limpios[-1].isdigit():
+                limpios.pop()
+            i += 2
+            continue
+        limpios.append(args[i])
+        i += 1
+    return limpios
+
+
 def revisar_proyecto(cmd, args, partes):
     """Lanzar backupctl, su web o su lanzador de escritorio."""
+    args = sin_redirecciones(args)
     if cmd in SHELLS:
         if "-n" in args:
             return
@@ -296,8 +317,14 @@ def revisar_git(args):
         bloquear("git checkout -- / . / -f descarta cambios locales: prohibido.")
     if sub == "restore" and "--staged" not in resto:
         bloquear("git restore sobre el árbol descarta cambios: prohibido (solo --staged).")
-    if sub == "branch" and any(a in ("-D", "-d", "--delete", "-M", "-m", "--move") for a in resto):
-        bloquear("borrar o renombrar ramas requiere permiso del PO.")
+    if sub == "branch":
+        # ADR 0011: el coder borra ramas locales YA FUSIONADAS con -d (git se niega si no lo
+        # están). Forzar (-D, --force), renombrar y tocar ramas remotas siguen siendo del PO.
+        if any(a in ("-D", "-M", "-m", "--move", "-C", "-c", "--copy") for a in resto):
+            bloquear("forzar el borrado, renombrar o copiar ramas requiere permiso del PO (ADR 0011).")
+        borra = any(a in ("-d", "--delete") for a in resto)
+        if borra and any(a in ("-f", "--force", "-r", "--remotes", "-a", "--all") for a in resto):
+            bloquear("borrar ramas forzando o ramas remotas requiere permiso del PO (ADR 0011).")
     if sub == "stash" and resto[:1] in (["drop"], ["clear"]):
         bloquear("git stash drop/clear pierde trabajo: prohibido.")
     if sub == "config":
