@@ -29,7 +29,11 @@ los agentes leerlas (CUBIERTA para agentes).
 `bc_ssh_sudo` (`lib/ssh.sh:120`) comprueba `id -u` con un `bc_ssh` que lee stdin (121): si se
 le manda un script, SQL o un secreto por tubería o heredoc, esa comprobación se lo come, el
 lado remoto recibe nada, sale con 0 y la orden informa de un éxito que no ocurrió. Para enviar
-contenido: `bc_ssh_sudo_stdin` (108), que cierra stdin en la comprobación. Casos tratados:
+contenido: `bc_ssh_sudo_stdin` (108), que cierra stdin **solo en su comprobación de root**: su
+segunda comprobación (`bc_ssh_can_sudo_nopass`, `ssh.sh:96-98`, sin `< /dev/null`) también se
+come el contenido cuando se entra con un usuario con sudo sin contraseña (CONFIRMADA en
+simulación con un `ssh` falso que lee su entrada, ronda #023; afecta a `adoptar.sh` en cada
+`bc_ssh_sudo_stdin`). Sin corregir. Casos tratados:
 `adoptar.sh:454-460, 861-864`.
 
 ### T3. Sin `-p`, cualquier orden usa el perfil real — CONFIRMADA (código)
@@ -140,7 +144,26 @@ solo borra `BC_TEMP_DIR` y las credenciales temporales de MySQL. Lo que se queda
 - `adoptar` deja temporales locales (140, 549, 1291) y el espacio de trabajo remoto con datos
   (855); `restic` su temporal (`lib/restic.sh:43`).
 
-Decisión: ADR 0012 (registro de limpiezas al salir). En curso.
+Decisión: ADR 0012 (registro de limpiezas al salir). Implementado en `fix/limpieza-al-salir`,
+**sin fusionar** (2026-09-14): pruebas en `probar_limpieza.sh` y `probar_restauracion.sh`. Queda
+abierto: una limpieza que termina en error se da por hecha (no se reintenta); el registro vive
+solo en memoria (un `kill -9` no deja rastro); `trap '' INT TERM` en `bc_cleanup_all` lo heredan
+los hijos (un `ssh` colgado no se puede interrumpir) y no cubre SIGPIPE.
+
+### T21. `adoptar` puede dejar vacío o borrar el `restic.conf` del destino — CONFIRMADA (código)
+
+En `master`, `bc_ad_restaurar_conf` (`lib/adoptar.sh:41-53`) devuelve el original con
+`printf … | bc_ssh_sudo "cat > …"` (44): por T2, el archivo puede quedar **vacío** mientras la
+orden informa de éxito. Ocurre al terminar **cualquier** `adoptar --to` en un destino que ya
+tenía su propio `restic.conf`. Y la lectura del original (277) acaba en `|| true`: un fallo
+pasajero se toma por «no existía» y la limpieza **borra** el archivo real. Encontrado por
+`security-auditor` (ronda #021).
+
+En `fix/limpieza-al-salir` (sin fusionar): se devuelve con `bc_ssh_sudo_stdin` y un fallo de
+lectura detiene la orden antes de pisar nada. **Sigue abierto**: (a) con un usuario con sudo sin
+contraseña se sigue perdiendo el contenido (T2); (b) el `test -e` que decide si existía no
+distingue «no existe» de «no se pudo comprobar», y la limpieza se registra antes de escribir: un
+fallo pasajero puede acabar en un `rm -f` del `restic.conf` real del destino.
 
 ### Menores — CONFIRMADAS (código)
 
