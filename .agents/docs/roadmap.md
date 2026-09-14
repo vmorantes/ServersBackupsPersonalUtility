@@ -32,9 +32,20 @@ Una tarea sale de aquí al cerrarse; su historia queda en la bitácora. Referenc
 
 ## Bugs de `backupctl` encontrados por el banco
 
-- [ ] **Limpieza que no corre al morir** (T20; ADR 0012, en curso en `fix/limpieza-al-salir`):
-      `restore`, `verify`, `pull`, `restic` y `adoptar` (este deja `restic.conf` del destino
-      pisado si se interrumpe). Nombrado por el PO el 2026-09-14.
+- [ ] **Limpieza que no corre al morir** (T20, T21; ADR 0012). Nombrado por el PO el
+      2026-09-14. Implementado en `fix/limpieza-al-salir` (sin fusionar, 7 suites en verde).
+      **Antes de pedir la prueba al PO** (revisiones de la ronda #023):
+      - [ ] `bc_ssh_sudo_stdin`: cerrar la entrada estándar también en `bc_ssh_can_sudo_nopass`
+            (T2), con prueba de destino no-root en `probar_adoptar_conf.sh`.
+      - [ ] Existencia de `restic.conf` en el destino con centinela (`SI`/`NO`), no con el código
+            de `test -e`; registrar la limpieza de `adoptar_conf` solo cuando haya algo que
+            deshacer.
+      - [ ] Una limpieza que termina en error debe poder reintentarse o avisarse; un fallo de
+            `adoptar_conf` no debe ocultar los avisos finales a los usuarios restaurados bien.
+      - [ ] `trap '' INT TERM` en `bc_cleanup_all`: sustituir por un trap que no se herede a los
+            hijos; prueba que reproduzca `bc_cleanup_all` entero (la mutación M26 no la ve hoy).
+- [ ] **`adoptar --snapshot` sin validar** en la CLI (la web sí valida): se interpola entre
+      comillas simples y se ejecuta como root en el destino (`adoptar.sh:419,925`). Seguridad.
 
 ## El repositorio
 
