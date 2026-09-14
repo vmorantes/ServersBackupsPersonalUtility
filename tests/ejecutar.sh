@@ -75,5 +75,9 @@ for suite in "$RAIZ"/tests/probar_*.sh; do
 done
 
 echo
+if (( total == 0 )); then
+  echo "tests/ejecutar.sh: no se encontró ninguna suite (tests/probar_*.sh)." >&2
+  exit 1
+fi
 echo "suites: $total, fallidas: $fallidas"
 (( fallidas == 0 ))
