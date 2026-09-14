@@ -183,3 +183,7 @@ Importa `server.py` y regenera `web/__pycache__/server.cpython-312.pyc`, que est
 - `bin/backupctl:503`: comentario de `exec-count` fuera de su sitio; la lista de órdenes con
   ensayo de la ayuda (143-144) omite `hestia rclone/restic/cron` y `adoptar*`.
 - `docs/desarrollo/repositorio.md` «Ramas»: actualizado con el ADR 0007 el 2026-09-14.
+- `DEPLOY_USER` vale `root` por defecto en `lib/config.sh`; `docs/referencia/variables.md`
+  dice `$USER_NAME`.
+- `status` con un perfil sin `NOTIFY_*` ni `HEALTHCHECK_URL` sale siempre con 1: cuenta «ningún
+  aviso configurado» como problema (`lib/archive.sh:106-204`).
