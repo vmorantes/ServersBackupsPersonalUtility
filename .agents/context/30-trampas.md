@@ -175,6 +175,12 @@ real (`data/users/conf/restic.conf` frente a `conf/restic.conf`).
 
 ### T17. HestiaCP no renombra cuentas; `v-add-database` concatena — CONFIRMADA (servidor)
 
+**SOSPECHA** (lectura, 2026-09-14): mientras `adoptar --to` trabaja, el `restic.conf` que escribe
+en el destino apunta al repositorio rescatado con su propia retención (`SNAPSHOTS='30'`,
+`KEEP_DAILY='8'`…). Si en ese rato corriera el respaldo Restic del destino, respaldaría sus
+cuentas en ese repositorio y lo podaría con esa política (`50-hestiacp.md`, «Retención»). Falta
+comprobar si hay un cron activo en el destino durante la migración.
+
 `v-change-user-name` cambia el nombre de contacto, no la cuenta; renombrar es reconstruirla con
 otro nombre, posible porque `user.conf` y `dns.conf` no llevan el usuario dentro
 (`adoptar.sh:642-654`). `v-add-database` forma `usuario_sufijo` y no admite el nombre completo
@@ -189,7 +195,10 @@ sustituyendo `mysql`, `mysqldump`, `ssh` y compañía por falsos en el `PATH`. L
 fuera, porque `HESTIA_DIR` no es una raíz completa:
 
 - `lib/adoptar.sh`: 18 rutas `/usr/local/hestia` escritas a mano y ningún uso de `HESTIA_DIR`.
-  Cubrirlo exige cambiar el código (ADR propio).
+  Cubrirlo exige cambiar el código (ADR propio). En modo remoto esas rutas solo viajan por
+  `ssh` (el falso no las mira), pero llegar con falsos hasta la escritura de `restic.conf`
+  exige unas 12 respuestas distintas de `ssh`/`bc_ssh_sudo` (recuento de la ronda #017): se
+  dejó sin prueba.
 - `lib/hestia.sh`: usa `$HESTIA_DIR` (23 sitios), pero el crontab de `hestiaweb` está escrito a
   mano (`hestia.sh:35`) y lee `/etc/cron.d` (464-481); `rclone.conf` se redirige con
   `BC_RCLONE_CONF` (25). Buena parte se puede probar ya con `HESTIA_DIR` en el temporal.

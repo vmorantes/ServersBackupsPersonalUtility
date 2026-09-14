@@ -79,9 +79,10 @@ Pasado a `.agents/docs/roadmap.md` y a «Espera al PO» de `estado/AHORA.md`.
   está en `docs/hestiacp/tres-escenarios.md` y la ejecuta el PO.
 - **Sin probar contra un servidor**: buzones de correo y DKIM, certificados SSL, alias web,
   cuentas grandes, y el remapeo de IP en una restauración real (solo con datos sintéticos).
-- **El servidor de pruebas se va a dar de baja.** Mientras siga encendido, su retención de
-  Restic poda cada noche; las instantáneas buenas de la cuenta grande desaparecen hacia
-  principios de octubre de 2026.
+- **El servidor de pruebas se va a dar de baja.** Su respaldo Restic nocturno, que poda al
+  terminar, ya no se ejecuta: el PO quitó esa línea del cron del sistema (lo dijo el
+  2026-09-14). Las instantáneas quedan en el almacenamiento S3. Resquicio sin verificar: un
+  respaldo lanzado a mano desde el panel también podaría (`context/50-hestiacp.md`).
 - **Dos bloqueos de Restic sin liberar** en los repositorios de dos cuentas de ese servidor,
   de transferencias interrumpidas. Se dejaron a propósito: si frenan la poda nocturna,
   protegen las copias buenas hasta que el PO decida.
