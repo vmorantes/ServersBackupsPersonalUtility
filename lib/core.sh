@@ -73,16 +73,24 @@ bc_cleanup_register() {
   BC_CLEANUP_CMDS["$clave"]="$orden"
 }
 
-# Ejecuta ya la limpieza de <clave>, si existe, y la quita del registro. NUNCA
-# en una subshell: bc_verify_drop_scratch, por ejemplo, tiene que poder dejar
-# BC_SCRATCH_DB="" en ESTE proceso, no en uno que desaparece al terminar.
+# Ejecuta ya la limpieza de <clave>, si existe, y la quita del registro
+# DESPUÉS —no antes— de ejecutarla. NUNCA en una subshell: bc_verify_drop_scratch,
+# por ejemplo, tiene que poder dejar BC_SCRATCH_DB="" en ESTE proceso, no en
+# uno que desaparece al terminar.
+#
+# El orden (ejecutar, LUEGO quitar) importa: si el proceso muere a mitad de
+# bc_cleanup_eval (una señal que no sea INT/TERM, o esta misma limpieza
+# corriendo dentro de bc_cleanup_pending — ver ahí), la clave SIGUE
+# registrada y bc_cleanup_pending la reintenta al salir. Esto exige que toda
+# limpieza sea idempotente (ya lo era: un rm -rf o un cat > repetidos no
+# hacen daño la segunda vez).
 bc_cleanup_run() {
   local clave="$1"
   [[ -n "${BC_CLEANUP_CMDS[$clave]+x}" ]] || return 0
   local orden="${BC_CLEANUP_CMDS[$clave]}"
+  bc_cleanup_eval "$orden"
   unset 'BC_CLEANUP_CMDS[$clave]'
   bc_cleanup_quitar_clave "$clave"
-  bc_cleanup_eval "$orden"
 }
 
 # Evalúa una orden de limpieza sin que su fallo interrumpa el proceso (set -e
