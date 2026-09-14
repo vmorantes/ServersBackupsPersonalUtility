@@ -106,10 +106,45 @@ test_a_failing_cleanup_does_not_block_the_rest() {
   afirmar_igual "$contenido" "C,A," "A y C corrieron pese a que B (entre medias) falló"
 }
 
+# bc_cleanup_eval restaura el errexit de quien llama TAL COMO ESTABA, no lo
+# impone: bc_cleanup_all hace `set +e` antes de bc_cleanup_pending
+# (bin/backupctl), así que debe seguir en +e después. Se mira $- (sin
+# provocar ningún fallo real: "true" siempre sale bien).
+test_cleanup_eval_preserves_the_callers_errexit() {
+  nueva_prueba t6
+  local estado_mas="$BANCO_TMP/t6/mas.txt" estado_menos="$BANCO_TMP/t6/menos.txt"
+
+  # Caso 1: quien llama tiene errexit DESACTIVADO en el momento de limpiar.
+  bash -c '
+    set -Eeuo pipefail
+    trap "bc_trap_err \"\$BASH_COMMAND\"" ERR
+    source "$1/lib/core.sh"
+    set +e
+    bc_cleanup_register a "true"
+    bc_cleanup_run a
+    case "$-" in *e*) echo on ;; *) echo off ;; esac > "$2"
+  ' _ "$BANCO_RAIZ" "$estado_menos" >/dev/null 2>&1
+  afirmar_existe "$estado_menos" "el caso 'set +e' dejó su archivo de estado"
+  afirmar_igual "$(cat "$estado_menos" 2>/dev/null || true)" "off" "tras limpiar, sigue en 'set +e' (no se activa errexit)"
+
+  # Caso 2: quien llama tiene errexit ACTIVADO en el momento de limpiar.
+  bash -c '
+    set -Eeuo pipefail
+    trap "bc_trap_err \"\$BASH_COMMAND\"" ERR
+    source "$1/lib/core.sh"
+    bc_cleanup_register a "true"
+    bc_cleanup_run a
+    case "$-" in *e*) echo on ;; *) echo off ;; esac > "$2"
+  ' _ "$BANCO_RAIZ" "$estado_mas" >/dev/null 2>&1
+  afirmar_existe "$estado_mas" "el caso 'set -e' dejó su archivo de estado"
+  afirmar_igual "$(cat "$estado_mas" 2>/dev/null || true)" "on" "tras limpiar, sigue en 'set -e' (se restaura errexit)"
+}
+
 test_loading_core_does_not_execute_anything
 test_pending_cleanups_run_in_reverse_order_on_bc_die
 test_cleanup_run_executes_once_and_not_again_on_exit
 test_cleanup_forget_does_not_execute
 test_a_failing_cleanup_does_not_block_the_rest
+test_cleanup_eval_preserves_the_callers_errexit
 
 fin_de_suite
