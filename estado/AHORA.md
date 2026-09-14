@@ -1,9 +1,10 @@
 # Ahora
 
 - **Actualizado:** 2026-09-14 (tras las respuestas del PO)
-- **Último mensaje:** #007 (ARQ) — ronda correctiva del banco. Se espera #008. (#006: banco
-  construido, 28 afirmaciones en verde, pero la revisión encontró 2 defectos críticos en las
-  propias pruebas; no se fusionó.)
+- **Último mensaje:** #009 (ARQ) — segunda corrección del banco. Se espera #010. (#008: los
+  2 críticos cerrados y demostrados con 6 mutaciones, 43 afirmaciones en verde; la nueva
+  revisión encontró 1 crítico: la salvaguarda del perfil fallaba en abierto con `BANCO_TMP`
+  vacío. No se fusionó.)
 - **Tramo en curso:** `estado/tramos/2026-09-14-0949-adopcion-arquitecto-coder.md`
 
 ## Espera al PO
@@ -27,11 +28,10 @@ Decidido el 2026-09-14: pruebas en servidor, solo el PO (ADR 0006); `master` est
 
 ## En curso
 
-Ronda #007 en vuelo, en `feat/banco-de-pruebas` (8 commits, sin fusionar): corregir dos
-pruebas que pasaban con el código roto (restauración: no comprobaba el `CREATE DATABASE`;
-salvaguarda del perfil: sus fallos se perdían en una subshell), endurecer el banco, añadir
-pruebas del camino de fallo, demostrar cada corrección con mutaciones, volver a revisar y
-fusionar si no queda nada crítico.
+Ronda #009 en vuelo, en `feat/banco-de-pruebas` (19 commits, sin fusionar): validar
+`BANCO_TMP`/`BANCO_RAIZ` al cargar `tests/lib.sh` y hacer que la salvaguarda falle en cerrado,
+cerrar tres advertencias, demostrarlo con mutaciones, revisar y fusionar si no queda nada
+crítico.
 
 Si se corta ahora: quedaría la rama a medias; el coder termina la ronda antes de parar.
 

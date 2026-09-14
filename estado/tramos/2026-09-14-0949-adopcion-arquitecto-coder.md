@@ -16,7 +16,12 @@ La configuración la hizo el arquitecto sin coder. Después:
 | #001→#002 | Saludo; el coder confirma (Claude Code / Sonnet 5, `master`) | completado | — |
 | #003→#004 | Commitear la adopción en `chore/adopcion-arquitecto-coder` y fusionar | completado | `e26d637` `4021253` `4ebffe4` `70c9967` `b713923` `64ac581`; fusión `7977793` |
 | #005→#006 | Banco de pruebas local (ADR 0009), rama `feat/banco-de-pruebas` | bloqueado: 2 críticos de revisión, sin fusionar | `9ff440f` `68ec043` `5672967` `80dbaad` `ddc93e8` `3b795cb` `c10cacf` `ce6b124` |
-| #007→#008 | Corregir los críticos, endurecer, camino de fallo, mutaciones, fusionar | en vuelo | — |
+| #007→#008 | Corregir los críticos, endurecer, camino de fallo, mutaciones, fusionar | bloqueado: 1 crítico nuevo, sin fusionar; 6/6 mutaciones confirmadas | `b2ce989` `858910f` `76a0f64` `30b6f90` `0450cdd` `1e1680c` `e7ef47c` `e2df7b8` `f919645` `706faa4` `e440a02` |
+| #009→#010 | Salvaguarda que falle en cerrado; advertencias 2, 3 y 5; mutaciones; fusionar | en vuelo | — |
+
+Hallazgo de #008: el arquitecto había escrito en T18 (y en el ADR 0009) que `hestia` depende de
+`/usr/local/hestia` escrito a mano; falso: `lib/hestia.sh` usa `$HESTIA_DIR` 23 veces. Corregido
+en `context/`; el ADR no se edita.
 
 Hallazgo de #006: dos afirmaciones pasaban con el código roto (demostrado por mutación por
 `code-reviewer`). Y el arquitecto dictó en #005 nombres distintos de los del ADR 0009
