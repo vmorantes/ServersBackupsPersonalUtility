@@ -120,6 +120,15 @@ el llamador. Solo `restic.sh:78` hace `trap - RETURN`. Aparecen en `remote.sh:47
 `deploy.sh:59`, `pull.sh:41`, `hestia.sh` (varias), `adoptar.sh:272,549,855,1291` (esta, en un
 bucle). Con comillas dobles se expanden al ponerse (`restore.sh:62`, `verify.sh:57`).
 
+### T20. `restore` cancelado deja los volcados extraídos en `$TMPDIR` — CONFIRMADA (banco)
+
+`lib/restore.sh:60-62` extrae la base a `$TMPDIR/backupctl-restore.XXXXXXXX` y confía su
+borrado a un `trap … RETURN`. Si la restauración se cancela (`bc_confirm … || bc_die`, 80-81),
+`bc_die` sale del proceso sin que la función retorne y el directorio se queda, con los
+`.sql.gz` de la base. En un servidor acumula volcados en `/tmp` (permisos 700). Lo mostró la
+prueba `test_restore_without_yes_refuses_an_existing_target` (ronda #012). Misma familia que
+T14. Sin corregir (roadmap).
+
 ### Menores — CONFIRMADAS (código)
 
 | Qué | Dónde |
@@ -160,13 +169,21 @@ otro nombre, posible porque `user.conf` y `dns.conf` no llevan el usuario dentro
 
 ## Pruebas y herramientas
 
-### T18. No hay forma de probar sin servidor — CONFIRMADA (código)
+### T18. `adoptar` no se puede probar sin servidor; `hestia`, en parte — CONFIRMADA (código)
 
-No existe ninguna prueba automatizada. `ssh`, `rsync`, `mysql`, `mysqldump`, `sudo`,
-`crontab`, `restic` y `rclone` se invocan por nombre: solo se sustituyen poniendo falsos
-delante en el `PATH`. `HESTIA_DIR` no es una raíz completa: `/usr/local/hestia` está escrito a
-mano en `cron.sh:46,51`, `pull.sh:101`, unas 15 líneas de `adoptar.sh` y `server.py:438-444,
-474, 632`. Ver `40-entorno.md`.
+El banco (`tests/`, ADR 0009) cubre perfil, respaldo, verificación, retención y restauración
+sustituyendo `mysql`, `mysqldump`, `ssh` y compañía por falsos en el `PATH`. Lo que queda
+fuera, porque `HESTIA_DIR` no es una raíz completa:
+
+- `lib/adoptar.sh`: 18 rutas `/usr/local/hestia` escritas a mano y ningún uso de `HESTIA_DIR`.
+  Cubrirlo exige cambiar el código (ADR propio).
+- `lib/hestia.sh`: usa `$HESTIA_DIR` (23 sitios), pero el crontab de `hestiaweb` está escrito a
+  mano (`hestia.sh:35`) y lee `/etc/cron.d` (464-481); `rclone.conf` se redirige con
+  `BC_RCLONE_CONF` (25). Buena parte se puede probar ya con `HESTIA_DIR` en el temporal.
+- También escritos a mano: `cron.sh:46,51`, `pull.sh:101`, `server.py:438-444, 474, 632`.
+
+El ADR 0009 metió `hestia` junto a `adoptar` en lo excluido; la corrección es esta (revisión de
+la ronda #008). Ver `40-entorno.md`.
 
 ### T19. `web/comprobar.py` reescribe un `.pyc` versionado — CUBIERTA
 
@@ -183,3 +200,7 @@ Importa `server.py` y regenera `web/__pycache__/server.cpython-312.pyc`, que est
 - `bin/backupctl:503`: comentario de `exec-count` fuera de su sitio; la lista de órdenes con
   ensayo de la ayuda (143-144) omite `hestia rclone/restic/cron` y `adoptar*`.
 - `docs/desarrollo/repositorio.md` «Ramas»: actualizado con el ADR 0007 el 2026-09-14.
+- `DEPLOY_USER` vale `root` por defecto en `lib/config.sh`; `docs/referencia/variables.md`
+  dice `$USER_NAME`.
+- `status` con un perfil sin `NOTIFY_*` ni `HEALTHCHECK_URL` sale siempre con 1: cuenta «ningún
+  aviso configurado» como problema (`lib/archive.sh:106-204`).

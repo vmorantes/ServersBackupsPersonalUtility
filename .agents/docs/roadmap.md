@@ -12,10 +12,12 @@ Una tarea sale de aquí al cerrarse; su historia queda en la bitácora. Referenc
 ## En curso (nombrado por el PO el 2026-09-14)
 
 - [ ] **Commitear la adopción del modelo arquitecto-coder** en una rama y fusionarla.
-- [ ] **Banco de pruebas local**: órdenes falsas (`ssh`, `rsync`, `mysql`, `mysqldump`,
-      `sudo`, `v-*`, `restic`, `rclone`) delante en el `PATH` y perfiles sintéticos en un
-      temporal, para probar sin servidor (T18; ADR 0006 lo vuelve imprescindible). Necesita
-      ADR antes de escribir código.
+- [ ] **Banco de pruebas local** (ADR 0009): primera fase construida en
+      `feat/banco-de-pruebas`; ronda correctiva en curso antes de fusionar.
+- [ ] **Siguientes suites del banco**: `ssh`/`deploy`/`pull`/`remote` contra falsos,
+      confirmaciones sin terminal (T5), `bc_ssh_sudo` y la entrada estándar (T2), `hestia` con
+      `HESTIA_DIR` en el temporal. `adoptar` exige antes sustituir `/usr/local/hestia` por
+      `$HESTIA_DIR` (T18, ADR propio).
 
 ## Pendiente en servidores (lo ejecuta el PO)
 
@@ -26,6 +28,11 @@ Una tarea sale de aquí al cerrarse; su historia queda en la bitácora. Referenc
 - [ ] **Baja del servidor de pruebas.** Su retención de Restic poda cada noche: las
       instantáneas buenas de la cuenta grande desaparecen hacia principios de octubre de 2026.
       Dos bloqueos de Restic quedaron sin liberar a propósito (`HERENCIA.md`).
+
+## Bugs de `backupctl` encontrados por el banco
+
+- [ ] **`restore` cancelado deja volcados en `/tmp`** (T20): el borrado va en un `trap RETURN`
+      que `bc_die` salta. Revisar a la vez las demás trampas `RETURN` (T14).
 
 ## El repositorio
 

@@ -16,7 +16,8 @@
       "Bash(mysqldump:*)",
       "Bash(git push:*)",
       "Read(./*/env.sh)",
-      "Read(./*/env.sh.*)",
+      "Read(./*/env.sh.anterior)",
+      "Read(./*/env.sh.nuevo)",
       "Read(./*/output/HestiaCP/**)",
       "Read(./*/ESTADO.md)",
       "Read(./.git/config)"

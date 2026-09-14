@@ -1,0 +1,15 @@
+ssh
+scp
+sftp
+sshpass
+ssh-keygen
+ssh-copy-id
+rsync
+mysql
+mysqldump
+sudo
+crontab
+restic
+rclone
+mail
+curl

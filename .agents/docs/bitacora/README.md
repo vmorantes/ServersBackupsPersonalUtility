@@ -21,4 +21,4 @@ reporte del coder en mano. Plantilla:
 
 | Entrada | Qué cierra | Fecha |
 | --- | --- | --- |
-| — | Ninguna todavía: la primera será la de la adopción, al commitearse | — |
+| [0001](0001-adopcion-arquitecto-coder.md) | Adopción del modelo arquitecto-coder | 2026-09-14 |

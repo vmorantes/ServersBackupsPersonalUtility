@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# =============================================================================
+# tests/ejecutar.sh — banco de pruebas local (ADR 0010)
+# =============================================================================
+# Única entrada. Sin argumentos. Lanza cada tests/probar_*.sh en un proceso
+# propio, con un PATH que antepone órdenes falsas y un entorno limpio.
+#
+# Esto es el lanzador OFICIAL, no la única salvaguarda: tests/lib.sh comprueba
+# por su cuenta, al cargarse y de nuevo en backupctl_prueba, que el PATH
+# resuelve a los falsos y que la carpeta lleva la marca que escribe aquí
+# abajo. Una suite lanzada a mano, sin pasar por este guion, no la reproduce y
+# aborta (ADR 0010: ninguna salvaguarda depende de quién llama).
+#
+# Sale con 0 solo si todas las suites pasan.
+# =============================================================================
+set -u
+
+if [[ "$(id -u)" == "0" ]]; then
+  echo "tests/ejecutar.sh: no se ejecuta como root." >&2
+  exit 2
+fi
+
+RAIZ="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+ORDENES_ARCHIVO="$RAIZ/tests/falsos/ordenes.txt"
+if [[ ! -s "$ORDENES_ARCHIVO" ]]; then
+  echo "tests/ejecutar.sh: falta o está vacío $ORDENES_ARCHIVO." >&2
+  exit 2
+fi
+ORDENES_PELIGROSAS=()
+while IFS= read -r orden || [[ -n "$orden" ]]; do
+  [[ -z "$orden" ]] && continue
+  if [[ ! "$orden" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+    echo "tests/ejecutar.sh: línea inválida en $ORDENES_ARCHIVO: '$orden'." >&2
+    exit 2
+  fi
+  ORDENES_PELIGROSAS+=("$orden")
+done < "$ORDENES_ARCHIVO"
+
+# Ruta EXPLÍCITA, no "-t": con "-t" mktemp antepone $TMPDIR si está definida,
+# y todo lo que compara contra /tmp/backupctl-pruebas.* (tests/lib.sh) dejaría
+# de reconocer el temporal por una variable de entorno ajena al banco.
+T="$(mktemp -d /tmp/backupctl-pruebas.XXXXXX)"
+if [[ -z "$T" || ! -d "$T" ]]; then
+  echo "tests/ejecutar.sh: mktemp -d no devolvió un directorio utilizable." >&2
+  exit 2
+fi
+trap 'rm -rf "$T"' EXIT
+
+# Testigo aleatorio: liga la carpeta que usan las suites al lanzador que la
+# creó. Sin esto, cualquier directorio con el nombre correcto pasaría la
+# comprobación de rutas de tests/lib.sh (ADR 0010, «Alternativas descartadas»).
+TESTIGO="$(od -An -tx1 -N16 /dev/urandom | tr -d ' \n')"
+printf '%s' "$TESTIGO" > "$T/.banco"
+
+mkdir -p "$T/bin" "$T/home" "$T/tmp"
+for orden in "${ORDENES_PELIGROSAS[@]}"; do
+  ln -s "$RAIZ/tests/falsos/despachador.sh" "$T/bin/$orden"
+done
+
+BANCO_PATH="$T/bin:/usr/local/bin:/usr/bin:/bin"
+
+# --- Comprobación de seguridad: antes de ejecutar NINGUNA suite --------------
+fallo_seguridad=0
+for orden in "${ORDENES_PELIGROSAS[@]}"; do
+  resuelto="$(PATH="$BANCO_PATH" command -v "$orden" 2>/dev/null || true)"
+  if [[ "$resuelto" != "$T/bin/$orden" ]]; then
+    echo "ABORTADO: '$orden' no resuelve a su falso (resolvió a: '${resuelto:-<nada>}')." >&2
+    fallo_seguridad=1
+  fi
+done
+if (( fallo_seguridad )); then
+  echo "No se ha ejecutado ninguna suite." >&2
+  exit 2
+fi
+
+# --- Suites --------------------------------------------------------------
+total=0
+fallidas=0
+for suite in "$RAIZ"/tests/probar_*.sh; do
+  [[ -f "$suite" ]] || continue
+  nombre="$(basename "$suite" .sh)"
+  total=$(( total + 1 ))
+  mkdir -p "$T/$nombre"
+  echo
+  echo "== $nombre =="
+  if env -i \
+      HOME="$T/home" \
+      TMPDIR="$T/tmp" \
+      PATH="$BANCO_PATH" \
+      LANG=C.UTF-8 \
+      BANCO_RAIZ="$RAIZ" \
+      BANCO_TMP="$T/$nombre" \
+      BANCO_TESTIGO="$TESTIGO" \
+      bash "$suite"
+  then
+    :
+  else
+    fallidas=$(( fallidas + 1 ))
+  fi
+done
+
+echo
+if (( total == 0 )); then
+  echo "tests/ejecutar.sh: no se encontró ninguna suite (tests/probar_*.sh)." >&2
+  exit 1
+fi
+echo "suites: $total, fallidas: $fallidas"
+(( fallidas == 0 ))
