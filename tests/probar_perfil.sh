@@ -10,20 +10,22 @@ echo "== probar_perfil =="
 
 # 'config --check' no toca MySQL: no hace falta ningún guion de mysql/mysqldump.
 test_config_check_accepts_the_synthetic_profile() {
-  local perfil="$BANCO_TMP/perfil1"
+  nueva_prueba t1
+  local perfil="$BANCO_TMP/t1/perfil"
   crear_perfil "$perfil"
 
-  backupctl_prueba "$perfil" config --check >"$BANCO_TMP/salida1.log" 2>&1
+  backupctl_prueba "$perfil" config --check >"$BANCO_TMP/t1/salida.log" 2>&1
   afirmar_codigo 0 "$?" "config --check acepta el perfil sintético"
 }
 
 test_config_check_requires_mysql_user() {
-  local perfil="$BANCO_TMP/perfil2"
+  nueva_prueba t2
+  local perfil="$BANCO_TMP/t2/perfil"
   crear_perfil "$perfil"
   # Se sustituye la línea sin tocar el resto del perfil.
   sed -i 's/^export MYSQL_USER=.*/export MYSQL_USER=""/' "$perfil/env.sh"
 
-  backupctl_prueba "$perfil" config --check >"$BANCO_TMP/salida2.log" 2>&1
+  backupctl_prueba "$perfil" config --check >"$BANCO_TMP/t2/salida.log" 2>&1
   afirmar_codigo 1 "$?" "config --check exige MYSQL_USER"
 }
 

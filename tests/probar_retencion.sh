@@ -29,23 +29,25 @@ contar_zips() {
 }
 
 test_retention_dry_run_deletes_nothing() {
-  local perfil="$BANCO_TMP/perfil1"
+  nueva_prueba t1
+  local perfil="$BANCO_TMP/t1/perfil"
   crear_perfil "$perfil"
   preparar_zips "$perfil/output/mysql_backups"
 
   # --dry-run debe ser el PRIMER argumento (bin/backupctl:359).
-  backupctl_prueba "$perfil" retention --dry-run >"$BANCO_TMP/salida1.log" 2>&1
+  backupctl_prueba "$perfil" retention --dry-run >"$BANCO_TMP/t1/salida.log" 2>&1
   afirmar_codigo 0 "$?" "retention --dry-run termina en código 0"
   afirmar_igual "$(contar_zips "$perfil/output/mysql_backups")" "5" "--dry-run no borra ninguno de los 5 respaldos"
-  afirmar_contiene "$BANCO_TMP/salida1.log" 'simulaci' "la salida menciona la simulación"
+  afirmar_contiene "$BANCO_TMP/t1/salida.log" 'simulaci' "la salida menciona la simulación"
 }
 
 test_retention_keeps_the_minimum() {
-  local perfil="$BANCO_TMP/perfil2"
+  nueva_prueba t2
+  local perfil="$BANCO_TMP/t2/perfil"
   crear_perfil "$perfil"
   preparar_zips "$perfil/output/mysql_backups"
 
-  backupctl_prueba "$perfil" retention >"$BANCO_TMP/salida2.log" 2>&1
+  backupctl_prueba "$perfil" retention >"$BANCO_TMP/t2/salida.log" 2>&1
   afirmar_codigo 0 "$?" "retention termina en código 0"
   afirmar_igual "$(contar_zips "$perfil/output/mysql_backups")" "3" "quedan exactamente los 3 más recientes (BACKUP_KEEP_MIN)"
 }
