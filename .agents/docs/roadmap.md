@@ -27,9 +27,8 @@ Una tarea sale de aquí al cerrarse; su historia queda en la bitácora. Referenc
       `docs/hestiacp/tres-escenarios.md`. De punta a punta solo se probó una cuenta pequeña.
 - [ ] **Sin probar contra un servidor**: buzones y DKIM, certificados SSL, alias web, cuentas
       grandes, remapeo de IP en una restauración real.
-- [ ] **Baja del servidor de pruebas.** Su retención de Restic poda cada noche: las
-      instantáneas buenas de la cuenta grande desaparecen hacia principios de octubre de 2026.
-      Dos bloqueos de Restic quedaron sin liberar a propósito (`HERENCIA.md`).
+- [ ] **Baja del servidor de pruebas.** Ya no poda (el PO quitó el respaldo Restic del cron el
+      2026-09-14). Dos bloqueos de Restic quedaron sin liberar a propósito (`HERENCIA.md`).
 
 ## Bugs de `backupctl` encontrados por el banco
 
