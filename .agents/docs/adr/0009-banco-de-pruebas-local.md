@@ -1,6 +1,6 @@
 # 0009 — Banco de pruebas local: órdenes falsas en el PATH y perfiles sintéticos
 
-- **Estado:** Aceptada (sin implementar)
+- **Estado:** Reemplazada por 0010
 - **Fecha:** 2026-09-14
 - **Decide:** Arquitecto, por mandato del PO («banco de pruebas local», 2026-09-14)
 - **Estructural:** sí (dónde viven las pruebas, cómo se ejecutan, qué entra en `verificar.sh`)

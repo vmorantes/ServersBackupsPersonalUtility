@@ -58,4 +58,5 @@ servidor). Su ADR lleva obligatoriamente:
 | [0006](0006-pruebas-en-servidor-las-hace-el-po.md) | Las pruebas contra un servidor las hace el PO | sí | Aceptada |
 | [0007](0007-ramas-master-estable.md) | `master` estable; ramas propias; lo que toca servidores espera la prueba del PO | sí | Aceptada |
 | [0008](0008-credenciales-versionadas.md) | Los perfiles guardan sus credenciales en el repositorio | sí | Aceptada |
-| [0009](0009-banco-de-pruebas-local.md) | Banco de pruebas local: órdenes falsas en el PATH y perfiles sintéticos | sí | Aceptada (sin implementar) |
+| [0009](0009-banco-de-pruebas-local.md) | Banco de pruebas local: órdenes falsas en el PATH y perfiles sintéticos | sí | Reemplazada por 0010 |
+| [0010](0010-banco-de-pruebas-salvaguardas-propias.md) | Banco de pruebas: cada salvaguarda se comprueba a sí misma | sí | Aceptada |

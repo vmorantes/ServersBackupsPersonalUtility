@@ -28,7 +28,13 @@ funciona en cualquier terminal y usa el perfil real por defecto (`30-trampas.md`
 Decirlo así en cualquier reporte, en vez de dar por probado lo que solo se razonó. Lo que el
 PO tenga que comprobar en un servidor va a «Espera al PO» con los pasos.
 
-## Cómo se prueba sin servidor: el banco (`tests/`, ADR 0009)
+## Cómo se prueba sin servidor: el banco (`tests/`, ADR 0010)
+
+Las salvaguardas del banco se comprueban a sí mismas (ADR 0010): lista única de órdenes
+peligrosas en `tests/falsos/ordenes.txt`; `ejecutar.sh` crea el temporal en `/tmp` sin mirar
+`TMPDIR` y deja una marca `.banco` con un testigo (`BANCO_TESTIGO`); `lib.sh`, al cargarse,
+exige la marca y que cada orden peligrosa resuelva a su falso, y `backupctl_prueba` lo repite
+antes de ejecutar. Una suite lanzada a mano aborta con 2. Para depurar, `tests/ejecutar.sh`.
 
 ```
 bash tests/ejecutar.sh      # también lo ejecuta verificar.sh
