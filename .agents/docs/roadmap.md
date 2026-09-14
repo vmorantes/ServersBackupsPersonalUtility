@@ -33,8 +33,9 @@ Una tarea sale de aquí al cerrarse; su historia queda en la bitácora. Referenc
 
 ## Bugs de `backupctl` encontrados por el banco
 
-- [ ] **`restore` cancelado deja volcados en `/tmp`** (T20): el borrado va en un `trap RETURN`
-      que `bc_die` salta. Revisar a la vez las demás trampas `RETURN` (T14).
+- [ ] **Limpieza que no corre al morir** (T20; ADR 0012, en curso en `fix/limpieza-al-salir`):
+      `restore`, `verify`, `pull`, `restic` y `adoptar` (este deja `restic.conf` del destino
+      pisado si se interrumpe). Nombrado por el PO el 2026-09-14.
 
 ## El repositorio
 
