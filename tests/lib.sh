@@ -16,6 +16,46 @@
 [[ -n "${BC_PRUEBA_LIB_LOADED:-}" ]] && return 0
 BC_PRUEBA_LIB_LOADED=1
 
+# -----------------------------------------------------------------------------
+# Salvaguarda de entorno — falla en CERRADO, no en abierto
+# -----------------------------------------------------------------------------
+# BANCO_TMP y BANCO_RAIZ sostienen todas las demás salvaguardas de este
+# archivo (backupctl_prueba, nueva_prueba): si cualquiera de las dos está
+# vacía, no es absoluta, o no es un directorio, cualquier comparación de rutas
+# posterior puede degenerar en "acepta cualquiera" (revisión de la ronda
+# #008: con $BANCO_TMP="", el patrón "$base"/*|"$base" se volvía /*|"", que
+# aceptaba cualquier ruta absoluta). Se comprueba ANTES de cualquier mkdir o
+# rm, y de nuevo dentro de nueva_prueba (defensa en profundidad).
+bc_comprobar_entorno_banco() {
+  local nombre valor real
+  for nombre in BANCO_TMP BANCO_RAIZ; do
+    valor="${!nombre:-}"
+    if [[ -z "$valor" ]]; then
+      echo "tests/lib.sh: \$$nombre no está definida o está vacía: se aborta." >&2
+      exit 2
+    fi
+    if [[ "$valor" != /* ]]; then
+      echo "tests/lib.sh: \$$nombre no es una ruta absoluta ('$valor'): se aborta." >&2
+      exit 2
+    fi
+    if [[ ! -d "$valor" ]]; then
+      echo "tests/lib.sh: \$$nombre no es un directorio existente ('$valor'): se aborta." >&2
+      exit 2
+    fi
+  done
+
+  real="$(realpath -e -- "$BANCO_TMP" 2>/dev/null || true)"
+  case "$real" in
+    /tmp/backupctl-pruebas.*) ;;
+    *)
+      echo "tests/lib.sh: \$BANCO_TMP ('$BANCO_TMP', resuelto '$real') no está dentro de /tmp/backupctl-pruebas.*: se aborta." >&2
+      exit 2
+      ;;
+  esac
+}
+
+bc_comprobar_entorno_banco
+
 mkdir -p "$BANCO_TMP/registro" "$BANCO_TMP/guion"
 : > "$BANCO_TMP/.resultados"
 
@@ -25,10 +65,10 @@ mkdir -p "$BANCO_TMP/registro" "$BANCO_TMP/guion"
 afirmar_codigo() {
   local esperado="$1" obtenido="$2" desc="$3"
   if [[ "$esperado" == "$obtenido" ]]; then
-    echo "  ok: $desc"
+    echo "  ok: $desc" >&2
     printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
   else
-    echo "  FALLO: $desc (esperado código $esperado, obtenido $obtenido)"
+    echo "  FALLO: $desc (esperado código $esperado, obtenido $obtenido)" >&2
     printf 'FALLO\t%s (esperado codigo %s, obtenido %s)\n' "$desc" "$esperado" "$obtenido" >> "$BANCO_TMP/.resultados"
   fi
 }
@@ -36,10 +76,10 @@ afirmar_codigo() {
 afirmar_igual() {
   local a="$1" b="$2" desc="$3"
   if [[ "$a" == "$b" ]]; then
-    echo "  ok: $desc"
+    echo "  ok: $desc" >&2
     printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
   else
-    echo "  FALLO: $desc (esperado '$b', obtenido '$a')"
+    echo "  FALLO: $desc (esperado '$b', obtenido '$a')" >&2
     printf 'FALLO\t%s (esperado %s, obtenido %s)\n' "$desc" "$b" "$a" >> "$BANCO_TMP/.resultados"
   fi
 }
@@ -47,10 +87,10 @@ afirmar_igual() {
 afirmar_contiene() {
   local archivo="$1" patron="$2" desc="$3"
   if [[ -f "$archivo" ]] && grep -qE -- "$patron" "$archivo"; then
-    echo "  ok: $desc"
+    echo "  ok: $desc" >&2
     printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
   else
-    echo "  FALLO: $desc (no se encontró '$patron' en $archivo)"
+    echo "  FALLO: $desc (no se encontró '$patron' en $archivo)" >&2
     printf 'FALLO\t%s (no se encontro %s en %s)\n' "$desc" "$patron" "$archivo" >> "$BANCO_TMP/.resultados"
   fi
 }
@@ -58,13 +98,13 @@ afirmar_contiene() {
 afirmar_no_contiene() {
   local archivo="$1" patron="$2" desc="$3"
   if [[ ! -f "$archivo" ]]; then
-    echo "  FALLO: $desc (no existe $archivo)"
+    echo "  FALLO: $desc (no existe $archivo)" >&2
     printf 'FALLO\t%s (no existe %s)\n' "$desc" "$archivo" >> "$BANCO_TMP/.resultados"
   elif grep -qE -- "$patron" "$archivo"; then
-    echo "  FALLO: $desc (se encontró '$patron' en $archivo)"
+    echo "  FALLO: $desc (se encontró '$patron' en $archivo)" >&2
     printf 'FALLO\t%s (se encontro %s en %s)\n' "$desc" "$patron" "$archivo" >> "$BANCO_TMP/.resultados"
   else
-    echo "  ok: $desc"
+    echo "  ok: $desc" >&2
     printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
   fi
 }
@@ -72,10 +112,10 @@ afirmar_no_contiene() {
 afirmar_intacto() {
   local archivo="$1" copia="$2" desc="$3"
   if cmp -s "$archivo" "$copia"; then
-    echo "  ok: $desc"
+    echo "  ok: $desc" >&2
     printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
   else
-    echo "  FALLO: $desc ($archivo difiere de $copia)"
+    echo "  FALLO: $desc ($archivo difiere de $copia)" >&2
     printf 'FALLO\t%s (%s difiere de %s)\n' "$desc" "$archivo" "$copia" >> "$BANCO_TMP/.resultados"
   fi
 }
@@ -88,7 +128,7 @@ fin_de_suite() {
     total="$(wc -l < "$BANCO_TMP/.resultados")"
     fallos="$(grep -c '^FALLO' "$BANCO_TMP/.resultados" || true)"
   fi
-  echo "  -- $total afirmaciones, $fallos fallidas --"
+  echo "  -- $total afirmaciones, $fallos fallidas --" >&2
   if (( total == 0 )); then
     echo "  FALLO: la suite no hizo ninguna afirmación" >&2
     return 1
@@ -104,6 +144,7 @@ fin_de_suite() {
 # misma suite) y un directorio propio donde trabajar.
 nueva_prueba() {
   local nombre="$1"
+  bc_comprobar_entorno_banco
   rm -rf "$BANCO_TMP/registro" "$BANCO_TMP/guion"
   mkdir -p "$BANCO_TMP/registro" "$BANCO_TMP/guion" "$BANCO_TMP/$nombre"
   cd "$BANCO_TMP/$nombre"
@@ -153,24 +194,28 @@ EOF
 # Siempre con -p y con la entrada estándar cerrada. Se niega —y lo deja escrito
 # en $BANCO_TMP/.resultados, no solo en una variable— si el perfil no está
 # dentro de $BANCO_TMP: sin esto, un error en una suite podría acabar usando
-# el perfil real (T3). Compara realpath -m de los dos lados: perfil y
-# $BANCO_TMP, por si este último llegara por un enlace simbólico.
+# el perfil real (T3). Compara realpath -e/-m de los dos lados: perfil y
+# $BANCO_TMP, por si este último llegara por un enlace simbólico. Si
+# cualquiera de los dos realpath falla o devuelve vacío, SE NIEGA: ninguna
+# rama del case de abajo puede aceptar con una base vacía (ronda #008: con
+# base="", "$base"/*|"$base" se volvía /*|"", que aceptaba cualquier ruta).
 backupctl_prueba() {
   local perfil_dir="$1"; shift
-  local real base
+  local real base negar=1
   real="$(realpath -m -- "$perfil_dir" 2>/dev/null || true)"
-  base="$(realpath -m -- "$BANCO_TMP" 2>/dev/null || true)"
-  case "$real" in
-    "$base"/*|"$base")
-      "$BANCO_RAIZ/bin/backupctl" -p "$perfil_dir/env.sh" "$@" </dev/null
-      return $?
-      ;;
-    *)
-      echo "  FALLO: backupctl_prueba se niega a ejecutar: '$perfil_dir' (resuelto: '$real') está fuera de \$BANCO_TMP ('$base')" >&2
-      printf 'FALLO\tbackupctl_prueba se niega: %s (resuelto: %s) esta fuera de %s\n' "$perfil_dir" "$real" "$base" >> "$BANCO_TMP/.resultados"
-      return 97
-      ;;
-  esac
+  base="$(realpath -e -- "$BANCO_TMP" 2>/dev/null || true)"
+  if [[ -n "$real" && -n "$base" ]]; then
+    case "$real" in
+      "$base"/*|"$base") negar=0 ;;
+    esac
+  fi
+  if (( negar == 0 )); then
+    "$BANCO_RAIZ/bin/backupctl" -p "$perfil_dir/env.sh" "$@" </dev/null
+    return $?
+  fi
+  echo "  FALLO: backupctl_prueba se niega a ejecutar: '$perfil_dir' (resuelto: '$real') está fuera de \$BANCO_TMP ('$base')" >&2
+  printf 'FALLO\tbackupctl_prueba se niega: %s (resuelto: %s) esta fuera de %s\n' "$perfil_dir" "$real" "$base" >> "$BANCO_TMP/.resultados"
+  return 97
 }
 
 # -----------------------------------------------------------------------------
