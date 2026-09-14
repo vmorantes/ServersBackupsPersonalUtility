@@ -12,7 +12,12 @@
 
 | # | Qué | Resultado | Commits |
 | --- | --- | --- | --- |
-| #017→#018 | A: commitear ADR 0011/0012, guarda y documentación; borrar las ramas fusionadas. B: implementar ADR 0012 en `fix/limpieza-al-salir` | en vuelo | — |
+| #017→(corte) | A: commitear ADR 0011/0012, guarda y documentación; borrar las ramas fusionadas. B: implementar ADR 0012 en `fix/limpieza-al-salir` | A completada; B commiteada sin revisar: los editores del PO se cerraron y el reporte no llegó | A: `7125f3a` `91df0b9` `80d6351`, fusión `9f82430`; B: `070107d` `b4430bc` `fda4642` `c617d1a` `b75bdd4` `8a5b3a4` `70b53a3` |
+| #018→#019 | Saludo tras el corte | el coder conserva el contexto; M20/M21 confirmadas; prueba de `adoptar` descartada (12 respuestas de falsos) | — |
+| #020→#021 | Terminar B: `set -e` en `bc_cleanup_eval`, revisiones, guía para el PO | en vuelo | — |
+
+Tras el corte, el estado se reconstruyó desde git, no desde la conversación: nada se había
+perdido (todo lo hecho estaba commiteado; el árbol, limpio salvo `estado/`).
 
 ## Encontrado y decidido
 
@@ -28,6 +33,14 @@
   módulos afectados; lo que toca servidores espera la prueba del PO antes de fusionar.
 - La guarda daba un falso positivo con redirecciones (`2>&1` contaba como argumentos): corregida,
   con sus casos (182/182).
+
+- Pregunta 5 del PO (conservar instantáneas): verificada en la fuente de HestiaCP 1.10.4 por
+  `hestia-verifier`. La poda la hace el propio servidor (`v-backup-user-restic`, `forget
+  --prune`, retención global en `conf/restic.conf`); `v-delete-backup-host-restic` la detiene
+  para todo el panel. Respuesta en `AHORA.md`. Corrección de `50-hestiacp.md` (el
+  `restic.conf` por usuario solo guarda la contraseña) redactada en el scratchpad para
+  depositarla tras #018. El informe del verificador salió corrupto en su último párrafo: solo
+  se usó lo citado literalmente.
 
 ## Falló por el camino
 

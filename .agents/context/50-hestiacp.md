@@ -19,8 +19,8 @@ enlace), **SIN VERIFICAR**. Al verificar algo, se actualiza su estado con el enl
 
 | Ruta | Qué es | Dónde se usa | Estado |
 | --- | --- | --- | --- |
-| `$HESTIA_DIR/conf/restic.conf` | Configuración de Restic del panel, **una para todo el HestiaCP** | `hestia.sh:30,42`; `adoptar.sh:362-364` la pisa y restaura | SERVIDOR |
-| `$HESTIA_DIR/data/users/<u>/restic.conf` | Datos de Restic por usuario | `hestia.sh` (`users`) | CÓDIGO |
+| `$HESTIA_DIR/conf/restic.conf` | Configuración de Restic del panel, **una para todo el HestiaCP**: `REPO`, `SNAPSHOTS`, `KEEP_DAILY`, `KEEP_WEEKLY`, `KEEP_MONTHLY`, `KEEP_YEARLY`. La escribe entera `v-add-backup-host-restic` | `hestia.sh:30,42`; `adoptar.sh` la pisa y restaura | SERVIDOR; claves FUENTE ([v-add-backup-host-restic](https://github.com/hestiacp/hestiacp/blob/1.10.4/bin/v-add-backup-host-restic)) |
+| `$HESTIA_DIR/data/users/<u>/restic.conf` | **Solo la contraseña** del repositorio Restic de esa cuenta (una línea, `--password-file`). No lleva retención | `hestia.sh` (`users`); `backupctl restic`/`hestia keys` la guardan en `Restic_Configs_*.txt` | FUENTE ([v-backup-user-restic](https://github.com/hestiacp/hestiacp/blob/1.10.4/bin/v-backup-user-restic)) |
 | `/root/.config/rclone/rclone.conf` | Remoto rclone del panel | `hestia.sh:25` (`BC_RCLONE_CONF`) | CÓDIGO |
 | `/var/spool/cron/crontabs/hestiaweb` | Crontab interno de HestiaCP; aquí vive el cron de Restic | `hestia.sh:35,458-521` | SERVIDOR |
 | `$HESTIA_DIR/data/users/<u>/cron.conf` | Origen del que HestiaCP regenera el crontab de cada usuario | `cron.sh:17-32` | CÓDIGO |
@@ -51,6 +51,27 @@ enlace), **SIN VERIFICAR**. Al verificar algo, se actualiza su estado con el enl
 
 - Restic en HestiaCP es **por usuario** (un repositorio por cuenta), no uno global
   (`b125085`). SERVIDOR.
+
+### Retención de Restic (verificado en la fuente, 2026-09-14)
+
+- `v-backup-users-restic` (lo que se programa en el crontab de `hestiaweb`) solo recorre los
+  usuarios no suspendidos y llama a `v-backup-user-restic <u>`; sale sin hacer nada si
+  `BACKUP_INCREMENTAL` no es `yes`. FUENTE.
+- `v-backup-user-restic` lee `$HESTIA/conf/restic.conf` en cada ejecución y termina con
+  `restic --repo "${REPO%/}/$user" --password-file $USER_DATA/restic.conf forget <política> --prune`:
+  `--keep-last $SNAPSHOTS` y `--keep-daily/weekly/monthly/yearly` si la variable es `>= 0`.
+  **La poda va dentro del respaldo** y la retención es **global** del panel. FUENTE.
+- No hay `v-change-*` para la retención: se repite `v-add-backup-host-restic` con el mismo
+  `REPO` o se edita el archivo. FUENTE (listado de `bin/` en la etiqueta).
+- `v-delete-backup-host-restic` borra `conf/restic.conf` y pone `BACKUP_INCREMENTAL=no`: detiene
+  respaldo y poda de todas las cuentas. FUENTE.
+- Ningún script Restic de 1.10.4 usa `restic unlock` ni `--no-lock`, y el `forget --prune` final
+  no comprueba su código de salida. FUENTE (lectura); qué hace restic ante bloqueos viejos: SIN
+  VERIFICAR.
+- `v-backup-user-restic` se quita de una cola (`$HESTIA/data/queue/backup.pipe`): puede haber un
+  respaldo manual lanzado desde el panel. Qué lo encola: SIN VERIFICAR.
+- La interfaz web de 1.10.4 solo lista y restaura instantáneas Restic
+  (`web/list/backup/incremental/index.php`); alta, retención y baja son solo por CLI. FUENTE.
 - Los respaldos nativos del panel y su formato (`backup.conf` dentro de la instantánea, leído
   con `eval` en `adoptar.sh:885`): CÓDIGO; su formato exacto, SIN VERIFICAR aquí.
 - Versión de Restic mínima que exige `adoptar`: 0.14 (`adoptar.sh:195-230`). CÓDIGO.
