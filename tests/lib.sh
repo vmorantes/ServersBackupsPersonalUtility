@@ -5,78 +5,108 @@
 # La cargan las suites (tests/probar_*.sh). Nada de esto se ejecuta contra un
 # servidor: los perfiles que crea viven siempre dentro de $BANCO_TMP, y
 # backupctl_prueba se niega a usar uno que no lo esté.
+#
+# Las afirmaciones se cuentan desde un ARCHIVO ($BANCO_TMP/.resultados), no
+# desde variables: una variable que cambia dentro de "$(...)" no sobrevive al
+# subshell (docs/desarrollo/arquitectura.md, «Detalles que no son obvios»); un
+# archivo, sí. Con esto una llamada a backupctl_prueba dentro de una
+# sustitución de comandos sigue contando aunque se niegue a ejecutar.
 # =============================================================================
 
 [[ -n "${BC_PRUEBA_LIB_LOADED:-}" ]] && return 0
 BC_PRUEBA_LIB_LOADED=1
 
-BC_ASSERT_TOTAL=0
-BC_ASSERT_FALLOS=0
+mkdir -p "$BANCO_TMP/registro" "$BANCO_TMP/guion"
+: > "$BANCO_TMP/.resultados"
 
 # -----------------------------------------------------------------------------
 # Afirmaciones
 # -----------------------------------------------------------------------------
 afirmar_codigo() {
   local esperado="$1" obtenido="$2" desc="$3"
-  BC_ASSERT_TOTAL=$(( BC_ASSERT_TOTAL + 1 ))
   if [[ "$esperado" == "$obtenido" ]]; then
     echo "  ok: $desc"
+    printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
   else
-    BC_ASSERT_FALLOS=$(( BC_ASSERT_FALLOS + 1 ))
     echo "  FALLO: $desc (esperado código $esperado, obtenido $obtenido)"
+    printf 'FALLO\t%s (esperado codigo %s, obtenido %s)\n' "$desc" "$esperado" "$obtenido" >> "$BANCO_TMP/.resultados"
   fi
 }
 
 afirmar_igual() {
   local a="$1" b="$2" desc="$3"
-  BC_ASSERT_TOTAL=$(( BC_ASSERT_TOTAL + 1 ))
   if [[ "$a" == "$b" ]]; then
     echo "  ok: $desc"
+    printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
   else
-    BC_ASSERT_FALLOS=$(( BC_ASSERT_FALLOS + 1 ))
     echo "  FALLO: $desc (esperado '$b', obtenido '$a')"
+    printf 'FALLO\t%s (esperado %s, obtenido %s)\n' "$desc" "$b" "$a" >> "$BANCO_TMP/.resultados"
   fi
 }
 
 afirmar_contiene() {
   local archivo="$1" patron="$2" desc="$3"
-  BC_ASSERT_TOTAL=$(( BC_ASSERT_TOTAL + 1 ))
   if [[ -f "$archivo" ]] && grep -qE -- "$patron" "$archivo"; then
     echo "  ok: $desc"
+    printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
   else
-    BC_ASSERT_FALLOS=$(( BC_ASSERT_FALLOS + 1 ))
     echo "  FALLO: $desc (no se encontró '$patron' en $archivo)"
+    printf 'FALLO\t%s (no se encontro %s en %s)\n' "$desc" "$patron" "$archivo" >> "$BANCO_TMP/.resultados"
   fi
 }
 
 afirmar_no_contiene() {
   local archivo="$1" patron="$2" desc="$3"
-  BC_ASSERT_TOTAL=$(( BC_ASSERT_TOTAL + 1 ))
   if [[ ! -f "$archivo" ]]; then
-    BC_ASSERT_FALLOS=$(( BC_ASSERT_FALLOS + 1 ))
     echo "  FALLO: $desc (no existe $archivo)"
+    printf 'FALLO\t%s (no existe %s)\n' "$desc" "$archivo" >> "$BANCO_TMP/.resultados"
   elif grep -qE -- "$patron" "$archivo"; then
-    BC_ASSERT_FALLOS=$(( BC_ASSERT_FALLOS + 1 ))
     echo "  FALLO: $desc (se encontró '$patron' en $archivo)"
+    printf 'FALLO\t%s (se encontro %s en %s)\n' "$desc" "$patron" "$archivo" >> "$BANCO_TMP/.resultados"
   else
     echo "  ok: $desc"
+    printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
   fi
 }
 
 afirmar_intacto() {
   local archivo="$1" copia="$2" desc="$3"
-  BC_ASSERT_TOTAL=$(( BC_ASSERT_TOTAL + 1 ))
   if cmp -s "$archivo" "$copia"; then
     echo "  ok: $desc"
+    printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
   else
-    BC_ASSERT_FALLOS=$(( BC_ASSERT_FALLOS + 1 ))
     echo "  FALLO: $desc ($archivo difiere de $copia)"
+    printf 'FALLO\t%s (%s difiere de %s)\n' "$desc" "$archivo" "$copia" >> "$BANCO_TMP/.resultados"
   fi
 }
 
+# Cuenta SIEMPRE desde el archivo. Una suite sin ninguna afirmación no ha
+# probado nada: cuenta como fallo, no como éxito vacío.
 fin_de_suite() {
-  echo "  -- $BC_ASSERT_TOTAL afirmaciones, $BC_ASSERT_FALLOS fallidas --"
-  (( BC_ASSERT_FALLOS == 0 ))
+  local total=0 fallos=0
+  if [[ -f "$BANCO_TMP/.resultados" ]]; then
+    total="$(wc -l < "$BANCO_TMP/.resultados")"
+    fallos="$(grep -c '^FALLO' "$BANCO_TMP/.resultados" || true)"
+  fi
+  echo "  -- $total afirmaciones, $fallos fallidas --"
+  if (( total == 0 )); then
+    echo "  FALLO: la suite no hizo ninguna afirmación" >&2
+    return 1
+  fi
+  (( fallos == 0 ))
+}
+
+# -----------------------------------------------------------------------------
+# Aislamiento entre pruebas
+# -----------------------------------------------------------------------------
+# Cada test_… empieza llamando a esto: deja registro/ y guion/ limpios (sin
+# arrastrar invocaciones ni respuestas de la prueba anterior dentro de la
+# misma suite) y un directorio propio donde trabajar.
+nueva_prueba() {
+  local nombre="$1"
+  rm -rf "$BANCO_TMP/registro" "$BANCO_TMP/guion"
+  mkdir -p "$BANCO_TMP/registro" "$BANCO_TMP/guion" "$BANCO_TMP/$nombre"
+  cd "$BANCO_TMP/$nombre"
 }
 
 # -----------------------------------------------------------------------------
@@ -85,13 +115,15 @@ fin_de_suite() {
 # Declara TODAS las variables de forma explícita: nada se hereda del entorno
 # (T13, .agents/context/30-trampas.md). BACKUP_WORK_DIR existe ya al volver de
 # esta función: el bloqueo de 'backup' se toma antes de crear directorios y,
-# si no existe, sale con 2 (core.sh:188, bin/backupctl:283).
+# si no existe, sale con 2 (core.sh:188, bin/backupctl:283). MYSQL_PASS lleva
+# un valor distintivo para poder comprobar que nunca llega a un registro ni a
+# un log (test_profile_password_never_reaches_the_logs).
 crear_perfil() {
   local dir="$1"
   mkdir -p "$dir/output/mysql_backups" "$dir/output/HestiaCP" "$dir/logs"
   cat > "$dir/env.sh" <<EOF
 export MYSQL_USER="prueba"
-export MYSQL_PASS="falsa"
+export MYSQL_PASS="clave-sintetica-no-real-7Q2"
 export MYSQL_HOST=""
 export MYSQL_PORT=""
 export MYSQL_SOCKET=""
@@ -118,22 +150,24 @@ EOF
 # -----------------------------------------------------------------------------
 # Ejecución de backupctl bajo prueba
 # -----------------------------------------------------------------------------
-# Siempre con -p y con la entrada estándar cerrada. Se niega —y cuenta como
-# afirmación fallida— si el perfil no está dentro de $BANCO_TMP: sin esto, un
-# error en una suite podría acabar usando el perfil real (T3).
+# Siempre con -p y con la entrada estándar cerrada. Se niega —y lo deja escrito
+# en $BANCO_TMP/.resultados, no solo en una variable— si el perfil no está
+# dentro de $BANCO_TMP: sin esto, un error en una suite podría acabar usando
+# el perfil real (T3). Compara realpath -m de los dos lados: perfil y
+# $BANCO_TMP, por si este último llegara por un enlace simbólico.
 backupctl_prueba() {
   local perfil_dir="$1"; shift
-  local real
+  local real base
   real="$(realpath -m -- "$perfil_dir" 2>/dev/null || true)"
+  base="$(realpath -m -- "$BANCO_TMP" 2>/dev/null || true)"
   case "$real" in
-    "$BANCO_TMP"/*|"$BANCO_TMP")
+    "$base"/*|"$base")
       "$BANCO_RAIZ/bin/backupctl" -p "$perfil_dir/env.sh" "$@" </dev/null
       return $?
       ;;
     *)
-      BC_ASSERT_TOTAL=$(( BC_ASSERT_TOTAL + 1 ))
-      BC_ASSERT_FALLOS=$(( BC_ASSERT_FALLOS + 1 ))
-      echo "  FALLO: backupctl_prueba se niega a ejecutar: '$perfil_dir' (resuelto: '$real') está fuera de \$BANCO_TMP" >&2
+      echo "  FALLO: backupctl_prueba se niega a ejecutar: '$perfil_dir' (resuelto: '$real') está fuera de \$BANCO_TMP ('$base')" >&2
+      printf 'FALLO\tbackupctl_prueba se niega: %s (resuelto: %s) esta fuera de %s\n' "$perfil_dir" "$real" "$base" >> "$BANCO_TMP/.resultados"
       return 97
       ;;
   esac
@@ -145,12 +179,26 @@ backupctl_prueba() {
 # Un único guion de 'mysql' sirve para respaldo, verificación y restauración:
 # cubre la conexión, las consultas de inventario y, sin -e, el SQL que llega
 # por la entrada estándar (restore.sh). Las respuestas están documentadas en
-# el ADR 0009 y confirmadas contra lib/mysql.sh, lib/backup.sh y
-# lib/restore.sh — son sintéticas, no salidas reales de MySQL.
+# el ADR 0009 y .agents/context/40-entorno.md, y confirmadas contra
+# lib/mysql.sh, lib/backup.sh y lib/restore.sh — son sintéticas, no salidas
+# reales de MySQL.
+#
+# Parámetros, todos opcionales tras <tmp>:
+#   destino_existe    "SELECT COUNT(*) ... schema_name='<x>'" (restore.sh:74,
+#                     lib/mysql.sh bc_mysql_table_count) responde esto en vez
+#                     de "0": el destino de un --into ya existe.
+#   tablas_existentes "SELECT COUNT(*) ... table_type='BASE TABLE'" responde
+#                     esto: cuántas tablas tiene ya ese destino.
+#   fallar_conexion   "1" hace que "SELECT 1" (bc_mysql_check) escriba un
+#                     error en stderr y salga con 1, en vez de conectar.
 escribir_guion_mysql() {
-  local tmp="$1"
+  local tmp="$1" destino_existe="${2:-0}" tablas_existentes="${3:-0}" fallar_conexion="${4:-0}"
   mkdir -p "$tmp/guion" "$tmp/registro"
-  cat > "$tmp/guion/mysql.sh" <<'GUION'
+  {
+    printf 'BC_DESTINO_EXISTE=%q\n' "$destino_existe"
+    printf 'BC_TABLAS_EXISTENTES=%q\n' "$tablas_existentes"
+    printf 'BC_FALLAR_CONEXION=%q\n' "$fallar_conexion"
+    cat <<'GUION'
 consulta=""
 for ((_i = 1; _i <= $#; _i++)); do
   if [[ "${!_i}" == "-e" ]]; then
@@ -170,7 +218,14 @@ if [[ -z "$consulta" ]]; then
 fi
 
 case "$consulta" in
-  *'SELECT 1'*) exit 0 ;;
+  *'SELECT 1'*)
+    if [[ "$BC_FALLAR_CONEXION" == "1" ]]; then
+      echo "ERROR 1045 (28000): Access denied for user" >&2
+      exit 1
+    fi
+    exit 0 ;;
+  *"schema_name='"*) echo "$BC_DESTINO_EXISTE"; exit 0 ;;
+  *"table_type='BASE TABLE'"*) echo "$BC_TABLAS_EXISTENTES"; exit 0 ;;
   *'COUNT(*)'*) echo "0"; exit 0 ;;
   *'VERSION()'*) echo "10.11.0-sintetico"; exit 0 ;;
   *'SUM(data_length'*) echo "1024"; exit 0 ;;
@@ -181,6 +236,7 @@ case "$consulta" in
   *) echo "falso mysql: consulta inesperada: $consulta" >&2; exit 97 ;;
 esac
 GUION
+  } > "$tmp/guion/mysql.sh"
 }
 
 # Guion de 'mysqldump'. Sin fallo (db_falla vacío) siempre limpio; con
