@@ -16,7 +16,7 @@
 | Qué exige el PO | Esté en `rules/` y `context/` y se cumpla sin recordatorio (hoy ya está: `40-salvaguardas.md` §7, `context/20-convenciones.md`) |
 | En qué se falló | Cada fallo tenga su prueba o su guarda, y pasen meses sin que vuelva |
 | Lo que quedó a medias | Esté cerrado o descartado en el roadmap |
-| Cómo se probaba | Exista un banco de pruebas local reutilizable, o el ADR que decida cómo se prueba contra servidores |
+| Cómo se probaba | Exista un banco de pruebas local reutilizable, o el ADR que decida cómo se prueba contra servidores. **Cumplida el 2026-09-14** (ADR 0006 y 0010, `tests/`) |
 
 Quien lo borre escribe una entrada de bitácora diciendo por qué ya no hacía falta.
 
