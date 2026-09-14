@@ -44,6 +44,12 @@ son preferencias de estilo: son requisitos de producto.
 - `--dry-run` real: no escribe, no conecta para escribir, no borra. Confirmaciones que sin
   terminal se degradan a «no»; `--yes` para lo contrario (`decisiones.md`).
 - Órdenes remotas que no dejan archivos de root en el árbol del usuario (commit `67e43bc`).
+- **Lo que haya que deshacer se registra en cuanto se crea** (ADR 0012):
+  `bc_cleanup_register <clave> <orden>` antes de cualquier operación que pueda fallar, y en el
+  camino normal `bc_cleanup_run <clave>` (o `bc_cleanup_forget` si ya no hace falta). Nunca solo
+  un `trap … RETURN`: con `bc_die` o Ctrl-C no corre. Las órdenes, idempotentes y construidas con
+  `printf '%q'` para las rutas locales. Lo registrado dentro de `$(...)` o de una tubería se
+  pierde.
 
 ## Una orden nueva
 
