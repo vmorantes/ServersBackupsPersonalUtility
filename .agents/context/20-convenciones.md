@@ -62,8 +62,12 @@ Los seis pasos de `docs/desarrollo/arquitectura.md` («Añadir una orden nueva»
 
 ## Pruebas
 
-- Sin servidor, sin MySQL real y sin HestiaCP: órdenes falsas delante en el `PATH`, perfiles
-  sintéticos en un temporal (`.agents/context/40-entorno.md`).
+- Sin servidor, sin MySQL real y sin HestiaCP: en el banco `tests/`, con las piezas de
+  `tests/lib.sh` (`.agents/context/40-entorno.md`).
+- Las afirmaciones no se hacen dentro de `$(...)` ni de una tubería: una subshell pierde lo
+  que cuenta (la trampa de `arquitectura.md` vale también para las pruebas).
+- Un patrón de texto que se afirma debe ser el del fallo, no una palabra que también sale
+  en el éxito (`suma` salía en los dos mensajes de `verify`).
 - **Cubren el camino de fallo** de todo lo que escribe, borra o restaura: el original queda
   byte a byte igual (`cmp`) cuando la operación no puede completarse.
 - **Temporales con prefijo propio** (`mktemp -d -t backupctl-pruebas.XXXXXX`), para comprobar

@@ -12,10 +12,11 @@ Una tarea sale de aquí al cerrarse; su historia queda en la bitácora. Referenc
 ## En curso (nombrado por el PO el 2026-09-14)
 
 - [ ] **Commitear la adopción del modelo arquitecto-coder** en una rama y fusionarla.
-- [ ] **Banco de pruebas local**: órdenes falsas (`ssh`, `rsync`, `mysql`, `mysqldump`,
-      `sudo`, `v-*`, `restic`, `rclone`) delante en el `PATH` y perfiles sintéticos en un
-      temporal, para probar sin servidor (T18; ADR 0006 lo vuelve imprescindible). Necesita
-      ADR antes de escribir código.
+- [ ] **Banco de pruebas local** (ADR 0009): primera fase construida en
+      `feat/banco-de-pruebas`; ronda correctiva en curso antes de fusionar.
+- [ ] **Siguientes suites del banco**: `ssh`/`deploy`/`pull`/`remote` contra falsos,
+      confirmaciones sin terminal (T5), `bc_ssh_sudo` y la entrada estándar (T2). `hestia` y
+      `adoptar` exigen antes sustituir `/usr/local/hestia` por `$HESTIA_DIR` (T18, ADR propio).
 
 ## Pendiente en servidores (lo ejecuta el PO)
 

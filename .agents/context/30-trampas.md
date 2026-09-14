@@ -160,13 +160,13 @@ otro nombre, posible porque `user.conf` y `dns.conf` no llevan el usuario dentro
 
 ## Pruebas y herramientas
 
-### T18. No hay forma de probar sin servidor — CONFIRMADA (código)
+### T18. `hestia` y `adoptar` no se pueden probar sin servidor — CONFIRMADA (código)
 
-No existe ninguna prueba automatizada. `ssh`, `rsync`, `mysql`, `mysqldump`, `sudo`,
-`crontab`, `restic` y `rclone` se invocan por nombre: solo se sustituyen poniendo falsos
-delante en el `PATH`. `HESTIA_DIR` no es una raíz completa: `/usr/local/hestia` está escrito a
-mano en `cron.sh:46,51`, `pull.sh:101`, unas 15 líneas de `adoptar.sh` y `server.py:438-444,
-474, 632`. Ver `40-entorno.md`.
+El banco (`tests/`, ADR 0009) cubre perfil, respaldo, verificación, retención y restauración
+sustituyendo `mysql`, `mysqldump`, `ssh` y compañía por falsos en el `PATH`. Lo que queda
+fuera: `HESTIA_DIR` no es una raíz completa, porque `/usr/local/hestia` está escrito a mano en
+`cron.sh:46,51`, `pull.sh:101`, unas 15 líneas de `adoptar.sh` y `server.py:438-444, 474, 632`.
+Cubrirlo exige cambiar el código (ADR propio). Ver `40-entorno.md`.
 
 ### T19. `web/comprobar.py` reescribe un `.pyc` versionado — CUBIERTA
 

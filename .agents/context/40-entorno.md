@@ -28,30 +28,36 @@ funciona en cualquier terminal y usa el perfil real por defecto (`30-trampas.md`
 Decirlo así en cualquier reporte, en vez de dar por probado lo que solo se razonó. Lo que el
 PO tenga que comprobar en un servidor va a «Espera al PO» con los pasos.
 
-## Cómo se prueba sin servidor
+## Cómo se prueba sin servidor: el banco (`tests/`, ADR 0009)
 
-**Hoy no existe un banco de pruebas** (`30-trampas.md` T18; roadmap). Cualquier prueba
-nueva sigue estas reglas, que son las que tendrá que cumplir el banco:
+```
+bash tests/ejecutar.sh      # también lo ejecuta verificar.sh
+```
 
-1. Un guion de entrada, `tests/ejecutar.sh`, sin argumentos; sale con 0 si todo pasa.
-   `verificar.sh` lo ejecuta si existe. La guarda no deja ejecutar `backupctl` directamente
-   (salvo `--help`, `version`, `profiles`): las pruebas lo ejecutan desde ese guion.
-2. Aborta si corre como root.
-3. Un temporal propio: `mktemp -d -t backupctl-pruebas.XXXXXX`, borrado al salir.
-4. Un directorio de órdenes falsas **delante en el `PATH`** (`ssh`, `rsync`, `mysql`,
-   `mysqldump`, `sudo`, `crontab`, `restic`, `rclone` y los `v-*` que hagan falta), que
-   registran sus argumentos y su entrada estándar en el temporal y devuelven datos sintéticos.
-   **Antes de ejecutar nada**, el guion comprueba que `command -v` de cada una resuelve a su
-   falso; si no, aborta.
-5. Un perfil sintético en el temporal, pasado **siempre** con `-p <temporal>/Perfil/env.sh`
-   (T3). Credenciales falsas, `example.org`, `203.0.113.10`.
-6. Lo que se puede redirigir: `TMPDIR`; las rutas del `env.sh` (`SCRIPTS_DIR`,
-   `BACKUP_*_DIR`, `LOG_DIR`, `HESTIA_OUTPUT_DIR`); `BC_RCLONE_CONF`; `HESTIA_DIR` solo en
-   parte. Lo que no: `BC_ROOT`, las rutas `/usr/local/hestia` escritas a mano (T18). Lo que
-   depende de ellas se reporta como no probado; no se rodea tocando el sistema.
-7. Cubren el camino de fallo (`20-convenciones.md`, «Pruebas»).
+| Pieza | Qué hace |
+| --- | --- |
+| `tests/ejecutar.sh` | Única entrada. Aborta como root. Crea `/tmp/backupctl-pruebas.XXXXXX` y lo borra al salir. Crea en `<T>/bin` un enlace a `falsos/despachador.sh` por cada orden peligrosa (`ssh scp sftp sshpass ssh-keygen ssh-copy-id rsync mysql mysqldump sudo crontab restic rclone mail curl`). Comprueba que `command -v` de cada una resuelve a `<T>/bin` antes de lanzar nada. Lanza cada `probar_*.sh` con `env -i` (sin `MYSQL_*`, `BC_*` ni `DEPLOY_*` heredados), `HOME` y `TMPDIR` en el temporal, `LANG=C.UTF-8`, y `BANCO_RAIZ`/`BANCO_TMP` |
+| `tests/falsos/despachador.sh` | Registra cada invocación en `$BANCO_TMP/registro/<orden>.log`; responde cargando `$BANCO_TMP/guion/<orden>.sh`; sin guion, sale con 97. **No lee la entrada estándar por su cuenta** (backup llama a mysql dentro de un `while read`); solo el guion que lo pide |
+| `tests/lib.sh` | `afirmar_*`, `crear_perfil <dir>` (perfil local con todas las variables explícitas y `BACKUP_WORK_DIR` ya creado), `backupctl_prueba <perfil_dir> …` (siempre `-p`, stdin de `/dev/null`, se niega fuera de `$BANCO_TMP`) |
+| `tests/probar_<área>.sh` | `perfil`, `respaldo`, `verificacion`, `retencion`, `restauracion` |
 
-Montar el banco es una tarea del roadmap que necesita ADR.
+Cómo se escribe una prueba nueva:
+
+- Una función `test_…` (inglés) por caso; cuerpo y comentarios en español.
+- Guion por prueba en `$BANCO_TMP/guion/`, y registro limpio al empezar cada prueba.
+- **Sin terminal, `backup` no escribe nada en stdout ni stderr**: los mensajes están en
+  `$LOG_DIR/backup_<fecha>.log`.
+- **Una afirmación debe poder fallar**: si se puede, demuéstralo estropeando el código en una
+  copia del repositorio en un temporal y viendo la prueba en rojo (mutación). Así se
+  encontraron dos afirmaciones que pasaban con el código roto (tramo del 2026-09-14).
+- Cubre el camino de fallo con `afirmar_intacto` (`20-convenciones.md`, «Pruebas»).
+
+Qué **no** demuestra el banco: que las respuestas sintéticas coincidan con un MySQL real, que un
+`mysqldump` real falle con ese texto, que el SQL sea válido contra un motor real, ni que
+`restore` cree nada de verdad (solo que envía el SQL correcto). Eso lo prueba el PO (ADR 0006).
+
+Sin cubrir todavía: `ssh`/`deploy`/`pull`/`remote`, confirmaciones sin terminal (T5), y todo
+lo que depende de `/usr/local/hestia` escrito a mano (`hestia`, `adoptar`; T18).
 
 ## Verificación del proyecto
 
@@ -63,8 +69,8 @@ Comprueba: `bash -n` de `bin/backupctl` y todos los `.sh` (sin los `env.sh` de p
 ausencia de CRLF, el modo `100755` de `bin/backupctl`, sintaxis Python y JavaScript,
 `web/comprobar.py`, que `backupctl --help` arranca, agentes generados al día, symlinks de
 `.claude/`, pruebas de la guarda, menciones a IA en entregables y en commits posteriores a la
-adopción, y `tests/ejecutar.sh` si existe. No conecta a nada, no lee credenciales, no escribe
-fuera del repositorio.
+adopción, y el banco (`tests/ejecutar.sh`). No conecta a nada, no lee credenciales, no escribe
+fuera del repositorio salvo el temporal del banco.
 
 No incluye `mkdocs build --strict` (es un build: pendiente de que el PO lo autorice) ni
 `shellcheck` (no instalado).
