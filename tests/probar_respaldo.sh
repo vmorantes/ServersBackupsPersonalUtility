@@ -30,7 +30,12 @@ test_clean_backup_produces_a_verified_zip() {
   sumas="$(grep -cE '^[0-9a-f]{64}  ' "$BANCO_TMP/t1/manifest.txt" || true)"
   afirmar_igual "$sumas" "12" "el manifiesto trae 12 sumas SHA-256 (2 bases x 6 segmentos)"
 
-  afirmar_contiene "$BANCO_TMP/registro/mysqldump.log" "defaults-file" "cada volcado usa --defaults-file"
+  # No basta con que ALGUNA línea lleve --defaults-file: ninguna línea de
+  # volcado (todo lo que no sea la comprobación "mysqldump --help") puede
+  # carecer de él, o la contraseña habría podido colarse por otra vía.
+  local sin_defaults
+  sin_defaults="$(grep -v -- '--help' "$BANCO_TMP/registro/mysqldump.log" | grep -cv -- 'defaults-file' || true)"
+  afirmar_igual "${sin_defaults:-0}" "0" "todas las líneas de volcado (salvo --help) usan --defaults-file"
 }
 
 # LA GARANTÍA CENTRAL (lib/backup.sh:52-60): mysqldump con --force sale con 0
@@ -112,6 +117,8 @@ test_profile_password_never_reaches_the_logs() {
   escribir_guion_mysqldump "$BANCO_TMP"
 
   backupctl_prueba "$perfil" backup >/dev/null 2>&1
+  afirmar_codigo 0 "$?" "el respaldo de la prueba de fuga termina en código 0"
+  afirmar_igual "$([[ -s "$BANCO_TMP/registro/mysqldump.log" ]] && echo si || echo no)" "si" "hay invocaciones de mysqldump que inspeccionar"
 
   grep -rqF 'clave-sintetica-no-real-7Q2' "$BANCO_TMP/registro" "$perfil/logs" 2>/dev/null
   afirmar_codigo 1 "$?" "la contraseña del perfil no aparece en ningún registro ni log (grep -rF debe fallar)"
