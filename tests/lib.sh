@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# tests/lib.sh — biblioteca mínima del banco de pruebas (ADR 0009)
+# tests/lib.sh — biblioteca mínima del banco de pruebas (ADR 0010)
 # =============================================================================
 # La cargan las suites (tests/probar_*.sh). Nada de esto se ejecuta contra un
 # servidor: los perfiles que crea viven siempre dentro de $BANCO_TMP, y
@@ -26,6 +26,15 @@ BC_PRUEBA_LIB_LOADED=1
 # #008: con $BANCO_TMP="", el patrón "$base"/*|"$base" se volvía /*|"", que
 # aceptaba cualquier ruta absoluta). Se comprueba ANTES de cualquier mkdir o
 # rm, y de nuevo dentro de nueva_prueba (defensa en profundidad).
+#
+# ADR 0010: esto NO basta. La ronda #010 encontró que una suite lanzada a
+# mano, sin pasar por tests/ejecutar.sh, superaba todo lo anterior con solo
+# exportar BANCO_RAIZ/BANCO_TMP a un directorio real — y entonces
+# backupctl_prueba ejecutaba con el PATH real del usuario (mysql, ssh...
+# reales en esta máquina). Por eso, además: la marca .banco que escribe
+# ejecutar.sh en el directorio PADRE de BANCO_TMP tiene que coincidir con
+# BANCO_TESTIGO, y cada orden de ordenes.txt tiene que resolver al enlace que
+# el propio ejecutar.sh creó.
 bc_comprobar_entorno_banco() {
   local nombre valor real
   for nombre in BANCO_TMP BANCO_RAIZ; do
@@ -52,6 +61,71 @@ bc_comprobar_entorno_banco() {
       exit 2
       ;;
   esac
+
+  if [[ -z "${BANCO_TESTIGO:-}" ]]; then
+    echo "tests/lib.sh: \$BANCO_TESTIGO no está definida o está vacía: se aborta." >&2
+    exit 2
+  fi
+  local padre marca
+  padre="$(dirname "$BANCO_TMP")"
+  if [[ ! -f "$padre/.banco" ]]; then
+    echo "tests/lib.sh: no existe $padre/.banco: se aborta." >&2
+    exit 2
+  fi
+  marca="$(cat "$padre/.banco" 2>/dev/null || true)"
+  if [[ -z "$marca" || "$marca" != "$BANCO_TESTIGO" ]]; then
+    echo "tests/lib.sh: la marca de $padre/.banco no coincide con \$BANCO_TESTIGO: se aborta." >&2
+    exit 2
+  fi
+
+  if ! bc_comprobar_orden_falsa; then
+    echo "tests/lib.sh: el PATH no resuelve las órdenes peligrosas a sus falsas: se aborta." >&2
+    exit 2
+  fi
+}
+
+# Comprueba, orden por orden de tests/falsos/ordenes.txt, que "command -v"
+# resuelve al enlace que crea tests/ejecutar.sh (bajo el padre de BANCO_TMP) y
+# que ese enlace apunta de verdad a tests/falsos/despachador.sh. No sale del
+# proceso: solo informa por stderr y devuelve 1 si algo falla, para que tanto
+# la carga de la biblioteca (exit 2) como backupctl_prueba (return 97) puedan
+# decidir qué hacer con eso.
+bc_comprobar_orden_falsa() {
+  local archivo="$BANCO_RAIZ/tests/falsos/ordenes.txt"
+  if [[ ! -s "$archivo" ]]; then
+    echo "tests/lib.sh: falta o está vacío $archivo." >&2
+    return 1
+  fi
+
+  local despachador_real
+  despachador_real="$(realpath -e -- "$BANCO_RAIZ/tests/falsos/despachador.sh" 2>/dev/null || true)"
+  if [[ -z "$despachador_real" ]]; then
+    echo "tests/lib.sh: no se pudo resolver tests/falsos/despachador.sh." >&2
+    return 1
+  fi
+
+  local base_bin
+  base_bin="$(dirname "$BANCO_TMP")/bin"
+
+  local orden resuelto enlace_real
+  while IFS= read -r orden; do
+    [[ -z "$orden" ]] && continue
+    resuelto="$(command -v "$orden" 2>/dev/null || true)"
+    if [[ "$resuelto" != "$base_bin/$orden" ]]; then
+      echo "tests/lib.sh: '$orden' no resuelve al falso del banco (resolvió a: '${resuelto:-<nada>}')." >&2
+      return 1
+    fi
+    if [[ ! -L "$base_bin/$orden" ]]; then
+      echo "tests/lib.sh: '$base_bin/$orden' no es un enlace simbólico." >&2
+      return 1
+    fi
+    enlace_real="$(realpath -e -- "$base_bin/$orden" 2>/dev/null || true)"
+    if [[ -z "$enlace_real" || "$enlace_real" != "$despachador_real" ]]; then
+      echo "tests/lib.sh: '$base_bin/$orden' no apunta a tests/falsos/despachador.sh." >&2
+      return 1
+    fi
+  done < "$archivo"
+  return 0
 }
 
 bc_comprobar_entorno_banco
@@ -117,6 +191,21 @@ afirmar_intacto() {
   else
     echo "  FALLO: $desc ($archivo difiere de $copia)" >&2
     printf 'FALLO\t%s (%s difiere de %s)\n' "$desc" "$archivo" "$copia" >> "$BANCO_TMP/.resultados"
+  fi
+}
+
+# Archivo o directorio. Se usa ANTES de una afirmación que inspecciona una
+# ruta (grep, find...): esas pasan en verde también cuando la ruta no existe,
+# que es justo lo que no debe pasar desapercibido (40-entorno.md, «Cómo se
+# prueba sin servidor»).
+afirmar_existe() {
+  local ruta="$1" desc="$2"
+  if [[ -e "$ruta" ]]; then
+    echo "  ok: $desc" >&2
+    printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
+  else
+    echo "  FALLO: $desc (no existe $ruta)" >&2
+    printf 'FALLO\t%s (no existe %s)\n' "$desc" "$ruta" >> "$BANCO_TMP/.resultados"
   fi
 }
 
@@ -192,16 +281,19 @@ EOF
 # Ejecución de backupctl bajo prueba
 # -----------------------------------------------------------------------------
 # Siempre con -p y con la entrada estándar cerrada. Se niega —y lo deja escrito
-# en $BANCO_TMP/.resultados, no solo en una variable— si el perfil no está
-# dentro de $BANCO_TMP: sin esto, un error en una suite podría acabar usando
-# el perfil real (T3). Compara realpath -e/-m de los dos lados: perfil y
-# $BANCO_TMP, por si este último llegara por un enlace simbólico. Si
-# cualquiera de los dos realpath falla o devuelve vacío, SE NIEGA: ninguna
-# rama del case de abajo puede aceptar con una base vacía (ronda #008: con
-# base="", "$base"/*|"$base" se volvía /*|"", que aceptaba cualquier ruta).
+# en $BANCO_TMP/.resultados, no solo en una variable— en tres casos: el
+# perfil no está dentro de $BANCO_TMP (T3); su env.sh es un enlace simbólico
+# (podría llevar a cualquier sitio, credenciales reales incluidas); o el PATH
+# ya no resuelve las órdenes peligrosas a sus falsas (ADR 0010 — la misma
+# comprobación de bc_comprobar_orden_falsa, repetida aquí porque el entorno
+# pudo cambiar entre la carga de la biblioteca y esta llamada). Compara
+# realpath -e/-m de perfil y $BANCO_TMP; si cualquiera de los dos falla o
+# devuelve vacío, SE NIEGA (ronda #008: con base="", "$base"/*|"$base" se
+# volvía /*|"", que aceptaba cualquier ruta).
 backupctl_prueba() {
   local perfil_dir="$1"; shift
-  local real base negar=1
+  local real base negar=1 motivo=""
+
   real="$(realpath -m -- "$perfil_dir" 2>/dev/null || true)"
   base="$(realpath -e -- "$BANCO_TMP" 2>/dev/null || true)"
   if [[ -n "$real" && -n "$base" ]]; then
@@ -209,12 +301,25 @@ backupctl_prueba() {
       "$base"/*|"$base") negar=0 ;;
     esac
   fi
+
+  if (( negar == 0 )) && [[ -L "$perfil_dir/env.sh" ]]; then
+    negar=1
+    motivo="'$perfil_dir/env.sh' es un enlace simbólico"
+  fi
+
+  if (( negar == 0 )) && ! bc_comprobar_orden_falsa; then
+    negar=1
+    motivo="el PATH ya no resuelve las órdenes peligrosas a sus falsas"
+  fi
+
   if (( negar == 0 )); then
     "$BANCO_RAIZ/bin/backupctl" -p "$perfil_dir/env.sh" "$@" </dev/null
     return $?
   fi
-  echo "  FALLO: backupctl_prueba se niega a ejecutar: '$perfil_dir' (resuelto: '$real') está fuera de \$BANCO_TMP ('$base')" >&2
-  printf 'FALLO\tbackupctl_prueba se niega: %s (resuelto: %s) esta fuera de %s\n' "$perfil_dir" "$real" "$base" >> "$BANCO_TMP/.resultados"
+
+  [[ -z "$motivo" ]] && motivo="'$perfil_dir' (resuelto: '$real') está fuera de \$BANCO_TMP ('$base')"
+  echo "  FALLO: backupctl_prueba se niega a ejecutar: $motivo" >&2
+  printf 'FALLO\tbackupctl_prueba se niega: %s\n' "$motivo" >> "$BANCO_TMP/.resultados"
   return 97
 }
 
