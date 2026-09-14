@@ -101,8 +101,25 @@ test_backup_without_mysql_leaves_previous_backups_untouched() {
   afirmar_igual "$hay_mensaje" "1" "el log del segundo intento dice 'revisa MYSQL_USER'"
 }
 
+# Credenciales: nunca en la línea de órdenes ni en un registro
+# (20-convenciones.md). MYSQL_PASS va por el archivo --defaults-file
+# (lib/mysql.sh:27-59), nunca como argumento; esto lo comprueba desde fuera.
+test_profile_password_never_reaches_the_logs() {
+  nueva_prueba t4
+  local perfil="$BANCO_TMP/t4/perfil"
+  crear_perfil "$perfil"
+  escribir_guion_mysql "$BANCO_TMP"
+  escribir_guion_mysqldump "$BANCO_TMP"
+
+  backupctl_prueba "$perfil" backup >/dev/null 2>&1
+
+  grep -rqF 'clave-sintetica-no-real-7Q2' "$BANCO_TMP/registro" "$perfil/logs" 2>/dev/null
+  afirmar_codigo 1 "$?" "la contraseña del perfil no aparece en ningún registro ni log (grep -rF debe fallar)"
+}
+
 test_clean_backup_produces_a_verified_zip
 test_dump_error_with_exit_zero_fails_the_backup
 test_backup_without_mysql_leaves_previous_backups_untouched
+test_profile_password_never_reaches_the_logs
 
 fin_de_suite
