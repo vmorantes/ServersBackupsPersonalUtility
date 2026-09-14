@@ -160,13 +160,21 @@ otro nombre, posible porque `user.conf` y `dns.conf` no llevan el usuario dentro
 
 ## Pruebas y herramientas
 
-### T18. `hestia` y `adoptar` no se pueden probar sin servidor — CONFIRMADA (código)
+### T18. `adoptar` no se puede probar sin servidor; `hestia`, en parte — CONFIRMADA (código)
 
 El banco (`tests/`, ADR 0009) cubre perfil, respaldo, verificación, retención y restauración
 sustituyendo `mysql`, `mysqldump`, `ssh` y compañía por falsos en el `PATH`. Lo que queda
-fuera: `HESTIA_DIR` no es una raíz completa, porque `/usr/local/hestia` está escrito a mano en
-`cron.sh:46,51`, `pull.sh:101`, unas 15 líneas de `adoptar.sh` y `server.py:438-444, 474, 632`.
-Cubrirlo exige cambiar el código (ADR propio). Ver `40-entorno.md`.
+fuera, porque `HESTIA_DIR` no es una raíz completa:
+
+- `lib/adoptar.sh`: 18 rutas `/usr/local/hestia` escritas a mano y ningún uso de `HESTIA_DIR`.
+  Cubrirlo exige cambiar el código (ADR propio).
+- `lib/hestia.sh`: usa `$HESTIA_DIR` (23 sitios), pero el crontab de `hestiaweb` está escrito a
+  mano (`hestia.sh:35`) y lee `/etc/cron.d` (464-481); `rclone.conf` se redirige con
+  `BC_RCLONE_CONF` (25). Buena parte se puede probar ya con `HESTIA_DIR` en el temporal.
+- También escritos a mano: `cron.sh:46,51`, `pull.sh:101`, `server.py:438-444, 474, 632`.
+
+El ADR 0009 metió `hestia` junto a `adoptar` en lo excluido; la corrección es esta (revisión de
+la ronda #008). Ver `40-entorno.md`.
 
 ### T19. `web/comprobar.py` reescribe un `.pyc` versionado — CUBIERTA
 

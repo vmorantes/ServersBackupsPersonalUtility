@@ -15,8 +15,9 @@ Una tarea sale de aquí al cerrarse; su historia queda en la bitácora. Referenc
 - [ ] **Banco de pruebas local** (ADR 0009): primera fase construida en
       `feat/banco-de-pruebas`; ronda correctiva en curso antes de fusionar.
 - [ ] **Siguientes suites del banco**: `ssh`/`deploy`/`pull`/`remote` contra falsos,
-      confirmaciones sin terminal (T5), `bc_ssh_sudo` y la entrada estándar (T2). `hestia` y
-      `adoptar` exigen antes sustituir `/usr/local/hestia` por `$HESTIA_DIR` (T18, ADR propio).
+      confirmaciones sin terminal (T5), `bc_ssh_sudo` y la entrada estándar (T2), `hestia` con
+      `HESTIA_DIR` en el temporal. `adoptar` exige antes sustituir `/usr/local/hestia` por
+      `$HESTIA_DIR` (T18, ADR propio).
 
 ## Pendiente en servidores (lo ejecuta el PO)
 

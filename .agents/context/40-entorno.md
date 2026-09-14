@@ -56,8 +56,14 @@ Qué **no** demuestra el banco: que las respuestas sintéticas coincidan con un 
 `mysqldump` real falle con ese texto, que el SQL sea válido contra un motor real, ni que
 `restore` cree nada de verdad (solo que envía el SQL correcto). Eso lo prueba el PO (ADR 0006).
 
-Sin cubrir todavía: `ssh`/`deploy`/`pull`/`remote`, confirmaciones sin terminal (T5), y todo
-lo que depende de `/usr/local/hestia` escrito a mano (`hestia`, `adoptar`; T18).
+Sin cubrir todavía: `ssh`/`deploy`/`pull`/`remote`, confirmaciones sin terminal (T5),
+`hestia` (se puede con `HESTIA_DIR` en el temporal, salvo el crontab de `hestiaweb`) y
+`adoptar` (necesita antes cambiar el código; T18).
+
+La salvaguarda del banco depende de `BANCO_TMP` y `BANCO_RAIZ`: `tests/lib.sh` las valida al
+cargarse (no vacías, absolutas, directorios, `BANCO_TMP` dentro de un
+`/tmp/backupctl-pruebas.*`) y aborta si no. Una variable vacía convertía la comprobación de
+rutas en «acepta cualquiera» (revisión de la ronda #008).
 
 ## Verificación del proyecto
 
