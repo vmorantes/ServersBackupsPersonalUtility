@@ -66,6 +66,33 @@ test_restore_into_never_targets_the_original_database() {
   afirmar_igual "$encontrada_original" "0" "ningún SQL recibido menciona \`tienda\` en ningún sitio"
 }
 
+# Camino de fallo: si el destino de --into ya existe y no se pasa -y, restore
+# se cancela ANTES de tocar el destino (lib/restore.sh:74-81, sin terminal
+# bc_confirm devuelve el valor por defecto 'n' sin preguntar — core.sh:83-101).
+test_restore_without_yes_refuses_an_existing_target() {
+  nueva_prueba t2
+  local perfil="$BANCO_TMP/t2/perfil"
+  crear_perfil "$perfil"
+  # El destino "existe" con 3 tablas: así se activa el bc_confirm.
+  escribir_guion_mysql "$BANCO_TMP" 1 3
+  escribir_guion_mysqldump "$BANCO_TMP"
+
+  backupctl_prueba "$perfil" backup >/dev/null 2>&1
+  local zip
+  zip="$(find "$perfil/output/mysql_backups" -maxdepth 1 -name 'all_databases_*.zip' | head -1)"
+  afirmar_igual "$([[ -n "$zip" ]] && echo si || echo no)" "si" "hay un respaldo limpio de partida"
+  [[ -n "$zip" ]] || return 0
+
+  backupctl_prueba "$perfil" restore '' tienda --into copia >"$BANCO_TMP/t2/salida.log" 2>&1
+  afirmar_codigo 2 "$?" "sin -y, un destino existente hace que restore se cancele"
+  afirmar_contiene "$BANCO_TMP/t2/salida.log" 'cancelado' "la salida dice 'cancelado'"
+
+  local n
+  n="$(find "$BANCO_TMP/registro" -maxdepth 1 -name 'mysql.stdin.*' ! -name '*.args' 2>/dev/null | wc -l)"
+  afirmar_igual "$n" "0" "no se envió ningún SQL: la cancelación ocurre antes de tocar el destino"
+}
+
 test_restore_into_never_targets_the_original_database
+test_restore_without_yes_refuses_an_existing_target
 
 fin_de_suite
