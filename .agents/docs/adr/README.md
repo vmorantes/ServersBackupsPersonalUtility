@@ -60,3 +60,5 @@ servidor). Su ADR lleva obligatoriamente:
 | [0008](0008-credenciales-versionadas.md) | Los perfiles guardan sus credenciales en el repositorio | sí | Aceptada |
 | [0009](0009-banco-de-pruebas-local.md) | Banco de pruebas local: órdenes falsas en el PATH y perfiles sintéticos | sí | Reemplazada por 0010 |
 | [0010](0010-banco-de-pruebas-salvaguardas-propias.md) | Banco de pruebas: cada salvaguarda se comprueba a sí misma | sí | Aceptada |
+| [0011](0011-borrado-de-ramas-fusionadas.md) | El coder borra las ramas locales ya fusionadas (`git branch -d`) | sí | Aceptada |
+| [0012](0012-limpieza-que-sobrevive-a-la-salida.md) | La limpieza se registra y se ejecuta al salir, pase lo que pase | sí | Aceptada (sin implementar) |

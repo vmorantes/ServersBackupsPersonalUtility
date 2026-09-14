@@ -51,7 +51,8 @@ no bloquee algo **no** lo autoriza: la regla es esta, la guarda es una red.
 - `git config` no se toca: es configuración del entorno del PO.
 - **`master` es la rama estable** (ADR 0007): se trabaja en ramas propias, que el coder crea,
   commitea y fusiona con `--no-ff` cuando la instrucción lo ordena y se cumplen los criterios
-  del ADR. Borrar o renombrar ramas, el PO.
+  del ADR. Las ramas locales ya fusionadas las borra el coder con `git branch -d` (ADR 0011);
+  forzar (`-D`), renombrar o tocar ramas remotas, el PO.
 
 ## 4. Cero menciones a IA en lo que se entrega
 

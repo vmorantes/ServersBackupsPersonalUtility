@@ -122,14 +122,25 @@ el llamador. Solo `restic.sh:78` hace `trap - RETURN`. Aparecen en `remote.sh:47
 `deploy.sh:59`, `pull.sh:41`, `hestia.sh` (varias), `adoptar.sh:272,549,855,1291` (esta, en un
 bucle). Con comillas dobles se expanden al ponerse (`restore.sh:62`, `verify.sh:57`).
 
-### T20. `restore` cancelado deja los volcados extraídos en `$TMPDIR` — CONFIRMADA (banco)
+### T20. La limpieza en `trap … RETURN` no corre si la orden muere — CONFIRMADA (código y banco)
 
-`lib/restore.sh:60-62` extrae la base a `$TMPDIR/backupctl-restore.XXXXXXXX` y confía su
-borrado a un `trap … RETURN`. Si la restauración se cancela (`bc_confirm … || bc_die`, 80-81),
-`bc_die` sale del proceso sin que la función retorne y el directorio se queda, con los
-`.sql.gz` de la base. En un servidor acumula volcados en `/tmp` (permisos 700). Lo mostró la
-prueba `test_restore_without_yes_refuses_an_existing_target` (ronda #012). Misma familia que
-T14. Sin corregir (roadmap).
+`bc_die` (`lib/core.sh:39`) y la señal INT/TERM (`bin/backupctl:53`) salen con `exit`; un
+`trap … RETURN` solo corre si la función retorna. `bc_cleanup_all` (`bin/backupctl:75-79`)
+solo borra `BC_TEMP_DIR` y las credenciales temporales de MySQL. Lo que se queda a medias:
+
+- `restore` cancelado deja la base extraída en `$TMPDIR/backupctl-restore.*`
+  (`lib/restore.sh:60-81`). Lo mostró `test_restore_without_yes_refuses_an_existing_target`.
+- **`adoptar --to`** pisa `/usr/local/hestia/conf/restic.conf` del destino
+  (`lib/adoptar.sh:362-364`) y lo devuelve en un `trap RETURN` (272): con Ctrl-C durante la
+  restauración o un `bc_die` posterior, el destino queda respaldándose en el repositorio
+  rescatado; si falla la propia escritura (364), el archivo puede quedar truncado. Un
+  `restic.conf` vale para todo el panel (T16).
+- `verify --restore-test` puede dejar su base `verifybk_*` en MySQL (`lib/verify.sh:57`).
+- `pull` puede dejar la copia del `env.sh` del servidor, con credenciales (`lib/pull.sh:41`).
+- `adoptar` deja temporales locales (140, 549, 1291) y el espacio de trabajo remoto con datos
+  (855); `restic` su temporal (`lib/restic.sh:43`).
+
+Decisión: ADR 0012 (registro de limpiezas al salir). En curso.
 
 ### Menores — CONFIRMADAS (código)
 

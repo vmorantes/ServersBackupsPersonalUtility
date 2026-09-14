@@ -217,7 +217,8 @@ falta una herramienta del sistema, se detiene y lo reporta: instalarla es cosa d
 - La fusión a `master` la ordena el arquitecto (`git switch master && git merge --no-ff
   <rama>`), con verificación antes y después. Lo que cambia lo que se ejecuta en un servidor
   no se fusiona hasta que el PO lo haya probado.
-- Borrar o renombrar ramas, en local o en remoto: el PO.
+- Ramas locales ya fusionadas: el coder las borra con `git branch -d` cuando la instrucción lo
+  diga (ADR 0011). Forzar el borrado, renombrar o tocar ramas remotas: el PO.
 
 ### Guía de comprobación para el PO (ADR 0006)
 
