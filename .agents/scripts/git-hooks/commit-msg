@@ -1,0 +1,14 @@
+#!/bin/bash
+# Hook commit-msg: rechaza un commit cuyo mensaje mencione a una IA
+# (regla 40-salvaguardas.md, sección 4). Protege commits hechos con
+# cualquier herramienta, no solo con Claude Code.
+#
+# Se activa una vez por clon, lo decide el PO:
+#     git config core.hooksPath .agents/scripts/git-hooks
+
+RAIZ="$(git rev-parse --show-toplevel)" || exit 1
+
+if ! python3 "$RAIZ/.agents/scripts/menciones_ia.py" --archivo "$1"; then
+    echo "Commit rechazado: el mensaje menciona a una IA (40-salvaguardas.md §4)." >&2
+    exit 1
+fi
