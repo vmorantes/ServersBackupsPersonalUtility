@@ -72,7 +72,9 @@ y en `README.md`.
 
 ## Volcados e importación (MySQL / HestiaCP)
 
-### T8. La cabecera `USE` aplica el SQL a la base original — CONFIRMADA (código y servidor)
+### T8. La cabecera `USE` aplica el SQL a la base original — CUBIERTA (`restore --into`: `test_restore_into_never_targets_the_original_database`)
+
+Para `adoptar` y `verify --restore-test` sigue CONFIRMADA sin prueba.
 
 Un volcado empieza con ``USE `base_original`;``. Enviado con `mysql <otra_base>`, ese `USE`
 manda y el SQL se aplica a la original, sin error. Toda ruta que importe en otra base lo quita
@@ -171,7 +173,7 @@ otro nombre, posible porque `user.conf` y `dns.conf` no llevan el usuario dentro
 
 ### T18. `adoptar` no se puede probar sin servidor; `hestia`, en parte — CONFIRMADA (código)
 
-El banco (`tests/`, ADR 0009) cubre perfil, respaldo, verificación, retención y restauración
+El banco (`tests/`, ADR 0010) cubre perfil, respaldo, verificación, retención y restauración
 sustituyendo `mysql`, `mysqldump`, `ssh` y compañía por falsos en el `PATH`. Lo que queda
 fuera, porque `HESTIA_DIR` no es una raíz completa:
 

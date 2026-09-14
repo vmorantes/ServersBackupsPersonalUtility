@@ -9,15 +9,17 @@ Una tarea sale de aquí al cerrarse; su historia queda en la bitácora. Referenc
 
 ---
 
-## En curso (nombrado por el PO el 2026-09-14)
+## El banco de pruebas (ADR 0010; primera fase fusionada el 2026-09-14, bitácora 0002)
 
-- [ ] **Commitear la adopción del modelo arquitecto-coder** en una rama y fusionarla.
-- [ ] **Banco de pruebas local** (ADR 0009): primera fase construida en
-      `feat/banco-de-pruebas`; ronda correctiva en curso antes de fusionar.
 - [ ] **Siguientes suites del banco**: `ssh`/`deploy`/`pull`/`remote` contra falsos,
       confirmaciones sin terminal (T5), `bc_ssh_sudo` y la entrada estándar (T2), `hestia` con
       `HESTIA_DIR` en el temporal. `adoptar` exige antes sustituir `/usr/local/hestia` por
       `$HESTIA_DIR` (T18, ADR propio).
+- [ ] **Endurecimientos pendientes** (advertencias de la quinta revisión; todas exigen escribir
+      una prueba equivocada, ninguna la dispara una suite actual): leer el perfil por nombre de
+      variable y no por posición en `bc_comprobar_rutas_perfil`; auditar o vaciar
+      `NOTIFY_COMMAND`; exigir rutas absolutas en el perfil; comprobar el `mkdir`/`cd` de
+      `nueva_prueba`; sembrar también `LOG_DIR` y `HESTIA_OUTPUT_DIR` en la prueba de retención.
 
 ## Pendiente en servidores (lo ejecuta el PO)
 

@@ -22,3 +22,4 @@ reporte del coder en mano. Plantilla:
 | Entrada | Qué cierra | Fecha |
 | --- | --- | --- |
 | [0001](0001-adopcion-arquitecto-coder.md) | Adopción del modelo arquitecto-coder | 2026-09-14 |
+| [0002](0002-banco-de-pruebas-local.md) | Banco de pruebas local (`tests/`) | 2026-09-14 |

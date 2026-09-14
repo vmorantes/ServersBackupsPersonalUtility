@@ -1,10 +1,9 @@
 # Ahora
 
 - **Actualizado:** 2026-09-14 (tras las respuestas del PO)
-- **Último mensaje:** #013 (ARQ) — cuarta y última corrección del banco antes de fusionar.
-  Se espera #014. (#012: ADR 0010 implementado, 51 afirmaciones en verde, 5 mutaciones
-  confirmadas; la revisión encontró que un perfil podía declarar rutas fuera del temporal —
-  ninguna suite actual lo hace—, y un bug real de `restore` (T20).)
+- **Último mensaje:** #015 (ARQ) — commitear la documentación de cierre del tramo en
+  `docs/cierre-tramo-adopcion` y fusionar. Se espera #016. (#014: banco fusionado en `master`,
+  `d5483d0`.)
 - **Tramo en curso:** `estado/tramos/2026-09-14-0949-adopcion-arquitecto-coder.md`
 
 ## Espera al PO
@@ -18,8 +17,11 @@ Nada que bloquee. Cuando quieras:
    (`rm ~/.local/bin/backupctl`). Ningún agente lo toca.
 3. **Servidor de pruebas**: su baja, dos bloqueos de Restic y la poda que se come las
    instantáneas buenas de la cuenta grande hacia principios de octubre (roadmap).
-4. **`git push` de `master`**: la adopción ya está fusionada (`7977793`). Subirla, cuando
-   quieras, lo haces tú. La rama `chore/adopcion-arquitecto-coder` puede borrarse (también tú).
+4. **`git push` de `master`**: lleva la adopción (`7977793`) y el banco de pruebas
+   (`d5483d0`). Lo haces tú. Las ramas `chore/adopcion-arquitecto-coder` y
+   `feat/banco-de-pruebas` ya están fusionadas y pueden borrarse (también tú).
+5. **Qué sigue.** No queda trabajo nombrado. Candidata: arreglar T20 (`restore` cancelado deja
+   volcados de la base en `/tmp`), con su prueba en el banco.
 
 Decidido el 2026-09-14: pruebas en servidor, solo el PO (ADR 0006); `master` estable con ramas
 (ADR 0007); credenciales versionadas a propósito (ADR 0008); push solo el PO; los 31 commits con
@@ -28,10 +30,10 @@ Decidido el 2026-09-14: pruebas en servidor, solo el PO (ADR 0006); `master` est
 
 ## En curso
 
-Ronda #013 en vuelo, en `feat/banco-de-pruebas` (30 commits, sin fusionar): validar las rutas
-del perfil, cuatro endurecimientos menores, y fusionar. Criterio de corte: CRÍTICO solo si una
-suite existente, SIN modificarla, puede tocar algo real o pasar con el código roto; lo que exige
-escribir una prueba equivocada es advertencia (las pruebas nuevas pasan por revisión).
+Cierre del tramo: el trabajo nombrado por el PO (adopción y banco de pruebas) está hecho y en
+`master`. El arquitecto audita la documentación con el curador de contexto y después manda
+commitearla en `docs/cierre-tramo-adopcion`. No queda más trabajo nombrado: lo siguiente lo
+elige el PO (primera candidata: T20).
 
 Si se corta ahora: quedaría la rama a medias; el coder termina la ronda antes de parar.
 

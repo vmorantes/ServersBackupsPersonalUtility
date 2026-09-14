@@ -1,8 +1,8 @@
 # Tramo 2026-09-14 09:49 — Adopción del modelo arquitecto-coder
 
 - **Inicio:** 2026-09-14 09:49 (el PO pega `.agents/`, `.claude/` y `.vscode/`)
-- **Fin:** *(abierto: espera al PO)* — **Duración:** *(al cerrar)*
-- **Mensajes:** ninguno todavía (el primero será `#001`)
+- **Fin:** 2026-09-14 13:12 — **Duración:** 3 h 23 min
+- **Mensajes:** #001–#016 (#016: reporte de la ronda que commitea esta documentación)
 - **Mandato del PO:** «adaptar todos los insumos de este proyecto a la metodología
   arquitecto-coder», con permiso para consultar a la sesión anterior. Sobre el coder: «prefiero
   otro, y a ese úsalo solo en esta fase de configuración».
@@ -19,7 +19,12 @@ La configuración la hizo el arquitecto sin coder. Después:
 | #007→#008 | Corregir los críticos, endurecer, camino de fallo, mutaciones, fusionar | bloqueado: 1 crítico nuevo, sin fusionar; 6/6 mutaciones confirmadas | `b2ce989` `858910f` `76a0f64` `30b6f90` `0450cdd` `1e1680c` `e7ef47c` `e2df7b8` `f919645` `706faa4` `e440a02` |
 | #009→#010 | Salvaguarda que falle en cerrado; advertencias 2, 3 y 5; mutaciones; fusionar | bloqueado: 1 crítico nuevo (PATH solo comprobado en `ejecutar.sh`); 5/5 mutaciones confirmadas | `18230d3` `0218ff6` `9add51e` `d5a7448` `553c7ab` |
 | #011→#012 | Rediseño de salvaguardas (ADR 0010, reemplaza 0009), retención por nombre, evidencia previa | bloqueado: 1 crítico (rutas del perfil fuera del temporal, solo con una prueba modificada); 5/5 mutaciones; bug real T20 | `d94ed6e` `8206cf0` `f5d5b4b` `874be18` `860a30a` `6486ff4` |
-| #013→#014 | Rutas del perfil, endurecimientos menores, fusionar | en vuelo | — |
+| #013→#014 | Rutas del perfil, endurecimientos menores, fusionar | completado; 3/3 mutaciones; quinta revisión sin críticos (trazado con `strace`) | `9e3a0d1` `7a626db` `f1a3d46` `11285e2`; fusión `d5483d0` |
+| #015→#016 | Commitear la documentación de cierre del tramo (rama `docs/cierre-tramo-adopcion`) y fusionar | enviada al cerrar | — |
+
+Curador de contexto al cierre: sin falsedades en `context/`; T8 pasa a CUBIERTA; T18 cita el
+ADR 0010; el roadmap pierde las dos tareas hechas; `HERENCIA.md` cumple ya una de sus cuatro
+condiciones de borrado (falta cerrar lo pendiente en servidores).
 
 Decisión de corte: la cuarta revisión bajó otra capa (un perfil escrito a mano con rutas
 fuera). Se cierra, y desde aquí CRÍTICO exige que una suite existente sin modificar pueda
@@ -88,8 +93,25 @@ bloqueaba `config/env.sh.example`; corregida (solo `env.sh.anterior` y `env.sh.n
 
 ## Espera al PO
 
-Lo mismo que `estado/AHORA.md`, «Espera al PO».
+1. Subir `master` a GitHub (`git push`): lleva la adopción y el banco.
+2. Borrar, si quieres, las ramas ya fusionadas `chore/adopcion-arquitecto-coder`,
+   `feat/banco-de-pruebas` y, tras #016, `docs/cierre-tramo-adopcion`.
+3. Qué sigue. Candidata: arreglar T20 (`restore` cancelado deja volcados en `/tmp`), con su
+   prueba en el banco.
+4. `~/.local/bin/backupctl`: conservarlo o quitarlo.
+5. Servidor de pruebas: baja, dos bloqueos de Restic, poda hacia principios de octubre.
+6. En cada sesión nueva, los dos `/rename`.
 
 ## Resumen
 
-*(al cerrar)*
+Se adoptó el modelo arquitecto-coder: el andamiaje de otro proyecto se retiró entero y se
+reescribió para `backupctl` (ADR 0001–0008), con una guarda que impide a los agentes tocar
+servidores, MySQL, credenciales o el sistema del PO, probada sobre un repositorio sintético. El PO
+decidió que las pruebas en servidor y las subidas a GitHub son solo suyas, que `master` es
+estable y que las credenciales siguen versionadas.
+
+Después se construyó el banco de pruebas local (`tests/`, ADR 0010): 5 suites y 51
+afirmaciones que ejecutan `backupctl` de verdad contra imitaciones de `mysql`, `ssh` y compañía.
+Llevó cinco rondas de revisión: cuatro defectos críticos en las propias pruebas, encontrados y
+cerrados, 19 mutaciones que lo demuestran, y una última revisión sin críticos trazada con
+`strace`. El banco encontró un bug real de `backupctl` (T20) que espera la decisión del PO.
