@@ -17,7 +17,12 @@ La configuración la hizo el arquitecto sin coder. Después:
 | #003→#004 | Commitear la adopción en `chore/adopcion-arquitecto-coder` y fusionar | completado | `e26d637` `4021253` `4ebffe4` `70c9967` `b713923` `64ac581`; fusión `7977793` |
 | #005→#006 | Banco de pruebas local (ADR 0009), rama `feat/banco-de-pruebas` | bloqueado: 2 críticos de revisión, sin fusionar | `9ff440f` `68ec043` `5672967` `80dbaad` `ddc93e8` `3b795cb` `c10cacf` `ce6b124` |
 | #007→#008 | Corregir los críticos, endurecer, camino de fallo, mutaciones, fusionar | bloqueado: 1 crítico nuevo, sin fusionar; 6/6 mutaciones confirmadas | `b2ce989` `858910f` `76a0f64` `30b6f90` `0450cdd` `1e1680c` `e7ef47c` `e2df7b8` `f919645` `706faa4` `e440a02` |
-| #009→#010 | Salvaguarda que falle en cerrado; advertencias 2, 3 y 5; mutaciones; fusionar | en vuelo | — |
+| #009→#010 | Salvaguarda que falle en cerrado; advertencias 2, 3 y 5; mutaciones; fusionar | bloqueado: 1 crítico nuevo (PATH solo comprobado en `ejecutar.sh`); 5/5 mutaciones confirmadas | `18230d3` `0218ff6` `9add51e` `d5a7448` `553c7ab` |
+| #011→#012 | Rediseño de salvaguardas (ADR 0010, reemplaza 0009), retención por nombre, evidencia previa | en vuelo | — |
+
+Decisión: tres críticos seguidos de la misma familia (salvaguarda que depende de su llamador)
+indican un fallo de diseño, no de ejecución: ADR 0010. Se precisa además qué es CRÍTICO en la
+revisión, para no bloquear por endurecimientos que no protegen de nada real.
 
 Hallazgo de #008: el arquitecto había escrito en T18 (y en el ADR 0009) que `hestia` depende de
 `/usr/local/hestia` escrito a mano; falso: `lib/hestia.sh` usa `$HESTIA_DIR` 23 veces. Corregido
