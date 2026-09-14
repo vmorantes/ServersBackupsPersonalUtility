@@ -36,6 +36,11 @@ BC_PRUEBA_LIB_LOADED=1
 # BANCO_TESTIGO, y cada orden de ordenes.txt tiene que resolver al enlace que
 # el propio ejecutar.sh creó.
 bc_comprobar_entorno_banco() {
+  if [[ "$(id -u)" == "0" ]]; then
+    echo "tests/lib.sh: no se ejecuta como root." >&2
+    exit 2
+  fi
+
   local nombre valor real
   for nombre in BANCO_TMP BANCO_RAIZ; do
     valor="${!nombre:-}"
@@ -108,8 +113,12 @@ bc_comprobar_orden_falsa() {
   base_bin="$(dirname "$BANCO_TMP")/bin"
 
   local orden resuelto enlace_real
-  while IFS= read -r orden; do
+  while IFS= read -r orden || [[ -n "$orden" ]]; do
     [[ -z "$orden" ]] && continue
+    if [[ ! "$orden" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+      echo "tests/lib.sh: línea inválida en $archivo: '$orden'." >&2
+      return 1
+    fi
     resuelto="$(command -v "$orden" 2>/dev/null || true)"
     if [[ "$resuelto" != "$base_bin/$orden" ]]; then
       echo "tests/lib.sh: '$orden' no resuelve al falso del banco (resolvió a: '${resuelto:-<nada>}')." >&2
@@ -136,14 +145,23 @@ mkdir -p "$BANCO_TMP/registro" "$BANCO_TMP/guion"
 # -----------------------------------------------------------------------------
 # Afirmaciones
 # -----------------------------------------------------------------------------
+# Cada afirmar_* escribe su detalle en $BANCO_TMP/.resultados en UNA sola
+# línea: fin_de_suite cuenta líneas, y un valor interpolado con saltos de
+# línea (un nombre de archivo con ruta larga, una lista) inflaría el
+# recuento. bc_una_linea sustituye cada salto por " | ".
+bc_una_linea() {
+  local s="$1"
+  printf '%s' "${s//$'\n'/ | }"
+}
+
 afirmar_codigo() {
   local esperado="$1" obtenido="$2" desc="$3"
   if [[ "$esperado" == "$obtenido" ]]; then
     echo "  ok: $desc" >&2
-    printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
+    printf 'ok\t%s\n' "$(bc_una_linea "$desc")" >> "$BANCO_TMP/.resultados"
   else
     echo "  FALLO: $desc (esperado código $esperado, obtenido $obtenido)" >&2
-    printf 'FALLO\t%s (esperado codigo %s, obtenido %s)\n' "$desc" "$esperado" "$obtenido" >> "$BANCO_TMP/.resultados"
+    printf 'FALLO\t%s\n' "$(bc_una_linea "$desc (esperado codigo $esperado, obtenido $obtenido)")" >> "$BANCO_TMP/.resultados"
   fi
 }
 
@@ -151,10 +169,10 @@ afirmar_igual() {
   local a="$1" b="$2" desc="$3"
   if [[ "$a" == "$b" ]]; then
     echo "  ok: $desc" >&2
-    printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
+    printf 'ok\t%s\n' "$(bc_una_linea "$desc")" >> "$BANCO_TMP/.resultados"
   else
     echo "  FALLO: $desc (esperado '$b', obtenido '$a')" >&2
-    printf 'FALLO\t%s (esperado %s, obtenido %s)\n' "$desc" "$b" "$a" >> "$BANCO_TMP/.resultados"
+    printf 'FALLO\t%s\n' "$(bc_una_linea "$desc (esperado $b, obtenido $a)")" >> "$BANCO_TMP/.resultados"
   fi
 }
 
@@ -162,10 +180,10 @@ afirmar_contiene() {
   local archivo="$1" patron="$2" desc="$3"
   if [[ -f "$archivo" ]] && grep -qE -- "$patron" "$archivo"; then
     echo "  ok: $desc" >&2
-    printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
+    printf 'ok\t%s\n' "$(bc_una_linea "$desc")" >> "$BANCO_TMP/.resultados"
   else
     echo "  FALLO: $desc (no se encontró '$patron' en $archivo)" >&2
-    printf 'FALLO\t%s (no se encontro %s en %s)\n' "$desc" "$patron" "$archivo" >> "$BANCO_TMP/.resultados"
+    printf 'FALLO\t%s\n' "$(bc_una_linea "$desc (no se encontro $patron en $archivo)")" >> "$BANCO_TMP/.resultados"
   fi
 }
 
@@ -173,13 +191,13 @@ afirmar_no_contiene() {
   local archivo="$1" patron="$2" desc="$3"
   if [[ ! -f "$archivo" ]]; then
     echo "  FALLO: $desc (no existe $archivo)" >&2
-    printf 'FALLO\t%s (no existe %s)\n' "$desc" "$archivo" >> "$BANCO_TMP/.resultados"
+    printf 'FALLO\t%s\n' "$(bc_una_linea "$desc (no existe $archivo)")" >> "$BANCO_TMP/.resultados"
   elif grep -qE -- "$patron" "$archivo"; then
     echo "  FALLO: $desc (se encontró '$patron' en $archivo)" >&2
-    printf 'FALLO\t%s (se encontro %s en %s)\n' "$desc" "$patron" "$archivo" >> "$BANCO_TMP/.resultados"
+    printf 'FALLO\t%s\n' "$(bc_una_linea "$desc (se encontro $patron en $archivo)")" >> "$BANCO_TMP/.resultados"
   else
     echo "  ok: $desc" >&2
-    printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
+    printf 'ok\t%s\n' "$(bc_una_linea "$desc")" >> "$BANCO_TMP/.resultados"
   fi
 }
 
@@ -187,10 +205,10 @@ afirmar_intacto() {
   local archivo="$1" copia="$2" desc="$3"
   if cmp -s "$archivo" "$copia"; then
     echo "  ok: $desc" >&2
-    printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
+    printf 'ok\t%s\n' "$(bc_una_linea "$desc")" >> "$BANCO_TMP/.resultados"
   else
     echo "  FALLO: $desc ($archivo difiere de $copia)" >&2
-    printf 'FALLO\t%s (%s difiere de %s)\n' "$desc" "$archivo" "$copia" >> "$BANCO_TMP/.resultados"
+    printf 'FALLO\t%s\n' "$(bc_una_linea "$desc ($archivo difiere de $copia)")" >> "$BANCO_TMP/.resultados"
   fi
 }
 
@@ -202,20 +220,24 @@ afirmar_existe() {
   local ruta="$1" desc="$2"
   if [[ -e "$ruta" ]]; then
     echo "  ok: $desc" >&2
-    printf 'ok\t%s\n' "$desc" >> "$BANCO_TMP/.resultados"
+    printf 'ok\t%s\n' "$(bc_una_linea "$desc")" >> "$BANCO_TMP/.resultados"
   else
     echo "  FALLO: $desc (no existe $ruta)" >&2
-    printf 'FALLO\t%s (no existe %s)\n' "$desc" "$ruta" >> "$BANCO_TMP/.resultados"
+    printf 'FALLO\t%s\n' "$(bc_una_linea "$desc (no existe $ruta)")" >> "$BANCO_TMP/.resultados"
   fi
 }
 
-# Cuenta SIEMPRE desde el archivo. Una suite sin ninguna afirmación no ha
-# probado nada: cuenta como fallo, no como éxito vacío.
+# Cuenta SIEMPRE desde el archivo, y solo líneas que empiezan por "ok<TAB>" o
+# "FALLO<TAB>": el detalle de una afirmación (un nombre de archivo, una
+# lista) va siempre en una sola línea (ver el saneo en cada afirmar_*), pero
+# contar con wc -l se habría inflado igual si alguna vez no lo fuera. Una
+# suite sin ninguna afirmación no ha probado nada: cuenta como fallo, no como
+# éxito vacío.
 fin_de_suite() {
   local total=0 fallos=0
   if [[ -f "$BANCO_TMP/.resultados" ]]; then
-    total="$(wc -l < "$BANCO_TMP/.resultados")"
-    fallos="$(grep -c '^FALLO' "$BANCO_TMP/.resultados" || true)"
+    total="$(grep -cE $'^(ok|FALLO)\t' "$BANCO_TMP/.resultados" || true)"
+    fallos="$(grep -cE $'^FALLO\t' "$BANCO_TMP/.resultados" || true)"
   fi
   echo "  -- $total afirmaciones, $fallos fallidas --" >&2
   if (( total == 0 )); then
@@ -277,19 +299,119 @@ export HEALTHCHECK_URL=""
 EOF
 }
 
+# Carga "$1/env.sh" en un subshell AISLADO (env -i, solo PATH/HOME/TMPDIR
+# actuales) — nunca en el proceso de la suite — y comprueba que las rutas que
+# quedan tras aplicarles los MISMOS valores por defecto que
+# lib/config.sh:146-197 (bc_config_apply_defaults) caen dentro de $BANCO_TMP,
+# y que DEPLOY_HOST está vacío. HESTIA_DIR solo se comprueba si el perfil lo
+# declara: su valor por defecto, /usr/local/hestia, no es lo que aquí se
+# vigila (nunca va a estar dentro de un temporal, y no tiene por qué).
+#
+# Ronda #012: un perfil dentro de $BANCO_TMP con env.sh normal (no enlace)
+# podía declarar BACKUP_OUTPUT_DIR/LOG_DIR apuntando FUERA, y backupctl
+# escribía —y con retention, borraba— ahí sin que nada lo impidiera. Esto lo
+# cierra: se valida el CONTENIDO del perfil, no solo su ubicación.
+#
+# Deja el motivo del fallo en BC_MOTIVO_RUTAS_PERFIL; no imprime ni escribe
+# en .resultados por su cuenta (lo hace quien la llama, como las demás
+# negativas de backupctl_prueba).
+bc_comprobar_rutas_perfil() {
+  local perfil_dir="$1"
+  BC_MOTIVO_RUTAS_PERFIL=""
+
+  local salida rc
+  salida="$(env -i HOME="${HOME:-}" TMPDIR="${TMPDIR:-}" PATH="$PATH" bash -c '
+    source "$1/env.sh" || exit 3
+    printf "%s\n" "${SCRIPTS_DIR:-}" "${BACKUP_OUTPUT_DIR:-}" "${BACKUP_WORK_DIR:-}" \
+                  "${HESTIA_OUTPUT_DIR:-}" "${LOG_DIR:-}" "${HESTIA_DIR:-}" "${DEPLOY_HOST:-}"
+  ' _ "$perfil_dir" 2>/dev/null)"
+  rc=$?
+  if (( rc != 0 )); then
+    BC_MOTIVO_RUTAS_PERFIL="no se pudo cargar '$perfil_dir/env.sh' (código $rc)"
+    return 1
+  fi
+
+  local scripts_dir out_dir work_dir hestia_out log_dir hestia_dir deploy_host
+  { IFS= read -r scripts_dir; IFS= read -r out_dir; IFS= read -r work_dir;
+    IFS= read -r hestia_out; IFS= read -r log_dir; IFS= read -r hestia_dir;
+    IFS= read -r deploy_host; } <<<"$salida"
+
+  # Mismos valores por defecto que bc_config_apply_defaults: SCRIPTS_DIR cae
+  # al directorio del perfil (BC_PROFILE_DIR allí es "$perfil_dir" aquí); el
+  # resto cuelga de SCRIPTS_DIR.
+  [[ -n "$scripts_dir" ]] || scripts_dir="$perfil_dir"
+  [[ -n "$out_dir"    ]] || out_dir="$scripts_dir/output/mysql_backups"
+  [[ -n "$work_dir"   ]] || work_dir="$scripts_dir/output"
+  [[ -n "$hestia_out" ]] || hestia_out="$scripts_dir/output/HestiaCP"
+  [[ -n "$log_dir"    ]] || log_dir="$scripts_dir/logs"
+
+  if [[ -n "$deploy_host" ]]; then
+    BC_MOTIVO_RUTAS_PERFIL="el perfil declara DEPLOY_HOST ('$deploy_host'); debe estar vacío"
+    return 1
+  fi
+
+  local base_tmp
+  base_tmp="$(realpath -e -- "$BANCO_TMP" 2>/dev/null || true)"
+  if [[ -z "$base_tmp" ]]; then
+    BC_MOTIVO_RUTAS_PERFIL="no se pudo resolver \$BANCO_TMP"
+    return 1
+  fi
+
+  local nombre valor real
+  for nombre in SCRIPTS_DIR BACKUP_OUTPUT_DIR BACKUP_WORK_DIR HESTIA_OUTPUT_DIR LOG_DIR; do
+    case "$nombre" in
+      SCRIPTS_DIR)       valor="$scripts_dir" ;;
+      BACKUP_OUTPUT_DIR) valor="$out_dir" ;;
+      BACKUP_WORK_DIR)   valor="$work_dir" ;;
+      HESTIA_OUTPUT_DIR) valor="$hestia_out" ;;
+      LOG_DIR)           valor="$log_dir" ;;
+    esac
+    real="$(realpath -m -- "$valor" 2>/dev/null || true)"
+    if [[ -z "$real" ]]; then
+      BC_MOTIVO_RUTAS_PERFIL="no se pudo resolver $nombre ('$valor')"
+      return 1
+    fi
+    case "$real" in
+      "$base_tmp"/*|"$base_tmp") ;;
+      *)
+        BC_MOTIVO_RUTAS_PERFIL="$nombre ('$valor', resuelto '$real') queda fuera de \$BANCO_TMP"
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -n "$hestia_dir" ]]; then
+    real="$(realpath -m -- "$hestia_dir" 2>/dev/null || true)"
+    if [[ -z "$real" ]]; then
+      BC_MOTIVO_RUTAS_PERFIL="no se pudo resolver HESTIA_DIR ('$hestia_dir')"
+      return 1
+    fi
+    case "$real" in
+      "$base_tmp"/*|"$base_tmp") ;;
+      *)
+        BC_MOTIVO_RUTAS_PERFIL="HESTIA_DIR ('$hestia_dir', resuelto '$real') queda fuera de \$BANCO_TMP"
+        return 1
+        ;;
+    esac
+  fi
+
+  return 0
+}
+
 # -----------------------------------------------------------------------------
 # Ejecución de backupctl bajo prueba
 # -----------------------------------------------------------------------------
 # Siempre con -p y con la entrada estándar cerrada. Se niega —y lo deja escrito
-# en $BANCO_TMP/.resultados, no solo en una variable— en tres casos: el
+# en $BANCO_TMP/.resultados, no solo en una variable— en cuatro casos: el
 # perfil no está dentro de $BANCO_TMP (T3); su env.sh es un enlace simbólico
-# (podría llevar a cualquier sitio, credenciales reales incluidas); o el PATH
-# ya no resuelve las órdenes peligrosas a sus falsas (ADR 0010 — la misma
-# comprobación de bc_comprobar_orden_falsa, repetida aquí porque el entorno
-# pudo cambiar entre la carga de la biblioteca y esta llamada). Compara
-# realpath -e/-m de perfil y $BANCO_TMP; si cualquiera de los dos falla o
-# devuelve vacío, SE NIEGA (ronda #008: con base="", "$base"/*|"$base" se
-# volvía /*|"", que aceptaba cualquier ruta).
+# (podría llevar a cualquier sitio, credenciales reales incluidas); el propio
+# env.sh declara una ruta fuera de $BANCO_TMP (ronda #012:
+# bc_comprobar_rutas_perfil); o el PATH ya no resuelve las órdenes peligrosas
+# a sus falsas (ADR 0010 — la misma comprobación de bc_comprobar_orden_falsa,
+# repetida aquí porque el entorno pudo cambiar entre la carga de la
+# biblioteca y esta llamada). Compara realpath -e/-m de perfil y $BANCO_TMP;
+# si cualquiera de los dos falla o devuelve vacío, SE NIEGA (ronda #008: con
+# base="", "$base"/*|"$base" se volvía /*|"", que aceptaba cualquier ruta).
 backupctl_prueba() {
   local perfil_dir="$1"; shift
   local real base negar=1 motivo=""
@@ -307,6 +429,11 @@ backupctl_prueba() {
     motivo="'$perfil_dir/env.sh' es un enlace simbólico"
   fi
 
+  if (( negar == 0 )) && ! bc_comprobar_rutas_perfil "$perfil_dir"; then
+    negar=1
+    motivo="$BC_MOTIVO_RUTAS_PERFIL"
+  fi
+
   if (( negar == 0 )) && ! bc_comprobar_orden_falsa; then
     negar=1
     motivo="el PATH ya no resuelve las órdenes peligrosas a sus falsas"
@@ -319,7 +446,7 @@ backupctl_prueba() {
 
   [[ -z "$motivo" ]] && motivo="'$perfil_dir' (resuelto: '$real') está fuera de \$BANCO_TMP ('$base')"
   echo "  FALLO: backupctl_prueba se niega a ejecutar: $motivo" >&2
-  printf 'FALLO\tbackupctl_prueba se niega: %s\n' "$motivo" >> "$BANCO_TMP/.resultados"
+  printf 'FALLO\tbackupctl_prueba se niega: %s\n' "$(bc_una_linea "$motivo")" >> "$BANCO_TMP/.resultados"
   return 97
 }
 
