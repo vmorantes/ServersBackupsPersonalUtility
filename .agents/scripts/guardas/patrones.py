@@ -34,7 +34,7 @@ PATRONES = [re.compile(p, re.IGNORECASE) for p in _INSENSIBLES] + [re.compile(p)
 # Rutas entregables, relativas a la raíz. Fuera de ellas (.agents/, .claude/,
 # AGENTS.md, estado/) hablar de agentes es el tema, no una firma. Los
 # directorios de perfil son del PO y no se revisan.
-PREFIJOS_ENTREGABLES = ("bin/", "lib/", "web/", "tools/", "config/", "docs/")
+PREFIJOS_ENTREGABLES = ("bin/", "lib/", "web/", "tools/", "config/", "docs/", "tests/")
 ARCHIVOS_ENTREGABLES = ("README.md", "CHANGELOG.md", "UtilCommands.md", "mkdocs.yml", ".gitignore", ".gitattributes")
 
 # Último commit anterior a la adopción del modelo arquitecto-coder (ADR 0001).
