@@ -53,8 +53,12 @@ bc_verify_run() {
 
   BC_VERIFY_PROBLEMS=0
   local tmp; tmp="$(mktemp -d "${TMPDIR:-/tmp}/backupctl-verify.XXXXXXXX")"
-  # shellcheck disable=SC2064
-  trap "rm -rf '$tmp'; bc_verify_drop_scratch" RETURN
+  # ADR 0012: registrada en cuanto se crea. bc_verify_drop_scratch lee
+  # BC_SCRATCH_DB en el momento de ejecutarse (no aquí, que todavía está
+  # vacía) y es idempotente (sale sola si no hay nada que borrar) — segura de
+  # nombrar en el texto registrado y de que se ejecute más de una vez.
+  bc_cleanup_register verify_tmp "rm -rf $(printf '%q' "$tmp"); bc_verify_drop_scratch"
+  trap 'bc_cleanup_run verify_tmp' RETURN
 
   # --- 1. Integridad del zip -------------------------------------------------
   bc_step "[1/5] Estructura del zip"
