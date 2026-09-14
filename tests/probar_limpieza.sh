@@ -140,11 +140,61 @@ test_cleanup_eval_preserves_the_callers_errexit() {
   afirmar_igual "$(cat "$estado_mas" 2>/dev/null || true)" "on" "tras limpiar, sigue en 'set -e' (se restaura errexit)"
 }
 
+# Reproduce el `trap … EXIT` real de bin/backupctl (52) y su trampa INT/TERM
+# (53): una señal TERM también tiene que dejar las limpiezas pendientes
+# hechas, no solo bc_die (ronda de #022: T20 hablaba de "muere con exit o por
+# señal", y hasta ahora solo se probaba lo primero).
+test_pending_cleanups_run_on_sigterm() {
+  nueva_prueba t7
+  local traza="$BANCO_TMP/t7/traza.txt"
+  bash -c '
+    set -Eeuo pipefail
+    trap "bc_trap_err \"\$BASH_COMMAND\"" ERR
+    source "$1/lib/core.sh"
+    trap bc_cleanup_pending EXIT
+    trap "exit 130" INT TERM
+    bc_cleanup_register a "echo A >> $(printf %q "$2")"
+    bc_cleanup_register b "echo B >> $(printf %q "$2")"
+    kill -TERM "$$"
+  ' _ "$BANCO_RAIZ" "$traza" >/dev/null 2>&1
+  afirmar_codigo 130 "$?" "el proceso sale con 130 (el código de la señal, como bin/backupctl:53)"
+  afirmar_existe "$traza" "la traza de limpiezas existe"
+  local contenido
+  contenido="$(tr '\n' ',' < "$traza" 2>/dev/null || true)"
+  afirmar_igual "$contenido" "B,A," "las dos limpiezas corrieron (orden inverso) pese a la señal"
+}
+
+# bc_cleanup_run ahora ejecuta la limpieza ANTES de quitar la clave del
+# registro (ronda de #022): si el proceso muere A MITAD de esa ejecución —
+# aquí, simulado con un "exit 3" dentro de la propia orden—, la clave SIGUE
+# registrada y bc_cleanup_pending, desde el trap EXIT, la reintenta. La orden
+# usa un marcador en disco para distinguir "primera vez" (corta) de "reintento"
+# (termina y dice OK), y así queda constancia de que el reintento sí corrió.
+test_cleanup_run_retries_if_interrupted() {
+  nueva_prueba t8
+  local marcador="$BANCO_TMP/t8/marcador" traza="$BANCO_TMP/t8/traza.txt"
+  bash -c '
+    set -Eeuo pipefail
+    trap "bc_trap_err \"\$BASH_COMMAND\"" ERR
+    source "$1/lib/core.sh"
+    trap bc_cleanup_pending EXIT
+    orden="if [ -e $(printf %q "$2") ]; then echo OK >> $(printf %q "$3"); else touch $(printf %q "$2"); exit 3; fi"
+    bc_cleanup_register k "$orden"
+    bc_cleanup_run k
+    echo "no deberia llegar aqui" >> "$3"
+  ' _ "$BANCO_RAIZ" "$marcador" "$traza" >/dev/null 2>&1
+  afirmar_codigo 3 "$?" "la primera pasada corta el proceso con el código simulado (3)"
+  afirmar_existe "$traza" "la traza existe: el reintento desde el trap EXIT llegó a correr"
+  afirmar_igual "$(cat "$traza" 2>/dev/null || true)" "OK" "el reintento completó la limpieza sin volver a cortar"
+}
+
 test_loading_core_does_not_execute_anything
 test_pending_cleanups_run_in_reverse_order_on_bc_die
 test_cleanup_run_executes_once_and_not_again_on_exit
 test_cleanup_forget_does_not_execute
 test_a_failing_cleanup_does_not_block_the_rest
 test_cleanup_eval_preserves_the_callers_errexit
+test_pending_cleanups_run_on_sigterm
+test_cleanup_run_retries_if_interrupted
 
 fin_de_suite
