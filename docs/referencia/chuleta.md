@@ -228,7 +228,7 @@ backupctl status >/dev/null || curl -fsS https://hc-ping.com/xxx/fail
 MiVPS/
 ├── env.sh       ✏️  lo editas tú          → sube con deploy
 ├── NOTAS.md     ✏️  tus apuntes           → pull nunca lo toca
-└── ESTADO.md    🤖  lo genera pull        → se regenera entero
+└── ESTADO.md    ⚙️  lo genera pull        → se regenera entero
 ```
 
 ## Ciclo repositorio ↔ servidor

@@ -21,7 +21,7 @@
 └── 🖥️ MiVPS/       UN SERVIDOR
     ├── ✏️ env.sh           ← LO ÚNICO QUE EDITAS TÚ
     ├── ✏️ NOTAS.md         ← tus apuntes. Nadie los toca
-    ├── 🤖 ESTADO.md        ← lo genera `backupctl pull`. No editar
+    ├── ⚙️ ESTADO.md        ← lo genera `backupctl pull`. No editar
     ├── 📂 logs/            ← salidas locales, si has ejecutado aquí
     └── 📂 output/          ← respaldos locales
 ```
@@ -30,7 +30,7 @@
 |---|---|
 | ✏️ | **Lo editas tú** |
 | 🔧 | Código compartido. Se sube igual a todos los servidores |
-| 🤖 | Se genera solo |
+| ⚙️ | Se genera solo |
 | 📖 | Documentación |
 
 ## La regla
