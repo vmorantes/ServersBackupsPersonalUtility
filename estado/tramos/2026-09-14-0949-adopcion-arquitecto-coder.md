@@ -18,7 +18,13 @@ La configuración la hizo el arquitecto sin coder. Después:
 | #005→#006 | Banco de pruebas local (ADR 0009), rama `feat/banco-de-pruebas` | bloqueado: 2 críticos de revisión, sin fusionar | `9ff440f` `68ec043` `5672967` `80dbaad` `ddc93e8` `3b795cb` `c10cacf` `ce6b124` |
 | #007→#008 | Corregir los críticos, endurecer, camino de fallo, mutaciones, fusionar | bloqueado: 1 crítico nuevo, sin fusionar; 6/6 mutaciones confirmadas | `b2ce989` `858910f` `76a0f64` `30b6f90` `0450cdd` `1e1680c` `e7ef47c` `e2df7b8` `f919645` `706faa4` `e440a02` |
 | #009→#010 | Salvaguarda que falle en cerrado; advertencias 2, 3 y 5; mutaciones; fusionar | bloqueado: 1 crítico nuevo (PATH solo comprobado en `ejecutar.sh`); 5/5 mutaciones confirmadas | `18230d3` `0218ff6` `9add51e` `d5a7448` `553c7ab` |
-| #011→#012 | Rediseño de salvaguardas (ADR 0010, reemplaza 0009), retención por nombre, evidencia previa | en vuelo | — |
+| #011→#012 | Rediseño de salvaguardas (ADR 0010, reemplaza 0009), retención por nombre, evidencia previa | bloqueado: 1 crítico (rutas del perfil fuera del temporal, solo con una prueba modificada); 5/5 mutaciones; bug real T20 | `d94ed6e` `8206cf0` `f5d5b4b` `874be18` `860a30a` `6486ff4` |
+| #013→#014 | Rutas del perfil, endurecimientos menores, fusionar | en vuelo | — |
+
+Decisión de corte: la cuarta revisión bajó otra capa (un perfil escrito a mano con rutas
+fuera). Se cierra, y desde aquí CRÍTICO exige que una suite existente sin modificar pueda
+causar el daño. Si no, cada revisión encontraría un nivel más de «y si alguien escribe una
+prueba mala», y el banco no se fusionaría nunca.
 
 Decisión: tres críticos seguidos de la misma familia (salvaguarda que depende de su llamador)
 indican un fallo de diseño, no de ejecución: ADR 0010. Se precisa además qué es CRÍTICO en la

@@ -1,10 +1,10 @@
 # Ahora
 
 - **Actualizado:** 2026-09-14 (tras las respuestas del PO)
-- **Último mensaje:** #011 (ARQ) — tercera corrección del banco, con el diseño del ADR 0010.
-  Se espera #012. (#010: el crítico de #008 cerrado, 5 mutaciones confirmadas, 45 afirmaciones
-  en verde; la tercera revisión encontró otro fallo en abierto: la comprobación del `PATH` solo
-  existía en `ejecutar.sh`. No se fusionó.)
+- **Último mensaje:** #013 (ARQ) — cuarta y última corrección del banco antes de fusionar.
+  Se espera #014. (#012: ADR 0010 implementado, 51 afirmaciones en verde, 5 mutaciones
+  confirmadas; la revisión encontró que un perfil podía declarar rutas fuera del temporal —
+  ninguna suite actual lo hace—, y un bug real de `restore` (T20).)
 - **Tramo en curso:** `estado/tramos/2026-09-14-0949-adopcion-arquitecto-coder.md`
 
 ## Espera al PO
@@ -28,12 +28,10 @@ Decidido el 2026-09-14: pruebas en servidor, solo el PO (ADR 0006); `master` est
 
 ## En curso
 
-Ronda #011 en vuelo, en `feat/banco-de-pruebas` (24 commits, sin fusionar): rediseño de las
-salvaguardas para que ninguna dependa de quién la llama (ADR 0010, reemplaza al 0009): marca
-con testigo, comprobación del `PATH` dentro de `lib.sh`, lista única de órdenes, temporal fijo
-en `/tmp`; retención comprobada por nombre; afirmaciones que exigen su evidencia. Tras tres
-revisiones con un crítico cada una, la revisión de esta ronda clasifica como CRÍTICO solo lo que
-pueda tocar algo real o dejar pasar código roto.
+Ronda #013 en vuelo, en `feat/banco-de-pruebas` (30 commits, sin fusionar): validar las rutas
+del perfil, cuatro endurecimientos menores, y fusionar. Criterio de corte: CRÍTICO solo si una
+suite existente, SIN modificarla, puede tocar algo real o pasar con el código roto; lo que exige
+escribir una prueba equivocada es advertencia (las pruebas nuevas pasan por revisión).
 
 Si se corta ahora: quedaría la rama a medias; el coder termina la ronda antes de parar.
 
