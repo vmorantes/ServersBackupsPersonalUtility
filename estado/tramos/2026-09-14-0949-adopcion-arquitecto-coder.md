@@ -14,7 +14,17 @@ La configuración la hizo el arquitecto sin coder. Después:
 | # | Qué | Resultado | Commits |
 | --- | --- | --- | --- |
 | #001→#002 | Saludo; el coder confirma (Claude Code / Sonnet 5, `master`) | completado | — |
-| #003→#004 | Commitear la adopción en `chore/adopcion-arquitecto-coder` y fusionar | en vuelo | — |
+| #003→#004 | Commitear la adopción en `chore/adopcion-arquitecto-coder` y fusionar | completado | `e26d637` `4021253` `4ebffe4` `70c9967` `b713923` `64ac581`; fusión `7977793` |
+| #005→#006 | Banco de pruebas local (ADR 0009), rama `feat/banco-de-pruebas` | bloqueado: 2 críticos de revisión, sin fusionar | `9ff440f` `68ec043` `5672967` `80dbaad` `ddc93e8` `3b795cb` `c10cacf` `ce6b124` |
+| #007→#008 | Corregir los críticos, endurecer, camino de fallo, mutaciones, fusionar | en vuelo | — |
+
+Hallazgo de #006: dos afirmaciones pasaban con el código roto (demostrado por mutación por
+`code-reviewer`). Y el arquitecto dictó en #005 nombres distintos de los del ADR 0009
+(`despachador.sh` frente a `_despachador.sh`, `LANG=C.UTF-8` frente a `LC_ALL=C`); el ADR ya
+estaba commiteado y no se edita: lo vigente está en `.agents/context/40-entorno.md`.
+
+Hallazgo de esta preparación: la denegación `Read(./*/env.sh.*)` de `.claude/settings.json`
+bloqueaba `config/env.sh.example`; corregida (solo `env.sh.anterior` y `env.sh.nuevo`).
 
 ## Encontrado y decidido
 
