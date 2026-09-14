@@ -39,8 +39,9 @@ bc_restic_run() {
 
   local out_path="$HESTIA_OUTPUT_DIR/Restic_Configs_$(date +%Y%m%d).txt"
   local tmp_path; tmp_path="$(mktemp "$HESTIA_OUTPUT_DIR/.Restic_Configs.XXXXXXXX")"
-  # shellcheck disable=SC2064
-  trap "rm -f '$tmp_path'" RETURN
+  # ADR 0012: registrada en cuanto se crea.
+  bc_cleanup_register restic_tmp "rm -f $(printf '%q' "$tmp_path")"
+  trap 'bc_cleanup_run restic_tmp' RETURN
 
   local confs=()
   mapfile -d '' -t confs < <(find "$HESTIA_DIR" -type f -name 'restic.conf' -print0 2>/dev/null)
@@ -75,7 +76,7 @@ bc_restic_run() {
 
   # Publicación atómica: hasta aquí no se ha tocado el archivo anterior
   mv -f "$tmp_path" "$out_path"
-  trap - RETURN
+  bc_cleanup_forget restic_tmp
 
   chown "$USER_NAME":"$USER_NAME" "$out_path" 2>/dev/null \
     || bc_warn "no se pudo cambiar el propietario a $USER_NAME (¿existe el usuario?)"
