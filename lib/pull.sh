@@ -38,7 +38,9 @@ bc_pull_run() {
   # esto, con autenticación por contraseña, la pediría una vez por consulta.
   bc_log "Conectando (si hace falta contraseña, se pedirá una sola vez)..."
   bc_ssh_init "$target" || bc_die "no se pudo conectar a $target."
-  trap 'bc_ssh_close; rm -f "${remote_env:-}"' RETURN
+  # bc_ssh_close solo cierra la conexión maestra: se deja en el RETURN de
+  # siempre (ADR 0012 — caduca sola con ControlPersist, ssh.sh:39).
+  trap 'bc_ssh_close' RETURN
 
   local host_info
   host_info="$(bc_ssh 'hostname -f 2>/dev/null || hostname')"
@@ -54,6 +56,11 @@ bc_pull_run() {
   # --- 1. env.sh remoto ------------------------------------------------------
   bc_step "Comparando la configuración"
   local remote_env; remote_env="$(mktemp)"
+  # ADR 0012: registrada con su ruta LITERAL (ya conocida aquí), en cuanto se
+  # crea — no "${remote_env:-}" en el trap de arriba, que a la salida por
+  # exit nunca llega a evaluarse. Lleva credenciales del servidor (T20).
+  bc_cleanup_register pull_env_copy "rm -f $(printf '%q' "$remote_env")"
+  trap 'bc_cleanup_run pull_env_copy; bc_ssh_close' RETURN
 
   if bc_ssh "cat '$path/env.sh'" > "$remote_env" 2>/dev/null && [[ -s "$remote_env" ]]; then
     if diff -q "$BC_ENV_FILE" "$remote_env" >/dev/null 2>&1; then
