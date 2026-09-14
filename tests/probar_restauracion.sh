@@ -18,8 +18,13 @@
 # respaldo limpio, así que las seis invocaciones por stdin quedan numeradas
 # 1..6 en ese orden exacto: no hace falta adivinar cuál es cuál.
 set -u
+
+if [[ -z "${BANCO_RAIZ:-}" || ! -f "$BANCO_RAIZ/tests/lib.sh" ]]; then
+  echo "probar_restauracion.sh: \$BANCO_RAIZ no está definida o tests/lib.sh no existe ahí." >&2
+  exit 2
+fi
 # shellcheck source=./lib.sh
-source "$BANCO_RAIZ/tests/lib.sh"
+source "$BANCO_RAIZ/tests/lib.sh" || exit 2
 
 echo "== probar_restauracion =="
 
@@ -56,7 +61,10 @@ test_restore_into_never_targets_the_original_database() {
 
   # Ningún SQL enviado, en ninguno de los seis segmentos, menciona la base
   # original en ningún sitio: ni en un USE, ni en un CREATE DATABASE, ni
-  # colada en otra sentencia.
+  # colada en otra sentencia. Antes: que exista al menos un mysql.stdin.<n>
+  # (el 1, el del segmento database) — si no hubiera ninguno, el bucle de
+  # abajo no encontraría nada que mirar y la afirmación pasaría sin evidencia.
+  afirmar_existe "$BANCO_TMP/registro/mysql.stdin.1" "hay al menos una invocación de SQL por stdin que inspeccionar"
   local encontrada_original=0 f
   for f in "$BANCO_TMP"/registro/mysql.stdin.*; do
     [[ -f "$f" ]] || continue
@@ -87,6 +95,7 @@ test_restore_without_yes_refuses_an_existing_target() {
   afirmar_codigo 2 "$?" "sin -y, un destino existente hace que restore se cancele"
   afirmar_contiene "$BANCO_TMP/t2/salida.log" 'cancelado' "la salida dice 'cancelado'"
 
+  afirmar_existe "$BANCO_TMP/registro" "el directorio de registro existe, para poder contar sobre él"
   local n
   n="$(find "$BANCO_TMP/registro" -maxdepth 1 -name 'mysql.stdin.*' ! -name '*.args' 2>/dev/null | wc -l)"
   afirmar_igual "$n" "0" "no se envió ningún SQL: la cancelación ocurre antes de tocar el destino"

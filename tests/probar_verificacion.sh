@@ -6,8 +6,13 @@
 # zip. Los guiones de mysql/mysqldump solo hacen falta para GENERAR el
 # respaldo de partida.
 set -u
+
+if [[ -z "${BANCO_RAIZ:-}" || ! -f "$BANCO_RAIZ/tests/lib.sh" ]]; then
+  echo "probar_verificacion.sh: \$BANCO_RAIZ no está definida o tests/lib.sh no existe ahí." >&2
+  exit 2
+fi
 # shellcheck source=./lib.sh
-source "$BANCO_RAIZ/tests/lib.sh"
+source "$BANCO_RAIZ/tests/lib.sh" || exit 2
 
 echo "== probar_verificacion =="
 

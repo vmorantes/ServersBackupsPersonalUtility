@@ -3,8 +3,13 @@
 # tests/probar_perfil.sh — carga y validación de un perfil (ADR 0009)
 # =============================================================================
 set -u
+
+if [[ -z "${BANCO_RAIZ:-}" || ! -f "$BANCO_RAIZ/tests/lib.sh" ]]; then
+  echo "probar_perfil.sh: \$BANCO_RAIZ no está definida o tests/lib.sh no existe ahí." >&2
+  exit 2
+fi
 # shellcheck source=./lib.sh
-source "$BANCO_RAIZ/tests/lib.sh"
+source "$BANCO_RAIZ/tests/lib.sh" || exit 2
 
 echo "== probar_perfil =="
 
