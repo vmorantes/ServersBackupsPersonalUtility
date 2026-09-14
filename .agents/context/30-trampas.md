@@ -120,6 +120,15 @@ el llamador. Solo `restic.sh:78` hace `trap - RETURN`. Aparecen en `remote.sh:47
 `deploy.sh:59`, `pull.sh:41`, `hestia.sh` (varias), `adoptar.sh:272,549,855,1291` (esta, en un
 bucle). Con comillas dobles se expanden al ponerse (`restore.sh:62`, `verify.sh:57`).
 
+### T20. `restore` cancelado deja los volcados extraídos en `$TMPDIR` — CONFIRMADA (banco)
+
+`lib/restore.sh:60-62` extrae la base a `$TMPDIR/backupctl-restore.XXXXXXXX` y confía su
+borrado a un `trap … RETURN`. Si la restauración se cancela (`bc_confirm … || bc_die`, 80-81),
+`bc_die` sale del proceso sin que la función retorne y el directorio se queda, con los
+`.sql.gz` de la base. En un servidor acumula volcados en `/tmp` (permisos 700). Lo mostró la
+prueba `test_restore_without_yes_refuses_an_existing_target` (ronda #012). Misma familia que
+T14. Sin corregir (roadmap).
+
 ### Menores — CONFIRMADAS (código)
 
 | Qué | Dónde |

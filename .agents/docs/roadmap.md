@@ -29,6 +29,11 @@ Una tarea sale de aquí al cerrarse; su historia queda en la bitácora. Referenc
       instantáneas buenas de la cuenta grande desaparecen hacia principios de octubre de 2026.
       Dos bloqueos de Restic quedaron sin liberar a propósito (`HERENCIA.md`).
 
+## Bugs de `backupctl` encontrados por el banco
+
+- [ ] **`restore` cancelado deja volcados en `/tmp`** (T20): el borrado va en un `trap RETURN`
+      que `bc_die` salta. Revisar a la vez las demás trampas `RETURN` (T14).
+
 ## El repositorio
 
 - [ ] **Datos reales del PO en el código** (T7): dominio de un cliente, usuario y bases en

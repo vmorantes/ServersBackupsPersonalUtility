@@ -35,6 +35,10 @@ peligrosas en `tests/falsos/ordenes.txt`; `ejecutar.sh` crea el temporal en `/tm
 `TMPDIR` y deja una marca `.banco` con un testigo (`BANCO_TESTIGO`); `lib.sh`, al cargarse,
 exige la marca y que cada orden peligrosa resuelva a su falso, y `backupctl_prueba` lo repite
 antes de ejecutar. Una suite lanzada a mano aborta con 2. Para depurar, `tests/ejecutar.sh`.
+`backupctl_prueba` comprueba también que las rutas que declara el perfil (`SCRIPTS_DIR`,
+`BACKUP_*_DIR`, `LOG_DIR`, `HESTIA_OUTPUT_DIR`, `HESTIA_DIR` si está) caen dentro de
+`BANCO_TMP` y que `DEPLOY_HOST` está vacío: un perfil dentro del temporal podía apuntar fuera
+(revisión de la ronda #012).
 
 ```
 bash tests/ejecutar.sh      # también lo ejecuta verificar.sh
