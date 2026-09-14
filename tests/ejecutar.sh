@@ -28,8 +28,12 @@ if [[ ! -s "$ORDENES_ARCHIVO" ]]; then
   exit 2
 fi
 ORDENES_PELIGROSAS=()
-while IFS= read -r orden; do
+while IFS= read -r orden || [[ -n "$orden" ]]; do
   [[ -z "$orden" ]] && continue
+  if [[ ! "$orden" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+    echo "tests/ejecutar.sh: línea inválida en $ORDENES_ARCHIVO: '$orden'." >&2
+    exit 2
+  fi
   ORDENES_PELIGROSAS+=("$orden")
 done < "$ORDENES_ARCHIVO"
 
