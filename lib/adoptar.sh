@@ -136,8 +136,9 @@ bc_adoptar_inventario() {
   bc_require_cmd rclone
 
   local tmp; tmp="$(mktemp -d)"; chmod 700 "$tmp"
-  # shellcheck disable=SC2064
-  trap "rm -rf '$tmp'" RETURN
+  # ADR 0012: registrada en cuanto se crea.
+  bc_cleanup_register adoptar_inv_tmp "rm -rf $(printf '%q' "$tmp")"
+  trap 'bc_cleanup_run adoptar_inv_tmp' RETURN
   cp "$rc" "$tmp/rclone.conf"; chmod 600 "$tmp/rclone.conf"
 
   local filas="$tmp/filas"; : > "$filas"
@@ -269,7 +270,12 @@ bc_adoptar_run() {
   bc_step "2 · El servidor de destino"
   bc_require_cmd ssh
   bc_ssh_init "$destino" || bc_die "no se pudo conectar a $destino."
-  trap 'bc_ad_restaurar_conf; bc_ssh_close' RETURN
+  # adoptar_conf se registra más abajo, justo antes de pisar restic.conf
+  # (ADR 0012); aquí todavía no hay nada que devolver, y bc_cleanup_run no
+  # hace nada si la clave no existe. bc_ssh_close se deja en el RETURN de
+  # siempre — pero AL FINAL, para que la limpieza remota de adoptar_conf,
+  # si hace falta, use la conexión antes de que se cierre.
+  trap 'bc_cleanup_run adoptar_conf; bc_ssh_close' RETURN
 
   bc_ssh_sudo "test -x /usr/local/hestia/bin/v-add-user" >/dev/null 2>&1 \
     || bc_die "en $destino no hay HestiaCP (falta /usr/local/hestia/bin/v-add-user)."
@@ -359,6 +365,13 @@ bc_adoptar_run() {
     bc_warn "El destino ya tenía su propia configuración de respaldo. Se guarda y se"
     bc_warn "devolverá al terminar, pase lo que pase."
   fi
+  # ADR 0012: registrada ANTES de la escritura, no después. Así, si la propia
+  # escritura falla (su bc_die, dos líneas más abajo, sale con exit), la
+  # limpieza igual se ejecuta desde bc_cleanup_pending — antes solo ocurría si
+  # la función llegaba a RETORNAR (T20: un fallo aquí podía dejar el destino
+  # respaldándose en el repositorio rescatado). bc_ad_restaurar_conf ya
+  # comprueba BC_AD_DESTINO antes de hacer nada: es segura de nombrar ahora.
+  bc_cleanup_register adoptar_conf "bc_ad_restaurar_conf"
   printf "REPO='%s'\nSNAPSHOTS='30'\nKEEP_DAILY='8'\nKEEP_WEEKLY='5'\nKEEP_MONTHLY='3'\nKEEP_YEARLY='-1'\n" "${BC_AD_REPO%/}" \
     | bc_ssh_sudo_stdin "cat > /usr/local/hestia/conf/restic.conf" \
     || bc_die "no se pudo apuntar al repositorio rescatado."
@@ -385,7 +398,7 @@ bc_adoptar_run() {
   done
 
   echo
-  bc_ad_restaurar_conf
+  bc_cleanup_run adoptar_conf
 
   echo
   if (( fallos )); then
@@ -545,8 +558,9 @@ bc_adoptar_bases() {
 
   # --- Traslado ---------------------------------------------------------------
   local tmp; tmp="$(mktemp -d)"; chmod 700 "$tmp"
-  # shellcheck disable=SC2064
-  trap "rm -rf '$tmp'; bc_ssh_close" RETURN
+  # ADR 0012: registrada en cuanto se crea; bc_ssh_close se deja en el RETURN.
+  bc_cleanup_register adoptar_bases_tmp "rm -rf $(printf '%q' "$tmp")"
+  trap 'bc_cleanup_run adoptar_bases_tmp; bc_ssh_close' RETURN
 
   local fallos=0 hechas=0 seg
   for b in "${lista[@]}"; do
@@ -851,8 +865,14 @@ bc_adoptar_como() {
   ws="$(bc_ssh_sudo "mktemp -d /root/.adoptar.XXXXXXXX" < /dev/null | tr -d '\r')"
   [[ -n "$ws" ]] || bc_die "no se pudo crear el directorio de trabajo en el destino."
   bc_ssh_sudo "chmod 700 '$ws'" < /dev/null || true
+  # ADR 0012: registrada en cuanto se crea. Es una limpieza REMOTA (por eso no
+  # lleva printf %q: $ws viaja dentro de una orden que se ejecuta en el
+  # destino vía bc_ssh_sudo, con el mismo comillado que ya usaba este trap);
+  # bc_ssh_close se deja en el RETURN, DESPUÉS, para que la conexión siga
+  # abierta mientras se borra el espacio de trabajo.
   # shellcheck disable=SC2064
-  trap "bc_ssh_sudo \"rm -rf '$ws'\" </dev/null >/dev/null 2>&1 || true; bc_ssh_close" RETURN
+  bc_cleanup_register adoptar_ws "bc_ssh_sudo \"rm -rf '$ws'\" </dev/null >/dev/null 2>&1 || true"
+  trap 'bc_cleanup_run adoptar_ws; bc_ssh_close' RETURN
 
   printf '%s' "$clave"      | bc_ssh_sudo_stdin "umask 077; cat > '$ws/clave'"       || bc_die "no se pudo enviar la clave."
   printf '%s' "$contrasena" | bc_ssh_sudo_stdin "umask 077; cat > '$ws/pass'"        || bc_die "no se pudo enviar la contraseña."
@@ -1287,8 +1307,13 @@ bc_adoptar_historial() {
   for u in "${usuarios[@]}"; do
     bc_section "Historial de '$u'"
     bc_ad_preparar "$u" "$claves" "$rc" || { bc_err "no hay clave de '$u'."; continue; }
-    # shellcheck disable=SC2064
-    trap "rm -rf '$BC_AD_TMP'" RETURN
+    # ADR 0012: una clave POR usuario, no un trap RETURN que se reescribe en
+    # cada vuelta del bucle. El trap de antes solo protegía —y solo con un
+    # return normal, nunca con exit— al ÚLTIMO usuario de la lista: cada
+    # vuelta anterior ya limpiaba su BC_AD_TMP a mano (líneas de abajo), así
+    # que hoy no se filtra nada en el camino normal; lo que ganaba con el
+    # registro es que un bc_die a mitad de esta vuelta también lo devuelve.
+    bc_cleanup_register "adoptar_hist_$u" "rm -rf $(printf '%q' "$BC_AD_TMP")"
 
     local ids
     ids="$(RCLONE_CONFIG="$BC_AD_TMP/rclone.conf" RESTIC_PASSWORD_FILE="$BC_AD_TMP/clave" \
@@ -1300,7 +1325,7 @@ for s in d[-int('$cuantas'):][::-1]: print(s['short_id'])
 " 2>/dev/null || true)"
     if [[ -z "$ids" ]]; then
       bc_err "no se pudo abrir el repositorio de '$u'."
-      rm -rf "$BC_AD_TMP"; continue
+      bc_cleanup_run "adoptar_hist_$u"; continue
     fi
 
     local filas; filas="$(mktemp)"
@@ -1335,7 +1360,7 @@ for s in d[-int('$cuantas'):][::-1]: print(s['short_id'])
     else
       bc_ok "La más reciente es la más completa: se puede usar «latest» con confianza."
     fi
-    rm -rf "$BC_AD_TMP"; BC_AD_TMP=""
+    bc_cleanup_run "adoptar_hist_$u"; BC_AD_TMP=""
   done
   return 0
 }
