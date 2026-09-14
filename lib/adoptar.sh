@@ -32,24 +32,40 @@
 BC_ADOPTAR_LOADED=1
 
 BC_AD_CONF_ORIGINAL=""
+# ¿Tenía el destino su propio restic.conf antes de que adoptar lo pisara?
+# Distinto de "BC_AD_CONF_ORIGINAL vacío": un archivo vacío en el origen
+# también daría BC_AD_CONF_ORIGINAL="", y confundirlo con "no existía"
+# llevaría a BORRAR un restic.conf que sí había en vez de devolverlo (ronda
+# de #022, hallazgo del security-auditor sobre #021).
+BC_AD_CONF_EXISTIA=0
+# ¿Falló la escritura o el borrado al devolver restic.conf? Lo consulta
+# bc_adoptar_run después de bc_cleanup_run adoptar_conf para no terminar con
+# éxito si el destino pudo quedarse apuntando al repositorio rescatado.
+BC_AD_CONF_FALLO=0
 BC_AD_DESTINO=""
 
 # Devuelve el conf/restic.conf del destino a como estaba. Se llama pase lo que
 # pase: si no, el servidor de destino quedaría respaldándose en un repositorio
 # que no es suyo, y nadie se daría cuenta hasta necesitarlo.
+#
+# Escribe con bc_ssh_sudo_stdin, NUNCA con bc_ssh_sudo (T2,
+# .agents/context/30-trampas.md): bc_ssh_sudo empieza comprobando "id -u" con
+# un ssh que, sin cerrarle la entrada estándar, se come lo que se le mande por
+# la tubería — el "cat > restic.conf" recibiría la nada, y el destino se
+# quedaría con el archivo VACÍO mientras esta función informa de éxito.
 bc_ad_restaurar_conf() {
   [[ -n "$BC_AD_DESTINO" ]] || return 0
   local remoto="/usr/local/hestia/conf/restic.conf"
-  if [[ -n "$BC_AD_CONF_ORIGINAL" ]]; then
-    printf '%s\n' "$BC_AD_CONF_ORIGINAL" | bc_ssh_sudo "cat > '$remoto'" >/dev/null 2>&1 \
+  if (( BC_AD_CONF_EXISTIA )); then
+    printf '%s\n' "$BC_AD_CONF_ORIGINAL" | bc_ssh_sudo_stdin "cat > '$remoto'" >/dev/null 2>&1 \
       && bc_ok "Devuelta la configuración de respaldo propia del destino." \
-      || bc_err "NO se pudo devolver conf/restic.conf del destino. Revísalo a mano."
+      || { bc_err "NO se pudo devolver conf/restic.conf del destino. Revísalo a mano."; BC_AD_CONF_FALLO=1; }
   else
     bc_ssh_sudo "rm -f '$remoto'" >/dev/null 2>&1 \
       && bc_log "Retirado el conf/restic.conf temporal (el destino no tenía uno)." \
-      || true
+      || { bc_err "NO se pudo retirar el conf/restic.conf temporal del destino. Revísalo a mano."; BC_AD_CONF_FALLO=1; }
   fi
-  BC_AD_CONF_ORIGINAL=""; BC_AD_DESTINO=""
+  BC_AD_CONF_ORIGINAL=""; BC_AD_DESTINO=""; BC_AD_CONF_EXISTIA=0
 }
 
 # Lee las claves rescatadas. Devuelve, por la salida estándar, líneas
@@ -360,10 +376,21 @@ bc_adoptar_run() {
   # --- 6. Apuntar al repositorio ajeno, temporalmente -----------------------
   bc_step "5 · Apuntar al repositorio rescatado (temporal)"
   BC_AD_DESTINO="$destino"
-  BC_AD_CONF_ORIGINAL="$(bc_ssh_sudo "cat /usr/local/hestia/conf/restic.conf 2>/dev/null" < /dev/null || true)"
-  if [[ -n "$BC_AD_CONF_ORIGINAL" ]]; then
+  # "test -e" primero, y SOLO si existe se lee: "cat ... || true" no
+  # distinguía "no existía" de "no se pudo leer" (fallo de red, sudo pidiendo
+  # contraseña...), y con la cadena vacía resultante bc_ad_restaurar_conf
+  # BORRARÍA un restic.conf real que solo no se pudo leer (hallazgo de
+  # seguridad de la ronda de #022). Si existe y la lectura falla, se aborta
+  # ANTES de pisar nada: no hay nada seguro que devolver más tarde.
+  if bc_ssh_sudo "test -e /usr/local/hestia/conf/restic.conf" < /dev/null 2>/dev/null; then
+    BC_AD_CONF_EXISTIA=1
+    BC_AD_CONF_ORIGINAL="$(bc_ssh_sudo "cat /usr/local/hestia/conf/restic.conf" < /dev/null)" \
+      || bc_die "no se pudo leer el restic.conf del destino; no se toca nada."
     bc_warn "El destino ya tenía su propia configuración de respaldo. Se guarda y se"
     bc_warn "devolverá al terminar, pase lo que pase."
+  else
+    BC_AD_CONF_EXISTIA=0
+    BC_AD_CONF_ORIGINAL=""
   fi
   # ADR 0012: registrada ANTES de la escritura, no después. Así, si la propia
   # escritura falla (su bc_die, dos líneas más abajo, sale con exit), la
@@ -399,6 +426,10 @@ bc_adoptar_run() {
 
   echo
   bc_cleanup_run adoptar_conf
+  if (( BC_AD_CONF_FALLO )); then
+    bc_err "el destino puede haberse quedado con otra configuración de Restic: revisa /usr/local/hestia/conf/restic.conf"
+    fallos=$((fallos+1))
+  fi
 
   echo
   if (( fallos )); then
@@ -689,7 +720,7 @@ import json,sys
 d=json.load(sys.stdin)
 for s in d[-6:][::-1]: print(s['short_id'])
 " 2>/dev/null || true)"
-  [[ -n "$ids" ]] || { rm -rf "$BC_AD_TMP"; BC_AD_TMP=""; return 0; }
+  [[ -n "$ids" ]] || { bc_cleanup_run adoptar_prep; BC_AD_TMP=""; return 0; }
 
   local elegida="$snap"
   [[ "$elegida" == "latest" ]] && elegida="$(head -1 <<<"$ids")"
@@ -700,7 +731,7 @@ for s in d[-6:][::-1]: print(s['short_id'])
     [[ -n "$id" ]] || continue
     printf '%s\t%s\n' "$id" "$(bc_ad_contenido "$repo" "$u" "$id")" >> "$filas"
   done <<<"$ids"
-  rm -rf "$BC_AD_TMP"; BC_AD_TMP=""
+  bc_cleanup_run adoptar_prep; BC_AD_TMP=""
 
   local act mejor_w mejor_m mejor_d act_w act_m act_d
   act="$(awk -F'\t' -v s="$elegida" '$1 ~ "^"s {print; exit}' "$filas")"
@@ -747,7 +778,7 @@ bc_ad_conflictos() {
   local c
   c="$(RCLONE_CONFIG="$BC_AD_TMP/rclone.conf" RESTIC_PASSWORD_FILE="$BC_AD_TMP/clave" \
        restic -r "${repo%/}/$u" dump "$snap" "/home/$u/backup/backup.conf" 2>/dev/null || true)"
-  rm -rf "$BC_AD_TMP"; BC_AD_TMP=""
+  bc_cleanup_run adoptar_prep; BC_AD_TMP=""
   [[ -n "$c" ]] || return 0
   local doms campo
   doms="$(for campo in WEB DNS MAIL; do tr ' ' '\n' <<<"$c" | grep "^$campo=" | cut -d\' -f2 | tr ',' '\n'; done | sed '/^$/d' | sort -u)"
@@ -864,6 +895,14 @@ bc_adoptar_como() {
   local ws
   ws="$(bc_ssh_sudo "mktemp -d /root/.adoptar.XXXXXXXX" < /dev/null | tr -d '\r')"
   [[ -n "$ws" ]] || bc_die "no se pudo crear el directorio de trabajo en el destino."
+  # $ws viaja después dentro de un "rm -rf" remoto (más abajo) y de las
+  # órdenes que envían la clave y la contraseña: se valida ANTES de registrar
+  # nada ni de enviar ningún secreto. Un destino que devolviera algo distinto
+  # de lo que "mktemp -d /root/.adoptar.XXXXXXXX" puede dar (ruido en
+  # ~/.bashrc, una respuesta inesperada) no debe acabar en un "rm -rf" con una
+  # ruta que no se controla.
+  [[ "$ws" =~ ^/root/\.adoptar\.[A-Za-z0-9]{8}$ ]] \
+    || bc_die "el destino devolvió una ruta de trabajo inesperada: '$ws'."
   bc_ssh_sudo "chmod 700 '$ws'" < /dev/null || true
   # ADR 0012: registrada en cuanto se crea. Es una limpieza REMOTA (por eso no
   # lleva printf %q: $ws viaja dentro de una orden que se ejecuta en el
@@ -1254,11 +1293,19 @@ REMOTO
 # =============================================================================
 
 # Prepara un directorio temporal con el acceso y la clave de un usuario.
-# Deja en BC_AD_TMP la ruta; quien llama se encarga de borrarla.
+# Deja en BC_AD_TMP la ruta; quien llama se encarga de borrarla con
+# bc_cleanup_run adoptar_prep (una sola clave: bc_ad_preparar puede llamarse
+# muchas veces seguidas —una por usuario candidato—, y cada llamada sustituye
+# el temporal de la anterior).
 BC_AD_TMP=""
 bc_ad_preparar() {
   local usuario="$1" claves="$2" rc="$3"
+  # Por si quedó algo de una llamada anterior sin que quien la usó lo borrara.
+  bc_cleanup_run adoptar_prep
   BC_AD_TMP="$(mktemp -d)"; chmod 700 "$BC_AD_TMP"
+  # Registrado ANTES del posible "return 1" de abajo (no hay clave para este
+  # usuario): así ese camino también deja el directorio cubierto.
+  bc_cleanup_register adoptar_prep "rm -rf $(printf '%q' "$BC_AD_TMP")"
   cp "$rc" "$BC_AD_TMP/rclone.conf"; chmod 600 "$BC_AD_TMP/rclone.conf"
   local k; k="$(awk -F'\t' -v u="$usuario" '$1==u{print $2; exit}' <<<"$claves")"
   [[ -n "$k" ]] || return 1
@@ -1307,13 +1354,10 @@ bc_adoptar_historial() {
   for u in "${usuarios[@]}"; do
     bc_section "Historial de '$u'"
     bc_ad_preparar "$u" "$claves" "$rc" || { bc_err "no hay clave de '$u'."; continue; }
-    # ADR 0012: una clave POR usuario, no un trap RETURN que se reescribe en
-    # cada vuelta del bucle. El trap de antes solo protegía —y solo con un
-    # return normal, nunca con exit— al ÚLTIMO usuario de la lista: cada
-    # vuelta anterior ya limpiaba su BC_AD_TMP a mano (líneas de abajo), así
-    # que hoy no se filtra nada en el camino normal; lo que ganaba con el
-    # registro es que un bc_die a mitad de esta vuelta también lo devuelve.
-    bc_cleanup_register "adoptar_hist_$u" "rm -rf $(printf '%q' "$BC_AD_TMP")"
+    # bc_ad_preparar ya registró "adoptar_prep": no hace falta una clave por
+    # usuario (antes sí, con un trap RETURN que se reescribía en cada vuelta
+    # y solo protegía —y solo con un return normal, nunca con exit— al ÚLTIMO
+    # usuario de la lista).
 
     local ids
     ids="$(RCLONE_CONFIG="$BC_AD_TMP/rclone.conf" RESTIC_PASSWORD_FILE="$BC_AD_TMP/clave" \
@@ -1325,7 +1369,7 @@ for s in d[-int('$cuantas'):][::-1]: print(s['short_id'])
 " 2>/dev/null || true)"
     if [[ -z "$ids" ]]; then
       bc_err "no se pudo abrir el repositorio de '$u'."
-      bc_cleanup_run "adoptar_hist_$u"; continue
+      bc_cleanup_run adoptar_prep; continue
     fi
 
     local filas; filas="$(mktemp)"
@@ -1360,7 +1404,7 @@ for s in d[-int('$cuantas'):][::-1]: print(s['short_id'])
     else
       bc_ok "La más reciente es la más completa: se puede usar «latest» con confianza."
     fi
-    bc_cleanup_run "adoptar_hist_$u"; BC_AD_TMP=""
+    bc_cleanup_run adoptar_prep; BC_AD_TMP=""
   done
   return 0
 }
