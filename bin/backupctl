@@ -73,6 +73,12 @@ bc_trap_err() {
 trap 'bc_trap_err "$BASH_COMMAND"' ERR
 
 bc_cleanup_all() {
+  # Un segundo Ctrl-C mientras se deshace algo (por ejemplo, adoptar
+  # devolviendo el restic.conf de un servidor ajeno) no debe cortar ESA
+  # limpieza a mitad: dejaría el destino peor que si no se hubiera intentado
+  # devolver nada. El proceso ya está saliendo de todos modos; INT/TERM se
+  # desarman solo para este tramo final.
+  trap '' INT TERM
   set +e
   # Primero lo registrado (ADR 0012): puede depender de las credenciales de
   # MySQL que bc_mysql_cleanup borra a continuación (verify --restore-test
