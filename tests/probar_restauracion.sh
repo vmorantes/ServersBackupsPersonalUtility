@@ -101,7 +101,40 @@ test_restore_without_yes_refuses_an_existing_target() {
   afirmar_igual "$n" "0" "no se envió ningún SQL: la cancelación ocurre antes de tocar el destino"
 }
 
+# ADR 0012 / T20: restore extrae el respaldo ANTES de comprobar el destino
+# (lib/restore.sh:64-69, antes de 73-82). Al cancelarse, ese temporal quedaba
+# en $TMPDIR — lo mostró esta misma prueba antes de la corrección. Ahora
+# restore_tmp se registra en cuanto se crea (bc_cleanup_register) y
+# bc_cleanup_pending lo deshace desde el trap EXIT de bin/backupctl aunque
+# bc_die salga con exit, no con return.
+test_restore_cancel_leaves_no_extracted_dump() {
+  nueva_prueba t3
+  local perfil="$BANCO_TMP/t3/perfil"
+  crear_perfil "$perfil"
+  # El destino "existe" con 3 tablas: así se activa el bc_confirm y, antes de
+  # llegar a él, la extracción ya ha ocurrido.
+  escribir_guion_mysql "$BANCO_TMP" 1 3
+  escribir_guion_mysqldump "$BANCO_TMP"
+
+  backupctl_prueba "$perfil" backup >/dev/null 2>&1
+  local zip
+  zip="$(find "$perfil/output/mysql_backups" -maxdepth 1 -name 'all_databases_*.zip' | head -1)"
+  afirmar_igual "$([[ -n "$zip" ]] && echo si || echo no)" "si" "hay un respaldo limpio de partida"
+  [[ -n "$zip" ]] || return 0
+
+  afirmar_existe "${TMPDIR:-}" "\$TMPDIR (el de la suite, no el del sistema) está definido"
+  local antes despues
+  antes="$(find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'backupctl-restore.*' 2>/dev/null | wc -l)"
+
+  backupctl_prueba "$perfil" restore '' tienda --into copia >/dev/null 2>&1
+  afirmar_codigo 2 "$?" "sin -y, un destino existente cancela restore (tras haber extraído)"
+
+  despues="$(find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'backupctl-restore.*' 2>/dev/null | wc -l)"
+  afirmar_igual "$despues" "$antes" "la cancelación no deja ningún backupctl-restore.* huérfano en \$TMPDIR"
+}
+
 test_restore_into_never_targets_the_original_database
 test_restore_without_yes_refuses_an_existing_target
+test_restore_cancel_leaves_no_extracted_dump
 
 fin_de_suite
