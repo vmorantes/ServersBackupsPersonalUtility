@@ -92,14 +92,29 @@ bc_cleanup_run() {
 #
 # Nombres de variable con prefijo _bc_cleanup_ a propósito: la orden que se
 # evalúa es texto de otro módulo y no debe poder pisar estas locales.
+#
+# "Restaurar exactamente como estaba" incluye el propio errexit: un `set -e`
+# incondicional al final impondría errexit sobre quien llamó con `set +e`
+# (bc_cleanup_all, por ejemplo, hace `set +e` antes de bc_cleanup_pending) en
+# vez de devolverle su estado. Se guarda con `[[ $- == *e* ]]` (igual que se
+# guarda el trap ERR) y se reactiva SOLO si estaba activo.
+#
+# Termina con `return 0` explícito: sin un trap ERR previo (fuera de
+# bin/backupctl, que siempre lo pone, esto puede pasar en una prueba), la
+# última línea de abajo devuelve 1 con toda normalidad (su lado izquierdo es
+# falso) y, sin el return, ESE 1 se convertiría en el código de salida de
+# bc_cleanup_eval — y de bc_cleanup_run, que termina llamándola — activando
+# el errexit que se acaba de restaurar por algo que no fue ningún fallo.
 bc_cleanup_eval() {
-  local _bc_cleanup_orden="$1" _bc_cleanup_previo
+  local _bc_cleanup_orden="$1" _bc_cleanup_previo _bc_cleanup_errexit=0
+  [[ $- == *e* ]] && _bc_cleanup_errexit=1
   _bc_cleanup_previo="$(trap -p ERR)"
   trap - ERR
   set +e
   eval "$_bc_cleanup_orden"
-  set -e
+  (( _bc_cleanup_errexit )) && set -e
   [[ -n "$_bc_cleanup_previo" ]] && eval "$_bc_cleanup_previo"
+  return 0
 }
 
 # Quita <clave> del registro SIN ejecutar su limpieza (para cuando ya no hace
