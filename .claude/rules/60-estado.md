@@ -1,0 +1,1 @@
+../../.agents/rules/60-estado.md

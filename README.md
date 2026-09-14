@@ -47,7 +47,7 @@ docs/  mkdocs.yml    📖 documentación
 TejidoTesting/          🖥️ un servidor
 ├── env.sh           ✏️ LO ÚNICO QUE EDITAS TÚ
 ├── NOTAS.md         ✏️ tus apuntes de despliegue (nadie los toca)
-└── ESTADO.md        🤖 lo genera `backupctl pull`
+└── ESTADO.md        ⚙️ lo genera `backupctl pull`
 ```
 
 `bin/` y `lib/` son **los archivos compartidos que se suben a cualquier

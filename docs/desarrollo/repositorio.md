@@ -127,15 +127,19 @@ backupctl -p <perfil> backup --dry-run
 
 ## Ramas
 
-El repositorio es de una sola persona y `master` es la rama de trabajo. Para un
-cambio grande conviene aislarlo:
+`master` es la rama estable: la que se despliega en los servidores. El trabajo
+se hace en ramas propias creadas desde `master` (`feat/…`, `fix/…`, `docs/…`,
+`chore/…`) y vuelve a ella con una fusión que conserva sus commits:
 
 ```bash
-git checkout -b cambio-grande
+git switch -c fix/algo master
 # ... trabajar y commitear ...
-git checkout master && git merge --ff-only cambio-grande
-git branch -d cambio-grande
+git switch master && git merge --no-ff fix/algo
 ```
+
+Antes de fusionar, la comprobación del repositorio tiene que pasar. Un cambio en
+lo que se ejecuta en un servidor no se fusiona hasta haberlo probado en uno.
+Subir a GitHub y borrar ramas lo hace el propietario del repositorio.
 
 ## Publicar la documentación
 

@@ -1,0 +1,1 @@
+../../.agents/rules/30-protocolo-coder.md

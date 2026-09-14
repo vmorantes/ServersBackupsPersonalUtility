@@ -1,0 +1,69 @@
+# Tramo 2026-09-14 09:49 — Adopción del modelo arquitecto-coder
+
+- **Inicio:** 2026-09-14 09:49 (el PO pega `.agents/`, `.claude/` y `.vscode/`)
+- **Fin:** *(abierto: espera al PO)* — **Duración:** *(al cerrar)*
+- **Mensajes:** ninguno todavía (el primero será `#001`)
+- **Mandato del PO:** «adaptar todos los insumos de este proyecto a la metodología
+  arquitecto-coder», con permiso para consultar a la sesión anterior. Sobre el coder: «prefiero
+  otro, y a ese úsalo solo en esta fase de configuración».
+
+## Rondas
+
+La configuración la hizo el arquitecto sin coder. Después:
+
+| # | Qué | Resultado | Commits |
+| --- | --- | --- | --- |
+| #001→#002 | Saludo; el coder confirma (Claude Code / Sonnet 5, `master`) | completado | — |
+| #003→#004 | Commitear la adopción en `chore/adopcion-arquitecto-coder` y fusionar | en vuelo | — |
+
+## Encontrado y decidido
+
+- El andamiaje pegado describía otro proyecto (plugins PHP de HestiaCP). Retirado al
+  scratchpad de la sesión, sin borrar: 14 ADR, bitácora, herencia, contexto, la skill
+  `nuevo-plugin-hestiacp` (el PO ya había borrado su carpeta y quedaba un symlink roto).
+- La guarda pegada se activó al pegarla para todas las sesiones del directorio: bloqueó un
+  `ssh` de la sesión anterior.
+- Escritos: ADR 0001–0005, reglas 30/40/60, 9 personas, contexto 10–50, `HERENCIA.md`,
+  roadmap, `AGENTS.md`, `CLAUDE.md`, guarda y sus pruebas (172 casos, sobre un repositorio
+  sintético), `verificar.sh` para bash, Python, JS y la web.
+- Hallazgos de seguridad: credenciales reales versionadas y en GitHub; token en la URL del
+  remoto; la web devuelve el `env.sh` al navegador; `pull` escribe el diff del `env.sh` en
+  `ESTADO.md`.
+- 31 commits con `Co-Authored-By` en el remoto: `menciones_ia.py` revisa desde `4435064`.
+- 🤖 en 5 líneas de documentación como marca de «generado»: cambiado a ⚙️.
+- Coder: `serversbackupspersonalutility-68` (Opus 5, sesión nueva, confirmó directorio y que
+  no escribió nada). La sesión anterior cerró su traspaso y no escribirá más.
+
+## Respuestas del PO (2026-09-14)
+
+- El `git add` de las 10:00 fue suyo, «para comparar».
+- Pruebas en servidor: «prefiero probar yo si no hay garantía de seguridad» → ADR 0006.
+- `git push`: «solo yo».
+- Ramas: «master rama estable; ustedes pueden mergear y commitear cuando quieran, pero
+  estable» → ADR 0007.
+- Credenciales: «este repositorio es de uso propio, acá las guardo» → ADR 0008.
+- Commits con `Co-Authored-By`: se quedan.
+- Primera tarea: banco de pruebas local.
+- Renombró las sesiones; el coder es una sesión nueva, `ServersBackupsPersonalUtility-Coder-Main`
+  (no la -68). Pide que se le recuerden los `/rename` en cada arranque.
+
+## Falló por el camino
+
+- Hacia las 10:00:01, alguien ejecutó un `git add` sobre `.agents/`, `.claude/` y `.vscode/`
+  sin orden, mientras el arquitecto escribía (deducido de qué archivos quedaron preparados tal
+  cual y cuáles modificados después; `.git/index` con esa hora). Sin commits nuevos. Pendiente
+  de saber quién; la primera ronda del coder vacía el índice.
+- Un `mv`+`rm` en un solo comando fue denegado por el clasificador de permisos; se rehízo solo
+  con `mv` al scratchpad.
+- La guarda bloqueó un `grep` cuyo patrón contenía `v-add-database`: miraba el comando entero.
+  Ahora mira solo la orden. Caso de prueba añadido.
+- `git grep` con exclusiones `':!*/env.sh*'` se bloqueaba: la exclusión nombra el secreto.
+  Corregido, con su caso.
+
+## Espera al PO
+
+Lo mismo que `estado/AHORA.md`, «Espera al PO».
+
+## Resumen
+
+*(al cerrar)*

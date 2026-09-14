@@ -144,7 +144,7 @@ cada máquina, sin tener que conectarse a mirarlo.
 MiVPS/
 ├── env.sh          ✏️  lo editas tú          → se sube con deploy
 ├── NOTAS.md        ✏️  lo escribes tú        → pull NUNCA lo toca
-└── ESTADO.md       🤖  lo genera pull        → se regenera entero cada vez
+└── ESTADO.md       ⚙️  lo genera pull        → se regenera entero cada vez
 ```
 
 !!! warning "`ESTADO.md` se regenera entero"

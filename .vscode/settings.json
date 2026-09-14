@@ -1,0 +1,44 @@
+{
+    "files.exclude": {
+        "**/.git": true,
+        "**/__pycache__": true
+    },
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/__pycache__/**": true,
+        "**/site/**": true
+    },
+    "files.associations": {
+        "**/bin/backupctl": "shellscript"
+    },
+    "files.eol": "\n",
+    "files.encoding": "utf8",
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
+    "editor.wordWrap": "on",
+    "explorer.confirmDelete": true,
+    "[shellscript]": {
+        "editor.insertSpaces": true,
+        "editor.tabSize": 2,
+        "editor.formatOnSave": false
+    },
+    "[python]": {
+        "editor.insertSpaces": true,
+        "editor.tabSize": 4
+    },
+    "[markdown]": {
+        "editor.rulers": [80, 92],
+        "files.trimTrailingWhitespace": false
+    },
+    "[json]": {
+        "editor.defaultFormatter": "vscode.json-language-features"
+    },
+    "shellcheck.enable": true,
+    "search.exclude": {
+        "**/.agents/agents/**": true,
+        "**/.claude/agents/**": true,
+        "**/site/**": true,
+        "**/*/output/**": true,
+        "**/*/env.sh": true
+    }
+}

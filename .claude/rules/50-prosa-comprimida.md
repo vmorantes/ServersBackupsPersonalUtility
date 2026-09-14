@@ -1,0 +1,1 @@
+../../.agents/rules/50-prosa-comprimida.md
