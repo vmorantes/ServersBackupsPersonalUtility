@@ -9,6 +9,26 @@ Una tarea sale de aquí al cerrarse; su historia queda en la bitácora. Referenc
 
 ---
 
+## Versión 2.1 estable (nombrado por el PO el 2026-09-16; ADR 0013)
+
+Mandato: «rigurosa y bonita como tú quieras; activar y configurar los incrementales desde ella,
+sin HestiaCP, y que me diga qué hizo; potenciarla; dejar una versión estable». Todo en la rama
+`release/2.1`.
+
+- [ ] **Fase 1 — Rigor.** Terminar `fix/limpieza-al-salir` (T20/T21, los cuatro puntos de abajo)
+      y llevarla a `release/2.1`; aviso falso de `adoptar --como`; `adoptar --snapshot` sin
+      validar; otros ALTA de las revisiones.
+- [ ] **Fase 2 — Incrementales de punta a punta desde la herramienta.** Activar, configurar
+      (almacenamiento, retención, programación, exclusiones), comprobar y desactivar Restic de
+      HestiaCP sin entrar al panel, usando su mecanismo propio por debajo. Toda acción que escribe
+      informa de lo hecho: qué había antes, qué cambió, qué órdenes se ejecutaron y cómo se
+      deshace. Necesita verificación en la fuente de HestiaCP y ADR.
+- [ ] **Fase 3 — Interfaz rigurosa y bonita.** Diagnóstico de tareas, maqueta, ADR; organizada
+      por tareas, estado y siguiente paso a la vista, lo avanzado plegado.
+- [ ] **Fase 4 — Salida.** Documentación de usuario al día (incluida
+      `docs/desarrollo/arquitectura.md`), `CHANGELOG.md`, versión 2.1.0, guía única de prueba para
+      el PO, su conformidad, fusión en `master` y etiqueta `v2.1.0`.
+
 ## El banco de pruebas (ADR 0010; primera fase fusionada el 2026-09-14, bitácora 0002)
 
 - [ ] **Siguientes suites del banco**: `ssh`/`deploy`/`pull`/`remote` contra falsos,
@@ -31,6 +51,14 @@ Una tarea sale de aquí al cerrarse; su historia queda en la bitácora. Referenc
       2026-09-14). Dos bloqueos de Restic quedaron sin liberar a propósito (`HERENCIA.md`).
 
 ## Bugs de `backupctl` encontrados por el banco
+
+- [ ] **`adoptar --como` informa «no se hizo el traslado» cuando solo faltan las bases**
+      (visto por el PO en el servidor de pruebas, 2026-09-16). En el script remoto
+      (`lib/adoptar.sh:1180-1181`), `grep -c . || echo 0` produce `0` y otro `0` cuando no hay
+      coincidencias: `[` falla con «integer expression expected», se pierde el aviso «el respaldo
+      tenía N bases y solo hay M», y el mensaje final generaliza. Además, en ese camino de error
+      no se muestra la contraseña de panel de la cuenta creada. Mismo patrón en `ESPERADAS`
+      (1180). Nombrarlo al PO antes de arreglarlo.
 
 - [ ] **Limpieza que no corre al morir** (T20, T21; ADR 0012). Nombrado por el PO el
       2026-09-14. Implementado en `fix/limpieza-al-salir` (sin fusionar, 7 suites en verde).
@@ -66,6 +94,14 @@ Una tarea sale de aquí al cerrarse; su historia queda en la bitácora. Referenc
 - [ ] **`CHANGELOG.md`**: no existe. Crearlo cuando haya una primera versión que nombrar.
 
 ## Grande y sin decidir
+
+- **La interfaz web es pesada y poco intuitiva** (queja recurrente del PO; la última, el
+  2026-09-16; ya el 2026-09-06: «me turba y abruma»). Hechos: 13 pestañas, 68 acciones
+  (`web/comprobar.py`), cada una con su párrafo; acciones duplicadas «en local» y «vía el
+  backupctl del servidor»; el PO no encontró «Resucitar» en la fila de pestañas. Choca con dos
+  exigencias suyas que empujan en sentido contrario: «un botón por acción, granularidad máxima»
+  y «estados claros». Antes de tocar código: diagnóstico con el PO de qué tareas hace de verdad, y
+  propuesta de diseño (maqueta) con ADR.
 
 - **Paridad web ↔ CLI.** El PO quiere que todo lo que hace `bin/backupctl` pueda hacerse
   desde `web/`, con botones atomizados. `web/comprobar.py` comprueba parte; falta saber si la
