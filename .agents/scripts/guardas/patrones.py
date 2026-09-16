@@ -20,6 +20,10 @@ _INSENSIBLES = [
     r"\bcopilot\b",
     r"\bgemini\b",
     r"\bllm\b",
+    # Nombres de los subagentes del proyecto: en un comentario de código dicen quién lo
+    # escribió o revisó (regla 40 §4). Fuera de .agents/ y .claude/ no tienen sitio.
+    r"\b(security-auditor|code-reviewer|hestia-verifier|test-writer|doc-writer|context-curator)\b",
+    r"\bsubagentes?\b",
     r"inteligencia artificial",
     r"artificial intelligence",
     "\U0001F916",  # emoji de robot
