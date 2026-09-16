@@ -188,6 +188,32 @@ test_cleanup_run_retries_if_interrupted() {
   afirmar_igual "$(cat "$traza" 2>/dev/null || true)" "OK" "el reintento completó la limpieza sin volver a cortar"
 }
 
+# C3 (ronda #028/#030): distinto de t8 (que simula que el PROCESO muere a
+# mitad de la limpieza) — aquí la orden TERMINA, pero en error ("false" al
+# final). bc_cleanup_run no debe darla por hecha: la clave sigue registrada y
+# bc_cleanup_pending, al salir, la reintenta una vez más — así que la orden
+# tiene que verse ejecutada DOS veces, y bc_cleanup_pending debe avisar por
+# stderr nombrando la clave que falló.
+test_cleanup_run_retries_on_failure() {
+  nueva_prueba t9
+  local traza="$BANCO_TMP/t9/traza.txt"
+  bash -c '
+    set -Eeuo pipefail
+    trap "bc_trap_err \"\$BASH_COMMAND\"" ERR
+    source "$1/lib/core.sh"
+    trap bc_cleanup_pending EXIT
+    bc_cleanup_register k "echo intento >> $(printf %q "$2"); false"
+    bc_cleanup_run k
+    exit 0
+  ' _ "$BANCO_RAIZ" "$traza" >"$BANCO_TMP/t9/salida.log" 2>&1
+  afirmar_codigo 0 "$?" "el proceso de prueba sale con código 0 (bc_cleanup_run no propaga el fallo)"
+  afirmar_existe "$traza" "la traza existe: bc_cleanup_run SÍ ejecutó la orden que falla"
+  local veces
+  veces="$(grep -c '^intento$' "$traza" 2>/dev/null || true)"
+  afirmar_igual "${veces:-0}" "2" "la orden corrió DOS veces: bc_cleanup_run y, al salir, bc_cleanup_pending"
+  afirmar_contiene "$BANCO_TMP/t9/salida.log" "la limpieza 'k' terminó en error" "bc_cleanup_pending avisa nombrando la clave que falló"
+}
+
 test_loading_core_does_not_execute_anything
 test_pending_cleanups_run_in_reverse_order_on_bc_die
 test_cleanup_run_executes_once_and_not_again_on_exit
@@ -196,5 +222,6 @@ test_a_failing_cleanup_does_not_block_the_rest
 test_cleanup_eval_preserves_the_callers_errexit
 test_pending_cleanups_run_on_sigterm
 test_cleanup_run_retries_if_interrupted
+test_cleanup_run_retries_on_failure
 
 fin_de_suite

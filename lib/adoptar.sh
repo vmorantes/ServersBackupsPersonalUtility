@@ -59,17 +59,31 @@ BC_AD_DESTINO=""
 # un ssh que, sin cerrarle la entrada estándar, se come lo que se le mande por
 # la tubería — el "cat > restic.conf" recibiría la nada, y el destino se
 # quedaría con el archivo VACÍO mientras esta función informa de éxito.
+#
+# Si falla (escritura o borrado), devuelve 1 y NO vacía BC_AD_DESTINO ni el
+# resto del estado: bc_cleanup_run, al ver que esta orden terminó en error,
+# la deja registrada (C3), y bc_cleanup_pending la reintenta al salir —
+# reintento que solo puede tener sentido si BC_AD_DESTINO, EXISTIA, ESCRITO y
+# ORIGINAL siguen siendo los mismos que la primera vez.
 bc_ad_restaurar_conf() {
   [[ -n "$BC_AD_DESTINO" ]] || return 0
   local remoto="/usr/local/hestia/conf/restic.conf"
   if (( BC_AD_CONF_EXISTIA )); then
-    printf '%s\n' "$BC_AD_CONF_ORIGINAL" | bc_ssh_sudo_stdin "cat > '$remoto'" >/dev/null 2>&1 \
-      && bc_ok "Devuelta la configuración de respaldo propia del destino." \
-      || { bc_err "NO se pudo devolver conf/restic.conf del destino. Revísalo a mano."; BC_AD_CONF_FALLO=1; }
+    if printf '%s\n' "$BC_AD_CONF_ORIGINAL" | bc_ssh_sudo_stdin "cat > '$remoto'" >/dev/null 2>&1; then
+      bc_ok "Devuelta la configuración de respaldo propia del destino."
+    else
+      bc_err "NO se pudo devolver conf/restic.conf del destino. Revísalo a mano."
+      BC_AD_CONF_FALLO=1
+      return 1
+    fi
   elif (( BC_AD_CONF_ESCRITO )); then
-    bc_ssh_sudo "rm -f '$remoto'" >/dev/null 2>&1 \
-      && bc_log "Retirado el conf/restic.conf temporal (el destino no tenía uno)." \
-      || { bc_err "NO se pudo retirar el conf/restic.conf temporal del destino. Revísalo a mano."; BC_AD_CONF_FALLO=1; }
+    if bc_ssh_sudo "rm -f '$remoto'" >/dev/null 2>&1; then
+      bc_log "Retirado el conf/restic.conf temporal (el destino no tenía uno)."
+    else
+      bc_err "NO se pudo retirar el conf/restic.conf temporal del destino. Revísalo a mano."
+      BC_AD_CONF_FALLO=1
+      return 1
+    fi
   fi
   # Si EXISTIA=0 y ESCRITO=0, no hay nada que hacer: adoptar nunca llegó a
   # escribir el temporal, así que tampoco hay nada que borrar.
@@ -458,14 +472,24 @@ bc_adoptar_run() {
 
   echo
   bc_cleanup_run adoptar_conf
+  local conf_fallo=0
   if (( BC_AD_CONF_FALLO )); then
     bc_err "el destino puede haberse quedado con otra configuración de Restic: revisa /usr/local/hestia/conf/restic.conf"
     fallos=$((fallos+1))
+    conf_fallo=1
   fi
 
   echo
   if (( fallos )); then
     bc_err "Terminado con $fallos fallo(s) de ${#lista[@]}."
+    # C3 (ronda #028/#030): si el ÚNICO problema añadido es el restic.conf
+    # del destino (conf_fallo), los usuarios que sí se restauraron bien
+    # siguen necesitando estos avisos — antes se perdían en cuanto
+    # fallos>0, aunque todos los usuarios hubieran quedado vivos.
+    if (( conf_fallo )); then
+      bc_warn "Su contraseña de panel es, de momento, su clave Restic: cámbiala."
+      bc_log  "Comprueba en el panel: dominios, correo y bases de datos."
+    fi
     BC_DELIBERATE_EXIT=1
     return 1
   fi

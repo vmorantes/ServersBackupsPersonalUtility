@@ -64,6 +64,13 @@ bc_die()  { bc_err "$*"; BC_DELIBERATE_EXIT=1; exit "${2:-2}"; }
 # algo ahí necesita resolverlo por su cuenta, no con este registro.
 declare -ga BC_CLEANUP_KEYS=()
 declare -gA BC_CLEANUP_CMDS=()
+# Código de salida de la ÚLTIMA orden que evaluó bc_cleanup_eval. No lo mira
+# bc_cleanup_eval por su cuenta (sigue devolviendo siempre 0, ver ahí): lo
+# dejan aquí bc_cleanup_run y bc_cleanup_pending para distinguir una limpieza
+# que TERMINÓ en error de una que se interrumpió a mitad (ronda #028/#030,
+# C3) — antes de esto no había forma de saber si "ya se ejecutó" también
+# quería decir "y salió bien".
+BC_CLEANUP_ULTIMO_RC=0
 
 # Apunta (o sustituye) una limpieza pendiente bajo <clave>. Si la clave ya
 # existía, la orden se sustituye pero NO se duplica en el orden de ejecución.
@@ -84,13 +91,24 @@ bc_cleanup_register() {
 # registrada y bc_cleanup_pending la reintenta al salir. Esto exige que toda
 # limpieza sea idempotente (ya lo era: un rm -rf o un cat > repetidos no
 # hacen daño la segunda vez).
+#
+# Si la orden TERMINA en error (no se interrumpe: llega a devolver un código
+# distinto de 0), la clave se deja registrada en vez de quitarla: al salir,
+# bc_cleanup_pending le da un reintento más (C3). bc_cleanup_run en sí nunca
+# refleja ese fallo en su propio código de salida —igual que bc_cleanup_eval—
+# para no disparar el errexit de quien la llama por algo que ya gestiona su
+# propia marca (BC_AD_CONF_FALLO, por ejemplo); quien necesite saberlo
+# consulta BC_CLEANUP_ULTIMO_RC justo después de llamarla.
 bc_cleanup_run() {
   local clave="$1"
   [[ -n "${BC_CLEANUP_CMDS[$clave]+x}" ]] || return 0
   local orden="${BC_CLEANUP_CMDS[$clave]}"
   bc_cleanup_eval "$orden"
-  unset 'BC_CLEANUP_CMDS[$clave]'
-  bc_cleanup_quitar_clave "$clave"
+  if (( BC_CLEANUP_ULTIMO_RC == 0 )); then
+    unset 'BC_CLEANUP_CMDS[$clave]'
+    bc_cleanup_quitar_clave "$clave"
+  fi
+  return 0
 }
 
 # Evalúa una orden de limpieza sin que su fallo interrumpa el proceso (set -e
@@ -120,6 +138,7 @@ bc_cleanup_eval() {
   trap - ERR
   set +e
   eval "$_bc_cleanup_orden"
+  BC_CLEANUP_ULTIMO_RC=$?
   (( _bc_cleanup_errexit )) && set -e
   [[ -n "$_bc_cleanup_previo" ]] && eval "$_bc_cleanup_previo"
   return 0
@@ -153,7 +172,10 @@ bc_cleanup_pending() {
   for (( i = ${#BC_CLEANUP_KEYS[@]} - 1; i >= 0; i-- )); do
     clave="${BC_CLEANUP_KEYS[$i]}"
     orden="${BC_CLEANUP_CMDS[$clave]:-}"
-    [[ -n "$orden" ]] && bc_cleanup_eval "$orden"
+    if [[ -n "$orden" ]]; then
+      bc_cleanup_eval "$orden"
+      (( BC_CLEANUP_ULTIMO_RC != 0 )) && bc_err "la limpieza '$clave' terminó en error (código $BC_CLEANUP_ULTIMO_RC)."
+    fi
   done
   BC_CLEANUP_KEYS=()
   BC_CLEANUP_CMDS=()
