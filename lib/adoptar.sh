@@ -1318,41 +1318,59 @@ REMOTO
     return 1
   fi
 
-  # CUENTA_CREADA y BASES_FALTAN se comprueban SIEMPRE, no solo si rc_final
-  # es 0: aunque algo posterior fallara, v-add-user pudo haber creado la
-  # cuenta de verdad, y esa contraseña sigue siendo la única copia que existe
-  # (C6, ronda #028/#030) — antes se perdía si el resto del traslado fallaba.
-  local cuenta_creada=0 bases_faltan="" listo=0
+  # En cuanto se sabe que la cuenta EXISTE de verdad, se muestra la
+  # contraseña YA — antes de leer nada más del destino (S2, ronda #032): es
+  # la única copia que existe, y una lectura posterior que falle o tarde no
+  # debe poder costarla. Antes se leía LISTO y BASES_FALTAN primero y la
+  # contraseña quedaba condicionada a terminar de leer todo eso.
+  local cuenta_creada=0
   bc_ssh_sudo "test -f '$ws/CUENTA_CREADA'" < /dev/null 2>/dev/null && cuenta_creada=1
+  if (( cuenta_creada )); then
+    bc_warn "Contraseña del panel para '$nuevo': $contrasena"
+    bc_log  "Apúntala ahora: no se guarda en ninguna parte."
+  fi
+
+  local listo=0
   bc_ssh_sudo "test -f '$ws/LISTO'" < /dev/null 2>/dev/null && listo=1
-  bc_ssh_sudo "test -f '$ws/BASES_FALTAN'" < /dev/null 2>/dev/null \
-    && bases_faltan="$(bc_ssh_sudo "cat '$ws/BASES_FALTAN'" < /dev/null)"
 
   # El código de salida no basta: una tubería vacía también sale con cero. Se
   # exige la marca que solo escribe el script tras completar los seis pasos.
   (( rc_final == 0 )) && (( ! listo )) && rc_final=1
 
   if (( rc_final != 0 )); then
-    if (( ! listo )) && [[ -n "$bases_faltan" ]]; then
-      local esperadas="" logradas=""
-      read -r esperadas logradas <<<"$bases_faltan"
-      bc_err "la cuenta '$nuevo' se creó con sus dominios, correo y archivos, pero faltan $(( esperadas - logradas )) de $esperadas bases: ver los avisos de arriba."
+    local bases_faltan=""
+    # `if var=$(...); then` en vez de `orden && var=$(...)`: bajo
+    # set -Eeuo pipefail, un fallo del lado derecho de un `&&` como ÚLTIMO
+    # mandato de la lista SÍ dispara errexit; como condición de un `if`,
+    # nunca (S2, ronda #032 — hallazgo de una revisión anterior).
+    if (( ! listo )) && bases_faltan="$(bc_ssh_sudo "cat '$ws/BASES_FALTAN'" < /dev/null)"; then
+      bc_ad_informar_bases_faltan "$nuevo" "$bases_faltan"
     else
       bc_err "El traslado terminó con errores. La cuenta '$nuevo' puede haber quedado a medias."
       bc_log "Revísala en el panel, o elimínala con: v-delete-user $nuevo"
-    fi
-    if (( cuenta_creada )); then
-      bc_warn "Contraseña del panel para '$nuevo': $contrasena"
-      bc_log  "Apúntala ahora: no se guarda en ninguna parte."
     fi
     BC_DELIBERATE_EXIT=1
     return 1
   fi
   bc_ok "'$viejo' está en $destino como '$nuevo'."
-  bc_warn "Contraseña del panel para '$nuevo': $contrasena"
-  bc_log  "Apúntala ahora: no se guarda en ninguna parte."
-  bc_log  "Comprueba dominios, correo y bases en el panel antes de dar por buena la migración."
+  bc_log "Comprueba dominios, correo y bases en el panel antes de dar por buena la migración."
   return 0
+}
+
+# Análisis PURO (sin ssh, sin efectos): decide qué decir sobre el contenido
+# de BASES_FALTAN sin operar nunca sobre texto que no se haya validado antes
+# (S2, ronda #032). Si el texto no es EXACTAMENTE "N M" con N y M enteros, ni
+# $(( )) ni [[ -eq ]] lo tocan: un dato del destino que llegara corrupto, con
+# ruido de shell, o deliberadamente hostil, no puede disparar más que un
+# aviso genérico — nunca una expansión aritmética sobre texto ajeno.
+bc_ad_informar_bases_faltan() {
+  local nombre="$1" texto="$2" esperadas="" logradas=""
+  if [[ "$texto" =~ ^([0-9]+)[[:space:]]+([0-9]+)$ ]]; then
+    esperadas="${BASH_REMATCH[1]}"; logradas="${BASH_REMATCH[2]}"
+    bc_err "la cuenta '$nombre' se creó con sus dominios, correo y archivos, pero faltan $(( esperadas - logradas )) de $esperadas bases: ver los avisos de arriba."
+  else
+    bc_err "la cuenta '$nombre' se creó con sus dominios, correo y archivos, pero no se pudo leer cuántas bases faltan: ver los avisos de arriba."
+  fi
 }
 
 # =============================================================================

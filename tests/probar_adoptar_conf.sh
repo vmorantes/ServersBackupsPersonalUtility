@@ -351,6 +351,74 @@ test_restaurar_conf_no_manda_rm_si_nunca_se_escribio() {
   afirmar_igual "$hay_rm" "0" "ningún 'rm' se envió: adoptar nunca llegó a escribir el temporal"
 }
 
+# S2 (ronda #032): bc_ad_informar_bases_faltan es una función PURA (sin
+# ssh): con "N M" bien formado, calcula y avisa con los números; con
+# CUALQUIER otra cosa (texto suelto, vacío, o un intento de inyectar una
+# sustitución de órdenes dentro de una expansión aritmética, el hallazgo de
+# una revisión anterior sobre esta misma función), un aviso genérico SIN
+# tocar $(( )) sobre el texto crudo. La prueba del intento de inyección
+# comprueba que el marcador NUNCA se crea: si $(( )) llegara a evaluar el
+# texto tal cual, sí se crearía.
+test_informar_bases_faltan_con_numeros_bien_formados() {
+  nueva_prueba t10
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/adoptar.sh"
+    nuevo="cuenta-prueba"
+    bc_ad_informar_bases_faltan "$nuevo" "13 0"
+  ' _ "$BANCO_RAIZ" >"$BANCO_TMP/t10/salida.log" 2>&1
+  afirmar_codigo 0 "$?" "con '13 0' no revienta"
+  afirmar_contiene "$BANCO_TMP/t10/salida.log" "faltan 13 de 13 bases" "el mensaje trae los dos números (13 esperadas, 0 logradas, faltan 13)"
+}
+
+test_informar_bases_faltan_con_texto_no_numerico() {
+  nueva_prueba t11
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/adoptar.sh"
+    nuevo="cuenta-prueba"
+    bc_ad_informar_bases_faltan "$nuevo" "hola"
+  ' _ "$BANCO_RAIZ" >"$BANCO_TMP/t11/salida.log" 2>&1
+  afirmar_codigo 0 "$?" "con 'hola' no revienta"
+  afirmar_contiene "$BANCO_TMP/t11/salida.log" "no se pudo leer cuántas bases faltan" "aviso genérico, sin aritmética"
+}
+
+test_informar_bases_faltan_con_texto_vacio() {
+  nueva_prueba t12
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/adoptar.sh"
+    nuevo="cuenta-prueba"
+    bc_ad_informar_bases_faltan "$nuevo" ""
+  ' _ "$BANCO_RAIZ" >"$BANCO_TMP/t12/salida.log" 2>&1
+  afirmar_codigo 0 "$?" "con texto vacío no revienta"
+  afirmar_contiene "$BANCO_TMP/t12/salida.log" "no se pudo leer cuántas bases faltan" "aviso genérico, sin aritmética"
+}
+
+# El texto malicioso va en comillas simples DENTRO del script (el truco
+# '\''...'\''): así el bash INTERNO recibe "a[$(touch ...)]" como texto
+# literal, sin que NADA lo ejecute antes de llegar a
+# bc_ad_informar_bases_faltan. Si en vez de esto se pusiera entre comillas
+# dobles, el propio bash de la prueba ejecutaría el "touch" al construir el
+# argumento — y la prueba dejaría de probar lo que dice probar (se detectó
+# así, construyéndolo mal la primera vez).
+test_informar_bases_faltan_con_intento_de_inyeccion() {
+  nueva_prueba t13
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/adoptar.sh"
+    nuevo="cuenta-prueba"
+    bc_ad_informar_bases_faltan "$nuevo" '\''a[$(touch MARCA-INYECCION)]'\''
+  ' _ "$BANCO_RAIZ" >"$BANCO_TMP/t13/salida.log" 2>&1
+  afirmar_codigo 0 "$?" "con el intento de inyección no revienta"
+  afirmar_contiene "$BANCO_TMP/t13/salida.log" "no se pudo leer cuántas bases faltan" "aviso genérico, sin aritmética"
+  afirmar_igual "$([[ -e "$BANCO_TMP/t13/MARCA-INYECCION" ]] && echo si || echo no)" "no" "el marcador NO se creó: \$(( )) nunca tocó el texto crudo"
+}
+
 test_loading_adoptar_does_not_execute_anything
 test_restaurar_conf_sends_the_original_text_verbatim
 test_restaurar_conf_deletes_when_it_did_not_exist
@@ -360,5 +428,9 @@ test_leer_conf_destino_si_existe_lee_el_contenido
 test_leer_conf_destino_no_existe
 test_leer_conf_destino_respuesta_basura_aborta
 test_restaurar_conf_no_manda_rm_si_nunca_se_escribio
+test_informar_bases_faltan_con_numeros_bien_formados
+test_informar_bases_faltan_con_texto_no_numerico
+test_informar_bases_faltan_con_texto_vacio
+test_informar_bases_faltan_con_intento_de_inyeccion
 
 fin_de_suite
