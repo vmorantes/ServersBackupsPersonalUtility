@@ -1026,6 +1026,11 @@ echo "[2/6] Creando la cuenta '$NUEVO'..."
 CONTACTO="$(grep -oP "^CONTACT='\K[^']*" "$B/hestia/user.conf" 2>/dev/null || true)"
 [ -n "$CONTACTO" ] || CONTACTO="$NUEVO@localhost"
 $H/bin/v-add-user "$NUEVO" "$PASS" "$CONTACTO" || { echo "FALLO: v-add-user"; exit 1; }
+# A partir de aquí la cuenta EXISTE en el destino, tenga o no todo lo demás:
+# la parte local usa esta marca para decidir si tiene sentido enseñar la
+# contraseña del panel, incluso cuando algo posterior (bases de datos, sobre
+# todo) queda a medias (C6, ronda #028/#030).
+touch "$WS/CUENTA_CREADA"
 
 echo "[3/7] Preparando dominios..."
 # ---------------------------------------------------------------------------
@@ -1296,6 +1301,9 @@ LOGRADAS=$($H/bin/v-list-databases "$NUEVO" plain 2>/dev/null | grep -c . || tru
 if [ "${ESPERADAS:-0}" -gt 0 ] && [ "${LOGRADAS:-0}" -lt "${ESPERADAS:-0}" ]; then
   echo "AVISO: el respaldo tenía ${ESPERADAS:-0} base(s) y solo hay ${LOGRADAS:-0}."
   FALLO_DB=1
+  # "esperadas logradas", en ese orden: la parte local resta para decir
+  # "faltan N de M" sin tener que volver a preguntar nada al destino (C6).
+  echo "${ESPERADAS:-0} ${LOGRADAS:-0}" > "$WS/BASES_FALTAN"
 fi
 [ "${FALLO_DB:-0}" -eq 0 ] && touch "$WS/LISTO"
 echo "LISTO"
@@ -1309,15 +1317,34 @@ REMOTO
     BC_DELIBERATE_EXIT=1
     return 1
   fi
+
+  # CUENTA_CREADA y BASES_FALTAN se comprueban SIEMPRE, no solo si rc_final
+  # es 0: aunque algo posterior fallara, v-add-user pudo haber creado la
+  # cuenta de verdad, y esa contraseña sigue siendo la única copia que existe
+  # (C6, ronda #028/#030) — antes se perdía si el resto del traslado fallaba.
+  local cuenta_creada=0 bases_faltan="" listo=0
+  bc_ssh_sudo "test -f '$ws/CUENTA_CREADA'" < /dev/null 2>/dev/null && cuenta_creada=1
+  bc_ssh_sudo "test -f '$ws/LISTO'" < /dev/null 2>/dev/null && listo=1
+  bc_ssh_sudo "test -f '$ws/BASES_FALTAN'" < /dev/null 2>/dev/null \
+    && bases_faltan="$(bc_ssh_sudo "cat '$ws/BASES_FALTAN'" < /dev/null)"
+
   # El código de salida no basta: una tubería vacía también sale con cero. Se
   # exige la marca que solo escribe el script tras completar los seis pasos.
-  if (( rc_final == 0 )) && ! bc_ssh_sudo "test -f '$ws/LISTO'" < /dev/null 2>/dev/null; then
-    bc_err "El script del destino no llegó al final: no se hizo el traslado."
-    rc_final=1
-  fi
+  (( rc_final == 0 )) && (( ! listo )) && rc_final=1
+
   if (( rc_final != 0 )); then
-    bc_err "El traslado terminó con errores. La cuenta '$nuevo' puede haber quedado a medias."
-    bc_log "Revísala en el panel, o elimínala con: v-delete-user $nuevo"
+    if (( ! listo )) && [[ -n "$bases_faltan" ]]; then
+      local esperadas="" logradas=""
+      read -r esperadas logradas <<<"$bases_faltan"
+      bc_err "la cuenta '$nuevo' se creó con sus dominios, correo y archivos, pero faltan $(( esperadas - logradas )) de $esperadas bases: ver los avisos de arriba."
+    else
+      bc_err "El traslado terminó con errores. La cuenta '$nuevo' puede haber quedado a medias."
+      bc_log "Revísala en el panel, o elimínala con: v-delete-user $nuevo"
+    fi
+    if (( cuenta_creada )); then
+      bc_warn "Contraseña del panel para '$nuevo': $contrasena"
+      bc_log  "Apúntala ahora: no se guarda en ninguna parte."
+    fi
     BC_DELIBERATE_EXIT=1
     return 1
   fi
