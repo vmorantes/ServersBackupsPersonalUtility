@@ -1291,10 +1291,10 @@ echo "  bases: $($H/bin/v-list-databases "$NUEVO" plain 2>/dev/null | wc -l)"
 # La marca solo si además están todas las bases que anunciaba el respaldo: un
 # usuario sin sus datos no es un traslado correcto, y al borrar sin querer este
 # bloque la orden llegó a informar de un éxito con CERO bases restauradas.
-ESPERADAS=$( { echo "${DB:-}" | tr ',' '\n' | grep -c . ; } || echo 0)
-LOGRADAS=$($H/bin/v-list-databases "$NUEVO" plain 2>/dev/null | grep -c . || echo 0)
-if [ "$ESPERADAS" -gt 0 ] && [ "$LOGRADAS" -lt "$ESPERADAS" ]; then
-  echo "AVISO: el respaldo tenía $ESPERADAS base(s) y solo hay $LOGRADAS."
+ESPERADAS=$( { echo "${DB:-}" | tr ',' '\n' | grep -c . ; } || true)
+LOGRADAS=$($H/bin/v-list-databases "$NUEVO" plain 2>/dev/null | grep -c . || true)
+if [ "${ESPERADAS:-0}" -gt 0 ] && [ "${LOGRADAS:-0}" -lt "${ESPERADAS:-0}" ]; then
+  echo "AVISO: el respaldo tenía ${ESPERADAS:-0} base(s) y solo hay ${LOGRADAS:-0}."
   FALLO_DB=1
 fi
 [ "${FALLO_DB:-0}" -eq 0 ] && touch "$WS/LISTO"

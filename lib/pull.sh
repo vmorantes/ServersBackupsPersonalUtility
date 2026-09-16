@@ -98,7 +98,8 @@ bc_pull_run() {
     ctl_status="$(bc_ssh "'$path/bin/backupctl' --no-color status" 2>&1 || true)"
     ctl_doctor="$(bc_ssh "'$path/bin/backupctl' --no-color doctor" 2>&1 || true)"
     ctl_list="$(bc_ssh "'$path/bin/backupctl' --no-color list"   2>&1 || true)"
-    db_count="$(bc_ssh "'$path/bin/backupctl' --no-color list --databases 2>/dev/null | grep -c ." 2>/dev/null || echo '?')"
+    db_count="$(bc_ssh "'$path/bin/backupctl' --no-color list --databases 2>/dev/null | grep -c ." 2>/dev/null || true)"
+    db_count="${db_count:-?}"
   fi
 
   crontab_block="$(bc_ssh "crontab -l 2>/dev/null | grep -v '^#\$'" 2>/dev/null || echo '(sin crontab o sin acceso)')"
