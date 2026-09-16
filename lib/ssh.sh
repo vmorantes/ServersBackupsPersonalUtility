@@ -94,7 +94,7 @@ bc_ssh_close() {
 # -----------------------------------------------------------------------------
 # ¿Puede este usuario hacer sudo sin contraseña?
 bc_ssh_can_sudo_nopass() {
-  bc_ssh "sudo -n true" 2>/dev/null
+  bc_ssh "sudo -n true" < /dev/null 2>/dev/null
 }
 
 # ¿Y con contraseña? (o sea, ¿está en el grupo sudo?)
@@ -118,7 +118,7 @@ bc_ssh_sudo_stdin() {
 # Ejecuta algo como root en el servidor. Si hace falta contraseña de sudo, se
 # pide con terminal asignado en lugar de fallar en silencio.
 bc_ssh_sudo() {
-  if bc_ssh "test \$(id -u) -eq 0" 2>/dev/null; then
+  if bc_ssh "test \$(id -u) -eq 0" < /dev/null 2>/dev/null; then
     bc_ssh "$@"
   elif bc_ssh_can_sudo_nopass; then
     bc_ssh "sudo -n $*"

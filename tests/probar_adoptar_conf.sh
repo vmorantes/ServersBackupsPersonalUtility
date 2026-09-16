@@ -33,6 +33,34 @@ exit 0
 GUION
 }
 
+# Variante que SÍ distingue la comprobación "id -u" del resto: con
+# modo_root=0 simula un destino que no es root pero tiene sudo sin
+# contraseña (sudo -n true sale 0), que es justo el camino de A1/C1 donde
+# bc_ssh_can_sudo_nopass entra en juego. Como el guion anterior, lee SIEMPRE
+# su entrada estándar entera y la registra junto a sus argumentos, para poder
+# comprobar qué invocación recibió qué.
+escribir_guion_ssh_modo() {
+  local tmp="$1" modo_root="${2:-1}"
+  mkdir -p "$tmp/guion" "$tmp/registro"
+  {
+    printf 'BC_MODO_ROOT=%q\n' "$modo_root"
+    cat <<'GUION'
+n=1
+while [[ -f "$BANCO_TMP/registro/ssh.stdin.$n" ]]; do n=$(( n + 1 )); done
+cat > "$BANCO_TMP/registro/ssh.stdin.$n"
+{ printf '%q ' "$@"; echo; } > "$BANCO_TMP/registro/ssh.stdin.$n.args"
+case "$*" in
+  *'id -u'*)
+    [[ "$BC_MODO_ROOT" == "1" ]] && exit 0 || exit 1
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+GUION
+  } > "$tmp/guion/ssh.sh"
+}
+
 # lib/adoptar.sh solo declara funciones y variables vacías al cargarse
 # (guarda BC_ADOPTAR_LOADED, sin mkdir ni red): comprobado igual que
 # probar_limpieza.sh comprueba lib/core.sh.
@@ -114,8 +142,92 @@ test_restaurar_conf_deletes_when_it_did_not_exist() {
   afirmar_igual "$hay_escritura" "0" "ningún 'cat >' se envió (no había nada que devolver)"
 }
 
+# T2 en su raíz (ronda de #028/#030, C1): bc_ssh_sudo (no solo
+# bc_ssh_sudo_stdin) tiene un llamador real con contenido por heredoc
+# (lib/adoptar.sh:1451, bc_adoptar_registrar) — un `< /dev/null` puesto ANTES
+# de un heredoc no tiene ningún efecto (bash aplica la ÚLTIMA redirección
+# sobre el mismo descriptor), así que ese heredoc SIEMPRE fue el contenido
+# real que debía llegar a la orden final. Antes de C1, la comprobación
+# interna de "id -u" (sin cerrar su propia entrada) se lo comía entero. Esta
+# prueba reproduce ese caso exacto: bc_ssh_sudo "bash -s 'cuenta'" con un
+# heredoc de varias líneas, camino ROOT (bc_ssh "$@" hereda el mismo stdin
+# que recibió bc_ssh_sudo).
+test_bc_ssh_sudo_delivers_heredoc_intact_when_root() {
+  nueva_prueba t4
+  escribir_guion_ssh_modo "$BANCO_TMP" 1
+
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    BC_SSH_TARGET="destino-sintetico"
+    BC_SSH_CTL="$BANCO_TMP/socket-sintetico"
+    bc_ssh_sudo "bash -s '"'"'cuenta'"'"'" <<'"'"'REMOTO'"'"'
+H=/usr/local/hestia
+echo linea-una
+echo linea-dos
+REMOTO
+  ' _ "$BANCO_RAIZ" >"$BANCO_TMP/t4/salida.log" 2>&1
+  afirmar_codigo 0 "$?" "bc_ssh_sudo (root) termina en código 0"
+
+  # La invocación que importa es la que LLEVA 'cuenta' en sus argumentos (la
+  # orden final, "bash -s 'cuenta'"): buscar por "cualquier invocación con
+  # contenido" no sirve, porque si la comprobación de "id -u" o "sudo -n
+  # true" se comen el heredoc, su propio registro queda con ESE MISMO texto
+  # y una comparación solo por contenido no distinguiría el error (esto pasó:
+  # las dos primeras versiones de esta prueba no detectaban M27/M27b).
+  local recibido="" f
+  for f in "$BANCO_TMP"/registro/ssh.stdin.*.args; do
+    [[ -f "$f" ]] || continue
+    grep -qF 'cuenta' "$f" && recibido="${f%.args}"
+  done
+  afirmar_igual "$([[ -n "$recibido" ]] && echo si || echo no)" "si" "hubo una invocación con 'bash -s cuenta' en sus argumentos"
+  [[ -n "$recibido" ]] || return 0
+
+  local esperado="$BANCO_TMP/t4/esperado.txt"
+  printf '%s\n' "H=/usr/local/hestia" "echo linea-una" "echo linea-dos" > "$esperado"
+  afirmar_intacto "$recibido" "$esperado" "el heredoc llega ÍNTEGRO a la invocación final (camino root)"
+}
+
+# Mismo caso, pero el destino NO es root y tiene sudo sin contraseña: pasa
+# por bc_ssh_can_sudo_nopass (elif) y por `bc_ssh "sudo -n $*"`, sin volver a
+# redirigir su entrada — hereda la del llamador. Es el camino que A1 (#023)
+# señalaba abierto y que C1 cierra en el helper compartido.
+test_bc_ssh_sudo_delivers_heredoc_intact_when_nonroot_with_sudo() {
+  nueva_prueba t5
+  escribir_guion_ssh_modo "$BANCO_TMP" 0
+
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    BC_SSH_TARGET="destino-sintetico"
+    BC_SSH_CTL="$BANCO_TMP/socket-sintetico"
+    bc_ssh_sudo "bash -s '"'"'cuenta'"'"'" <<'"'"'REMOTO'"'"'
+H=/usr/local/hestia
+echo linea-una
+echo linea-dos
+REMOTO
+  ' _ "$BANCO_RAIZ" >"$BANCO_TMP/t5/salida.log" 2>&1
+  afirmar_codigo 0 "$?" "bc_ssh_sudo (no-root, sudo sin contraseña) termina en código 0"
+
+  # Mismo criterio que en t4: identificar la invocación final por sus
+  # argumentos ('cuenta'), no por ser la primera con contenido no vacío.
+  local recibido="" f
+  for f in "$BANCO_TMP"/registro/ssh.stdin.*.args; do
+    [[ -f "$f" ]] || continue
+    grep -qF 'cuenta' "$f" && recibido="${f%.args}"
+  done
+  afirmar_igual "$([[ -n "$recibido" ]] && echo si || echo no)" "si" "hubo una invocación con 'bash -s cuenta' en sus argumentos"
+  [[ -n "$recibido" ]] || return 0
+
+  local esperado="$BANCO_TMP/t5/esperado.txt"
+  printf '%s\n' "H=/usr/local/hestia" "echo linea-una" "echo linea-dos" > "$esperado"
+  afirmar_intacto "$recibido" "$esperado" "el heredoc llega ÍNTEGRO a la invocación final (camino no-root con sudo)"
+}
+
 test_loading_adoptar_does_not_execute_anything
 test_restaurar_conf_sends_the_original_text_verbatim
 test_restaurar_conf_deletes_when_it_did_not_exist
+test_bc_ssh_sudo_delivers_heredoc_intact_when_root
+test_bc_ssh_sudo_delivers_heredoc_intact_when_nonroot_with_sudo
 
 fin_de_suite
