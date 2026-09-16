@@ -202,12 +202,16 @@ def escrituras(raiz):
         {"file_path": os.path.join(raiz, "lib/x.sh"), "content": "# Generated with Claude"},
         {"file_path": os.path.join(raiz, "README.md"), "old_string": "a", "new_string": "Hecho con ChatGPT"},
         {"file_path": os.path.join(raiz, "docs/x.md"), "content": "- 🤖 lo genera pull"},
+        {"file_path": os.path.join(raiz, "lib/core.sh"), "content": "# hallazgo del security-auditor"},
+        {"file_path": os.path.join(raiz, "tests/probar_x.sh"), "content": "# lo pidió un subagente"},
         {"file_path": os.path.join(raiz, "Ejemplo/env.sh"), "content": "x"},
         {"file_path": os.path.join(raiz, "Ejemplo/output/HestiaCP/rclone.conf"), "content": "x"},
     ]
     permite = [
         {"file_path": os.path.join(raiz, "lib/x.sh"), "content": "# Respaldo de bases"},
         {"file_path": os.path.join(raiz, ".agents/context/30-trampas.md"), "content": "El agente Claude debe..."},
+        {"file_path": os.path.join(raiz, ".agents/context/30-trampas.md"), "content": "Lo encontró security-auditor."},
+        {"file_path": os.path.join(raiz, "lib/core.sh"), "content": "# revisar el código antes de publicar"},
         {"file_path": os.path.join(raiz, "estado/AHORA.md"), "content": "Coder (Claude Code / Opus 5)"},
         {"file_path": os.path.join(raiz, "config/env.sh.example"), "content": "MYSQL_PASS=''"},
         {"file_path": "/tmp/banco/Perfil/env.sh", "content": "MYSQL_PASS='falsa'"},

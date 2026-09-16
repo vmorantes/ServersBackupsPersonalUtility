@@ -1,14 +1,23 @@
 # Ahora
 
 - **Actualizado:** 2026-09-16 — mandato del PO: versión 2.1 estable (ADR 0013).
-- **Último mensaje:** #028 (ARQ) — fase 1 (rigor): documentación a `master`, crear
-  `release/2.1`, terminar `fix/limpieza-al-salir` (T2, T21, limpiezas que fallan, señales, aviso
-  falso de `adoptar --como`, `--snapshot`) y fusionarla en `release/2.1` si las revisiones no
-  encuentran nada grave. Se espera #029. (#027: el coder conserva el contexto; árbol en `master`.)
+- **Último mensaje:** #032 (ARQ) — fase 1, segunda vuelta: corregir los hallazgos graves de las
+  revisiones de #031 y volver a revisar. Se espera #033. (#031: C1–C7 commiteados en
+  `fix/limpieza-al-salir`; no se fusionó: las revisiones encontraron que las señales podían truncar
+  la devolución de `restic.conf`, una expansión aritmética con datos del servidor que permite
+  ejecutar órdenes locales, una limpieza con secretos que no avisa si falla, y menciones a agentes
+  en comentarios de código.)
 - **Tramo en curso:** `estado/tramos/2026-09-16-1400-version-2-1.md`. En el árbol, sin commitear:
   ADR 0013, roadmap, este archivo y el tramo; los commitea la primera ronda.
 
 ## Espera al PO
+
+- **AVISO nuevo (T23)**: si alguna vez usaste en la web «Configurar el remoto» o «Reusar las
+  claves guardadas» (pestaña HestiaCP) contra un servidor, la versión actual pudo dejar **vacío**
+  su `/root/.config/rclone/rclone.conf` diciendo que lo había escrito. Compruébalo en ese
+  servidor: `wc -c /root/.config/rclone/rclone.conf` (si da 0 o muy poco, la copia anterior está
+  en `/root/.config/rclone/rclone.conf.anterior`). Sin ese archivo, los respaldos incrementales
+  de ese servidor no pueden llegar al almacenamiento.
 
 0. **Decisión tomada por el arquitecto, revertible por ti:** «activar los incrementales sin
    HestiaCP» se entiende como hacerlo desde la herramienta, sin entrar al panel ni a su consola,
