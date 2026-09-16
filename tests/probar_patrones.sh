@@ -79,7 +79,27 @@ test_doctor_with_zero_databases_does_not_crash() {
   echo "  $([[ $rc == 0 || $rc == 1 ]] && echo ok || echo FALLO): doctor termina en un código esperado (0 o 1)" >&2
 }
 
+# C7 (ronda #028/#030): --snapshot en la CLI llegaba SIN validar hasta una
+# orden remota como root (v-restore-user-full-restic, entre comillas
+# simples): una comilla en el valor rompe el entrecomillado. Mismo criterio
+# que _v_snapshot en web/server.py: 'latest' o un hash hexadecimal de 8-64.
+# Con un valor que no casa, backupctl_prueba no debería ni conectar: si algo
+# llegara a invocar ssh, sería la prueba de que la validación no cortó a
+# tiempo.
+test_snapshot_option_rejects_shell_metacharacters() {
+  nueva_prueba t3
+  local perfil="$BANCO_TMP/t3/perfil"
+  crear_perfil "$perfil"
+
+  backupctl_prueba "$perfil" adoptar --to "root@destino-sintetico" --snapshot "x'y" \
+    >"$BANCO_TMP/t3/salida.log" 2>&1
+  afirmar_codigo 2 "$?" "adoptar --snapshot con una comilla se aborta (bc_die, código 2)"
+  afirmar_igual "$([[ -f "$BANCO_TMP/registro/ssh.log" ]] && echo si || echo no)" "no" \
+    "ninguna invocación de ssh llegó a registrarse: se abortó antes de conectar"
+}
+
 test_no_grep_c_with_echo_fallback_in_deliverables
 test_doctor_with_zero_databases_does_not_crash
+test_snapshot_option_rejects_shell_metacharacters
 
 fin_de_suite

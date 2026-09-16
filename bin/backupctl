@@ -541,6 +541,15 @@ case "$BC_CMD" in
         *) bc_die "opción desconocida para 'adoptar': $1" ;;
       esac
     done
+    # Mismo criterio que _v_snapshot en web/server.py: 'latest' o un hash
+    # hexadecimal de Restic (8-64 caracteres). Sin esto, un valor con
+    # comillas llega SIN escapar hasta una orden remota como root
+    # (lib/adoptar.sh, v-restore-user-full-restic y el heredoc de --como):
+    # la web ya lo valida, la CLI era el vector abierto (C7, ronda #028/#030).
+    if [[ -n "${BC_OPT_SNAPSHOT:-}" && "$BC_OPT_SNAPSHOT" != "latest" \
+          && ! "$BC_OPT_SNAPSHOT" =~ ^[0-9a-f]{8,64}$ ]]; then
+      bc_die "--snapshot debe ser 'latest' o un hash hexadecimal de 8 a 64 caracteres: '$BC_OPT_SNAPSHOT'"
+    fi
     if [[ "${BC_OPT_HISTORIAL:-0}" == "1" ]]; then
       bc_adoptar_historial
     elif [[ "${BC_OPT_INVENTARIO:-0}" == "1" || -z "${BC_OPT_TO:-}" ]]; then
