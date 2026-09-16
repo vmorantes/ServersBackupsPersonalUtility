@@ -214,43 +214,53 @@ test_cleanup_run_retries_on_failure() {
   afirmar_contiene "$BANCO_TMP/t9/salida.log" "la limpieza 'k' terminó en error" "bc_cleanup_pending avisa nombrando la clave que falló"
 }
 
-# C4 (ronda #028/#030): bc_cleanup_all vive en bin/backupctl, que no se puede
-# cargar aquí (ejecuta su propio despacho de argumentos). En vez de copiar su
-# cuerpo a mano —y arriesgarse a que las dos versiones diverjan sin que nada
-# lo note—, se EXTRAE la función tal cual está en el archivo real con sed y
-# se evalúa: si bin/backupctl cambia (o alguien revierte el arreglo), esta
-# prueba lo ve directamente, sin mantenimiento aparte.
+# Ctrl-C se manda al GRUPO DE PROCESOS entero, no solo al padre: un manejador
+# que solo marca una variable difiere la señal EN EL PADRE, pero el hijo en
+# primer plano (el ssh real que devuelve restic.conf) la recibe igual y
+# muere a mitad de la escritura. Con `trap '' INT TERM` (ignorar, no un
+# manejador), los hijos heredan esa misma disposición vía exec y sobreviven.
 #
-# Reproduce bc_cleanup_all ENTERO: el mismo trap, el mismo set +e, la misma
-# llamada a bc_cleanup_pending, el mismo aviso final. Una limpieza registrada
-# se manda un SIGINT a sí misma (simulando el segundo Ctrl-C del operador
-# mientras se deshace algo) y, después, escribe un marcador — si la señal
-# cortara la limpieza a mitad, el marcador no llegaría a escribirse.
-test_cleanup_all_survives_a_second_signal() {
+# bc_cleanup_all vive en bin/backupctl, que no se puede cargar aquí (ejecuta
+# su propio despacho de argumentos). En vez de copiar su cuerpo a mano —y
+# arriesgarse a que las dos versiones diverjan sin que nada lo note—, se
+# EXTRAE la función tal cual está en el archivo real con sed y se evalúa: si
+# bin/backupctl cambia (o alguien revierte el arreglo), esta prueba lo ve
+# directamente, sin mantenimiento aparte.
+#
+# La reproducción corre en SU PROPIO grupo de procesos (`set -m` + `kill` a
+# -PID, NUNCA `kill -INT 0`): un "0" desnudo manda la señal al grupo de quien
+# LLAMA, que aquí sería tests/ejecutar.sh — comprobado aparte, en aislado, y
+# corta el banco entero, no solo esta prueba.
+test_cleanup_all_lets_foreground_child_survive_group_signal() {
   nueva_prueba t10
-  local marcador="$BANCO_TMP/t10/marcador"
-  bash -c '
-    set -Eeuo pipefail
-    trap "bc_trap_err \"\$BASH_COMMAND\"" ERR
-    source "$1/lib/core.sh"
-    source "$1/lib/mysql.sh"
-    eval "$(sed -n "/^bc_cleanup_all() {/,/^}/p" "$1/bin/backupctl")"
-    trap "rc=\$?; bc_cleanup_all; exit \$rc" EXIT
-    trap "BC_DELIBERATE_EXIT=1; exit 130" INT TERM
-    BC_CLEANUP_INTERRUMPIDA=0
-    bc_cleanup_register k "kill -INT \$\$; echo marcador >> $(printf %q "$2")"
-    exit 0
-  ' _ "$BANCO_RAIZ" "$marcador" >/dev/null 2>&1
-  afirmar_existe "$marcador" "la limpieza terminó (escribió su marcador) pese a mandarse un SIGINT a mitad"
+  local marca="$BANCO_TMP/t10/marca"
+  local orden_hijo
+  orden_hijo="bash -c $(printf '%q' "sleep 1; echo completo > $(printf '%q' "$marca")")"
+  ( set -m
+    bash -c '
+      set -Eeuo pipefail
+      trap "bc_trap_err \"\$BASH_COMMAND\"" ERR
+      source "$1/lib/core.sh"
+      source "$1/lib/mysql.sh"
+      eval "$(sed -n "/^bc_cleanup_all() {/,/^}/p" "$1/bin/backupctl")"
+      trap "rc=\$?; bc_cleanup_all; exit \$rc" EXIT
+      trap "BC_DELIBERATE_EXIT=1; exit 130" INT TERM
+      bc_cleanup_register hijo "$2"
+      exit 0
+    ' _ "$BANCO_RAIZ" "$orden_hijo" >/dev/null 2>&1 &
+    local pid=$!
+    sleep 0.3
+    kill -INT -"$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  )
+  afirmar_contiene "$marca" "completo" "el hijo en primer plano de la limpieza sobrevive a la señal del grupo"
 }
 
-# Distinto de survives_a_second_signal: aquí lo que importa es que un HIJO
-# lanzado DURANTE la limpieza (un ssh o un mysql reales, aquí un bash suelto)
-# NO herede la disposición de INT — si la heredara, ese hijo dejaría de ser
-# interrumpible con Ctrl-C si se colgara (hallazgo del security-auditor,
-# #028). El bit de SIGINT en la máscara SigIgn de /proc/self/status es 0x2
-# (bit 1, señal número 2): si no está puesto, el hijo NO ignora la señal.
-test_cleanup_all_does_not_leak_ignore_to_children() {
+# Complementaria de la anterior: con `trap ''` los hijos SÍ heredan SIGINT
+# ignorada (política invertida a propósito respecto a una ronda anterior:
+# ver 30-trampas.md T20). El bit de SIGINT en la máscara SigIgn de
+# /proc/self/status es 0x2 (bit 1, señal número 2).
+test_cleanup_all_children_inherit_ignored_sigint() {
   nueva_prueba t11
   local sigign="$BANCO_TMP/t11/sigign.txt"
   bash -c '
@@ -261,7 +271,6 @@ test_cleanup_all_does_not_leak_ignore_to_children() {
     eval "$(sed -n "/^bc_cleanup_all() {/,/^}/p" "$1/bin/backupctl")"
     trap "rc=\$?; bc_cleanup_all; exit \$rc" EXIT
     trap "BC_DELIBERATE_EXIT=1; exit 130" INT TERM
-    BC_CLEANUP_INTERRUMPIDA=0
     bc_cleanup_register k "bash -c '"'"'grep ^SigIgn: /proc/self/status'"'"' > $(printf %q "$2")"
     exit 0
   ' _ "$BANCO_RAIZ" "$sigign" >/dev/null 2>&1
@@ -271,7 +280,7 @@ test_cleanup_all_does_not_leak_ignore_to_children() {
   local hex valor
   hex="$(awk '{print $2}' "$sigign" 2>/dev/null || true)"
   valor=$(( 16#${hex:-0} ))
-  afirmar_igual "$(( valor & 2 ))" "0" "el hijo NO hereda SIGINT ignorada (bit 0x2 de SigIgn a 0)"
+  afirmar_igual "$(( valor & 2 ))" "2" "el hijo SÍ hereda SIGINT ignorada (bit 0x2 de SigIgn puesto)"
 }
 
 test_loading_core_does_not_execute_anything
@@ -283,7 +292,7 @@ test_cleanup_eval_preserves_the_callers_errexit
 test_pending_cleanups_run_on_sigterm
 test_cleanup_run_retries_if_interrupted
 test_cleanup_run_retries_on_failure
-test_cleanup_all_survives_a_second_signal
-test_cleanup_all_does_not_leak_ignore_to_children
+test_cleanup_all_lets_foreground_child_survive_group_signal
+test_cleanup_all_children_inherit_ignored_sigint
 
 fin_de_suite

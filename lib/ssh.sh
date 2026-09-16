@@ -39,6 +39,13 @@ bc_ssh_init() {
     -o ControlPersist=600
     -o ConnectTimeout=15
     -o StrictHostKeyChecking=accept-new
+    # Sin esto, una conexión que se cae de verdad (no un Ctrl-C: la red se
+    # fue) puede quedarse esperando indefinidamente — y bc_cleanup_all ahora
+    # ignora la señal del terminal mientras limpia. Con esto, un silencio de
+    # ~1 minuto (4 sondeos sin respuesta cada 15s) hace que el propio ssh
+    # cierre la conexión solo, sin depender de que el operador interrumpa.
+    -o ServerAliveInterval=15
+    -o ServerAliveCountMax=4
   )
 
   # Sin terminal no hay a quién pedirle una contraseña: se exige clave y se

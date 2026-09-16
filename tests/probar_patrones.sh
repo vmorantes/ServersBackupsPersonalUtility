@@ -98,8 +98,21 @@ test_snapshot_option_rejects_shell_metacharacters() {
     "ninguna invocación de ssh llegó a registrarse: se abortó antes de conectar"
 }
 
+# S1: con la limpieza ignorando la señal del terminal, un ssh que se cuelga
+# de verdad (la red se fue, no un Ctrl-C) ya no depende de que el operador
+# interrumpa: ServerAliveInterval/CountMax hacen que la propia conexión se
+# cierre sola en, como mucho, unos 60 segundos.
+test_bc_ssh_init_has_server_alive_options() {
+  nueva_prueba t4
+  afirmar_contiene "$BANCO_RAIZ/lib/ssh.sh" "ServerAliveInterval=15" \
+    "bc_ssh_init lleva ServerAliveInterval"
+  afirmar_contiene "$BANCO_RAIZ/lib/ssh.sh" "ServerAliveCountMax=4" \
+    "bc_ssh_init lleva ServerAliveCountMax"
+}
+
 test_no_grep_c_with_echo_fallback_in_deliverables
 test_doctor_with_zero_databases_does_not_crash
 test_snapshot_option_rejects_shell_metacharacters
+test_bc_ssh_init_has_server_alive_options
 
 fin_de_suite
