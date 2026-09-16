@@ -419,6 +419,66 @@ test_informar_bases_faltan_con_intento_de_inyeccion() {
   afirmar_igual "$([[ -e "$BANCO_TMP/t13/MARCA-INYECCION" ]] && echo si || echo no)" "no" "el marcador NO se creó: \$(( )) nunca tocó el texto crudo"
 }
 
+# S3 (ronda #032): la clave que borra el directorio de trabajo remoto
+# (adoptar_ws, lib/adoptar.sh) llevaba un "|| true" incrustado en la propia
+# orden registrada: eso hacía que bc_cleanup_eval SIEMPRE viera código 0,
+# aunque el "rm -rf" remoto fallara de verdad — sin reintento y sin aviso,
+# con la clave Restic, la contraseña y el rclone.conf rescatado quedando en
+# el destino sin que nadie se enterase.
+#
+# La línea real (`bc_cleanup_register adoptar_ws "..."`) se EXTRAE de
+# lib/adoptar.sh con grep y se ejecuta tal cual, en vez de reproducirla a
+# mano: así, si alguien vuelve a poner el "|| true" ahí, esta prueba lo nota
+# directamente, sin poder desincronizarse de la línea real (mismo criterio
+# que las pruebas de bc_cleanup_all, que extraen la función con sed).
+test_adoptar_ws_cleanup_retries_when_remote_rm_fails() {
+  nueva_prueba t14
+  mkdir -p "$BANCO_TMP/guion" "$BANCO_TMP/registro"
+  cat > "$BANCO_TMP/guion/ssh.sh" <<'GUION'
+n=1
+while [[ -f "$BANCO_TMP/registro/ssh.stdin.$n" ]]; do n=$(( n + 1 )); done
+cat > "$BANCO_TMP/registro/ssh.stdin.$n"
+{ printf '%q ' "$@"; echo; } > "$BANCO_TMP/registro/ssh.stdin.$n.args"
+case "$*" in
+  *'rm -rf'*) exit 1 ;;
+  *) exit 0 ;;
+esac
+GUION
+
+  local linea_real
+  linea_real="$(grep -F 'bc_cleanup_register adoptar_ws' "$BANCO_RAIZ/lib/adoptar.sh")"
+  if [[ -z "$linea_real" ]]; then
+    afirmar_igual "no" "si" "se encontró 'bc_cleanup_register adoptar_ws' en lib/adoptar.sh"
+    return 0
+  fi
+
+  bash -c '
+    set -Eeuo pipefail
+    trap "bc_trap_err \"\$BASH_COMMAND\"" ERR
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    trap bc_cleanup_pending EXIT
+    BC_SSH_TARGET="destino-sintetico"
+    BC_SSH_CTL="$BANCO_TMP/socket-sintetico"
+    ws="/root/.adoptar.ABCDEFGH"
+    eval "$2"
+    bc_cleanup_run adoptar_ws
+    exit 0
+  ' _ "$BANCO_RAIZ" "$linea_real" >"$BANCO_TMP/t14/salida.log" 2>&1
+  afirmar_codigo 0 "$?" "el proceso de prueba sale con código 0 (bc_cleanup_run no propaga el fallo)"
+
+  # printf '%q' escapa el espacio de "rm -rf" (queda "rm\ -rf\ ..."), así
+  # que se busca por la ruta de $ws, que no tiene espacios y solo aparece en
+  # la invocación de "rm -rf" (la comprobación de "id -u" no la menciona).
+  local veces=0 f
+  for f in "$BANCO_TMP"/registro/ssh.stdin.*.args; do
+    [[ -f "$f" ]] || continue
+    grep -qF '.adoptar.ABCDEFGH' "$f" && veces=$(( veces + 1 ))
+  done
+  afirmar_igual "$veces" "2" "el 'rm -rf' remoto se intentó DOS veces: bc_cleanup_run y, al salir, bc_cleanup_pending"
+  afirmar_contiene "$BANCO_TMP/t14/salida.log" "la limpieza 'adoptar_ws' terminó en error" "bc_cleanup_pending avisa nombrando la clave"
+}
+
 test_loading_adoptar_does_not_execute_anything
 test_restaurar_conf_sends_the_original_text_verbatim
 test_restaurar_conf_deletes_when_it_did_not_exist
@@ -432,5 +492,6 @@ test_informar_bases_faltan_con_numeros_bien_formados
 test_informar_bases_faltan_con_texto_no_numerico
 test_informar_bases_faltan_con_texto_vacio
 test_informar_bases_faltan_con_intento_de_inyeccion
+test_adoptar_ws_cleanup_retries_when_remote_rm_fails
 
 fin_de_suite

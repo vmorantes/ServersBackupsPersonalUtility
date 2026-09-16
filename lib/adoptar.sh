@@ -965,8 +965,18 @@ bc_adoptar_como() {
   # destino vía bc_ssh_sudo, con el mismo comillado que ya usaba este trap);
   # bc_ssh_close se deja en el RETURN, DESPUÉS, para que la conexión siga
   # abierta mientras se borra el espacio de trabajo.
+  #
+  # SIN "|| true" (S3, ronda #032): $ws lleva la clave Restic del origen, la
+  # contraseña de panel nueva y el rclone.conf rescatado, y el script remoto
+  # nunca los borra por su cuenta — esta es la ÚNICA limpieza que los quita.
+  # Un "|| true" aquí hacía que bc_cleanup_eval SIEMPRE viera código 0,
+  # aunque el "rm -rf" remoto hubiera fallado de verdad (red caída, sudo
+  # caducado): C3 nunca reintentaba ni avisaba, y los tres secretos podían
+  # quedarse en el destino sin que nadie se enterase. "rm -rf" de algo que ya
+  # no existe sigue saliendo 0 por su cuenta: la limpieza sigue siendo
+  # idempotente sin necesidad del "|| true".
   # shellcheck disable=SC2064
-  bc_cleanup_register adoptar_ws "bc_ssh_sudo \"rm -rf '$ws'\" </dev/null >/dev/null 2>&1 || true"
+  bc_cleanup_register adoptar_ws "bc_ssh_sudo \"rm -rf '$ws'\" </dev/null >/dev/null 2>&1"
   trap 'bc_cleanup_run adoptar_ws; bc_ssh_close' RETURN
 
   printf '%s' "$clave"      | bc_ssh_sudo_stdin "umask 077; cat > '$ws/clave'"       || bc_die "no se pudo enviar la clave."
