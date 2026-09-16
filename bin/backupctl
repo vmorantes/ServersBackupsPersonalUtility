@@ -47,6 +47,10 @@ BC_OPT_REMOTE_PATH=""; BC_OPT_HOUR=""; BC_OPT_MINUTE=""
 BC_OPT_PORT=""; BC_OPT_HOST=""; BC_OPT_OPEN=""
 BC_ASSUME_YES=0; BC_DEBUG="${BC_DEBUG:-0}"
 BC_PROFILE_ARG=""
+# ¿Llegó una señal MIENTRAS se limpiaba? La pone el trap INT/TERM de
+# bc_cleanup_all (C4, ronda #028/#030); bc_cleanup_all la consulta al
+# terminar para avisar de que, aun así, la limpieza se completó.
+BC_CLEANUP_INTERRUMPIDA=0
 
 # --- Manejo de errores -------------------------------------------------------
 trap 'rc=$?; bc_cleanup_all; exit $rc' EXIT
@@ -76,9 +80,18 @@ bc_cleanup_all() {
   # Un segundo Ctrl-C mientras se deshace algo (por ejemplo, adoptar
   # devolviendo el restic.conf de un servidor ajeno) no debe cortar ESA
   # limpieza a mitad: dejaría el destino peor que si no se hubiera intentado
-  # devolver nada. El proceso ya está saliendo de todos modos; INT/TERM se
-  # desarman solo para este tramo final.
-  trap '' INT TERM
+  # devolver nada. El proceso ya está saliendo de todos modos.
+  #
+  # Un manejador NO VACÍO, no `trap '' INT TERM`: uno vacío ("ignorar") lo
+  # heredan los hijos que esta misma limpieza lanza (ssh, mysql) vía exec, y
+  # entonces uno de ellos colgado (la red caída, el motivo típico de que el
+  # operador esté pulsando Ctrl-C) deja de ser interrumpible del todo — solo
+  # SIGQUIT o kill -9 lo sacarían (hallazgo del security-auditor, ronda de
+  # #028/#030, C4). Un manejador que solo marca una variable NO se hereda a
+  # los hijos (vuelven a la disposición por defecto en su propio exec), y
+  # sigue impidiendo que ESTA limpieza se corte a mitad: la señal se atiende
+  # al terminar la orden en curso, no en medio.
+  trap 'BC_CLEANUP_INTERRUMPIDA=1' INT TERM
   set +e
   # Primero lo registrado (ADR 0012): puede depender de las credenciales de
   # MySQL que bc_mysql_cleanup borra a continuación (verify --restore-test
@@ -86,6 +99,7 @@ bc_cleanup_all() {
   bc_cleanup_pending
   [[ -n "${BC_TEMP_DIR:-}" && -d "${BC_TEMP_DIR:-}" ]] && rm -rf "$BC_TEMP_DIR"
   bc_mysql_cleanup 2>/dev/null
+  (( BC_CLEANUP_INTERRUMPIDA )) && bc_warn "se recibió otra señal mientras se limpiaba: se completó igual antes de salir."
 }
 
 # =============================================================================

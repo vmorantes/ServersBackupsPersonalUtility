@@ -214,6 +214,66 @@ test_cleanup_run_retries_on_failure() {
   afirmar_contiene "$BANCO_TMP/t9/salida.log" "la limpieza 'k' terminó en error" "bc_cleanup_pending avisa nombrando la clave que falló"
 }
 
+# C4 (ronda #028/#030): bc_cleanup_all vive en bin/backupctl, que no se puede
+# cargar aquí (ejecuta su propio despacho de argumentos). En vez de copiar su
+# cuerpo a mano —y arriesgarse a que las dos versiones diverjan sin que nada
+# lo note—, se EXTRAE la función tal cual está en el archivo real con sed y
+# se evalúa: si bin/backupctl cambia (o alguien revierte el arreglo), esta
+# prueba lo ve directamente, sin mantenimiento aparte.
+#
+# Reproduce bc_cleanup_all ENTERO: el mismo trap, el mismo set +e, la misma
+# llamada a bc_cleanup_pending, el mismo aviso final. Una limpieza registrada
+# se manda un SIGINT a sí misma (simulando el segundo Ctrl-C del operador
+# mientras se deshace algo) y, después, escribe un marcador — si la señal
+# cortara la limpieza a mitad, el marcador no llegaría a escribirse.
+test_cleanup_all_survives_a_second_signal() {
+  nueva_prueba t10
+  local marcador="$BANCO_TMP/t10/marcador"
+  bash -c '
+    set -Eeuo pipefail
+    trap "bc_trap_err \"\$BASH_COMMAND\"" ERR
+    source "$1/lib/core.sh"
+    source "$1/lib/mysql.sh"
+    eval "$(sed -n "/^bc_cleanup_all() {/,/^}/p" "$1/bin/backupctl")"
+    trap "rc=\$?; bc_cleanup_all; exit \$rc" EXIT
+    trap "BC_DELIBERATE_EXIT=1; exit 130" INT TERM
+    BC_CLEANUP_INTERRUMPIDA=0
+    bc_cleanup_register k "kill -INT \$\$; echo marcador >> $(printf %q "$2")"
+    exit 0
+  ' _ "$BANCO_RAIZ" "$marcador" >/dev/null 2>&1
+  afirmar_existe "$marcador" "la limpieza terminó (escribió su marcador) pese a mandarse un SIGINT a mitad"
+}
+
+# Distinto de survives_a_second_signal: aquí lo que importa es que un HIJO
+# lanzado DURANTE la limpieza (un ssh o un mysql reales, aquí un bash suelto)
+# NO herede la disposición de INT — si la heredara, ese hijo dejaría de ser
+# interrumpible con Ctrl-C si se colgara (hallazgo del security-auditor,
+# #028). El bit de SIGINT en la máscara SigIgn de /proc/self/status es 0x2
+# (bit 1, señal número 2): si no está puesto, el hijo NO ignora la señal.
+test_cleanup_all_does_not_leak_ignore_to_children() {
+  nueva_prueba t11
+  local sigign="$BANCO_TMP/t11/sigign.txt"
+  bash -c '
+    set -Eeuo pipefail
+    trap "bc_trap_err \"\$BASH_COMMAND\"" ERR
+    source "$1/lib/core.sh"
+    source "$1/lib/mysql.sh"
+    eval "$(sed -n "/^bc_cleanup_all() {/,/^}/p" "$1/bin/backupctl")"
+    trap "rc=\$?; bc_cleanup_all; exit \$rc" EXIT
+    trap "BC_DELIBERATE_EXIT=1; exit 130" INT TERM
+    BC_CLEANUP_INTERRUMPIDA=0
+    bc_cleanup_register k "bash -c '"'"'grep ^SigIgn: /proc/self/status'"'"' > $(printf %q "$2")"
+    exit 0
+  ' _ "$BANCO_RAIZ" "$sigign" >/dev/null 2>&1
+  afirmar_existe "$sigign" "el hijo dejó su propio registro de SigIgn"
+  [[ -f "$sigign" ]] || return 0
+
+  local hex valor
+  hex="$(awk '{print $2}' "$sigign" 2>/dev/null || true)"
+  valor=$(( 16#${hex:-0} ))
+  afirmar_igual "$(( valor & 2 ))" "0" "el hijo NO hereda SIGINT ignorada (bit 0x2 de SigIgn a 0)"
+}
+
 test_loading_core_does_not_execute_anything
 test_pending_cleanups_run_in_reverse_order_on_bc_die
 test_cleanup_run_executes_once_and_not_again_on_exit
@@ -223,5 +283,7 @@ test_cleanup_eval_preserves_the_callers_errexit
 test_pending_cleanups_run_on_sigterm
 test_cleanup_run_retries_if_interrupted
 test_cleanup_run_retries_on_failure
+test_cleanup_all_survives_a_second_signal
+test_cleanup_all_does_not_leak_ignore_to_children
 
 fin_de_suite
