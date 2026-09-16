@@ -18,6 +18,11 @@ sin HestiaCP, y que me diga qué hizo; potenciarla; dejar una versión estable»
 - [ ] **Fase 1 — Rigor.** Terminar `fix/limpieza-al-salir` (T20/T21, los cuatro puntos de abajo)
       y llevarla a `release/2.1`; aviso falso de `adoptar --como`; `adoptar --snapshot` sin
       validar; otros ALTA de las revisiones.
+      Después de la fase 1, hallazgos de #031 que no la bloquean: `adoptar --to` no limpia la
+      sección que añade al `rclone.conf` del destino y aborta a mitad con sudo con contraseña;
+      reintento de `adoptar_conf` con la conexión ya cerrada; hasta tres intentos inútiles de
+      devolver `restic.conf`; camino `bc_ssh_tty` sin prueba; la contraseña de panel sale por
+      stdout (puede quedar en un log); registro de limpiezas solo en memoria.
 - [ ] **Fase 2 — Incrementales de punta a punta desde la herramienta.** Activar, configurar
       (almacenamiento, retención, programación, exclusiones), comprobar y desactivar Restic de
       HestiaCP sin entrar al panel, usando su mecanismo propio por debajo. Toda acción que escribe
