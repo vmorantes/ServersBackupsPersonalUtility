@@ -61,6 +61,39 @@ GUION
   } > "$tmp/guion/ssh.sh"
 }
 
+# Simula la respuesta del centinela SI/NO/basura de bc_ad_leer_conf_destino
+# (C2, ronda #028/#030): cualquier invocación cuyos argumentos contengan
+# "test -e" imprime $respuesta tal cual (así se puede simular también una
+# respuesta inesperada); un "cat" posterior imprime $contenido_cat si se dio.
+# Todo lo demás se registra y sale 0, como el resto de guiones de esta suite.
+escribir_guion_ssh_centinela() {
+  local tmp="$1" respuesta="$2" contenido_cat="${3:-}"
+  mkdir -p "$tmp/guion" "$tmp/registro"
+  {
+    printf 'BC_CENTINELA=%q\n' "$respuesta"
+    printf 'BC_CONTENIDO_CAT=%q\n' "$contenido_cat"
+    cat <<'GUION'
+n=1
+while [[ -f "$BANCO_TMP/registro/ssh.stdin.$n" ]]; do n=$(( n + 1 )); done
+cat > "$BANCO_TMP/registro/ssh.stdin.$n"
+{ printf '%q ' "$@"; echo; } > "$BANCO_TMP/registro/ssh.stdin.$n.args"
+case "$*" in
+  *'test -e'*)
+    printf '%s\n' "$BC_CENTINELA"
+    exit 0
+    ;;
+  *'cat '*)
+    [[ -n "$BC_CONTENIDO_CAT" ]] && printf '%s' "$BC_CONTENIDO_CAT"
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+GUION
+  } > "$tmp/guion/ssh.sh"
+}
+
 # lib/adoptar.sh solo declara funciones y variables vacías al cargarse
 # (guarda BC_ADOPTAR_LOADED, sin mkdir ni red): comprobado igual que
 # probar_limpieza.sh comprueba lib/core.sh.
@@ -125,6 +158,7 @@ test_restaurar_conf_deletes_when_it_did_not_exist() {
     BC_AD_DESTINO="destino-sintetico"
     BC_AD_CONF_EXISTIA=0
     BC_AD_CONF_ORIGINAL=""
+    BC_AD_CONF_ESCRITO=1
     bc_ad_restaurar_conf
   ' _ "$BANCO_RAIZ" </dev/null >"$BANCO_TMP/t3/salida.log" 2>&1
   afirmar_codigo 0 "$?" "bc_ad_restaurar_conf termina en código 0"
@@ -224,10 +258,107 @@ REMOTO
   afirmar_intacto "$recibido" "$esperado" "el heredoc llega ÍNTEGRO a la invocación final (camino no-root con sudo)"
 }
 
+# C2 (ronda #028/#030): bc_ad_leer_conf_destino con centinela SI, con
+# contenido real que debe quedar en BC_AD_CONF_ORIGINAL.
+test_leer_conf_destino_si_existe_lee_el_contenido() {
+  nueva_prueba t6
+  escribir_guion_ssh_centinela "$BANCO_TMP" "SI" "REPO='s3:viejo/restic'
+KEEP_DAILY='7'"
+
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/adoptar.sh"
+    BC_SSH_TARGET="destino-sintetico"
+    BC_SSH_CTL="$BANCO_TMP/socket-sintetico"
+    bc_ad_leer_conf_destino
+    printf "EXISTIA=%s\nORIGINAL=%s\n" "$BC_AD_CONF_EXISTIA" "$BC_AD_CONF_ORIGINAL"
+  ' _ "$BANCO_RAIZ" </dev/null >"$BANCO_TMP/t6/salida.log" 2>&1
+  afirmar_codigo 0 "$?" "bc_ad_leer_conf_destino (SI) termina en código 0"
+  afirmar_contiene "$BANCO_TMP/t6/salida.log" "^EXISTIA=1$" "BC_AD_CONF_EXISTIA queda en 1"
+  afirmar_contiene "$BANCO_TMP/t6/salida.log" "REPO='s3:viejo/restic'" "BC_AD_CONF_ORIGINAL trae el contenido leído"
+}
+
+# Centinela NO: no hay nada que leer, EXISTIA queda en 0 y ORIGINAL vacío.
+test_leer_conf_destino_no_existe() {
+  nueva_prueba t7
+  escribir_guion_ssh_centinela "$BANCO_TMP" "NO"
+
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/adoptar.sh"
+    BC_SSH_TARGET="destino-sintetico"
+    BC_SSH_CTL="$BANCO_TMP/socket-sintetico"
+    bc_ad_leer_conf_destino
+    printf "EXISTIA=%s\nORIGINAL=[%s]\n" "$BC_AD_CONF_EXISTIA" "$BC_AD_CONF_ORIGINAL"
+  ' _ "$BANCO_RAIZ" </dev/null >"$BANCO_TMP/t7/salida.log" 2>&1
+  afirmar_codigo 0 "$?" "bc_ad_leer_conf_destino (NO) termina en código 0"
+  afirmar_contiene "$BANCO_TMP/t7/salida.log" "^EXISTIA=0$" "BC_AD_CONF_EXISTIA queda en 0"
+  afirmar_contiene "$BANCO_TMP/t7/salida.log" "^ORIGINAL=\[\]$" "BC_AD_CONF_ORIGINAL queda vacío"
+}
+
+# ALTA de #023/#028 (A3): una respuesta que no es ni "SI" ni "NO" (fallo de
+# red, sudo pidiendo algo, cualquier corte) NO se trata como "no existe":
+# bc_die ANTES de leer ni de tocar nada. Ni un solo "cat" debe haberse
+# enviado.
+test_leer_conf_destino_respuesta_basura_aborta() {
+  nueva_prueba t8
+  escribir_guion_ssh_centinela "$BANCO_TMP" "esto-no-es-SI-ni-NO"
+
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/adoptar.sh"
+    BC_SSH_TARGET="destino-sintetico"
+    BC_SSH_CTL="$BANCO_TMP/socket-sintetico"
+    bc_ad_leer_conf_destino
+  ' _ "$BANCO_RAIZ" </dev/null >"$BANCO_TMP/t8/salida.log" 2>&1
+  afirmar_codigo 2 "$?" "una respuesta que no es SI ni NO aborta (bc_die, código 2)"
+
+  local hay_cat=0 f
+  for f in "$BANCO_TMP"/registro/ssh.stdin.*.args; do
+    [[ -f "$f" ]] || continue
+    grep -qF 'cat' "$f" && hay_cat=1
+  done
+  afirmar_igual "$hay_cat" "0" "ninguna invocación con 'cat' se envió: se abortó antes de leer"
+}
+
+# C2: si EXISTIA=0 y ESCRITO=0 (adoptar nunca llegó a escribir el temporal),
+# bc_ad_restaurar_conf no debe mandar ningún "rm": no hay nada que borrar.
+test_restaurar_conf_no_manda_rm_si_nunca_se_escribio() {
+  nueva_prueba t9
+  escribir_guion_ssh "$BANCO_TMP"
+
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/adoptar.sh"
+    BC_SSH_TARGET="destino-sintetico"
+    BC_SSH_CTL="$BANCO_TMP/socket-sintetico"
+    BC_AD_DESTINO="destino-sintetico"
+    BC_AD_CONF_EXISTIA=0
+    BC_AD_CONF_ESCRITO=0
+    bc_ad_restaurar_conf
+  ' _ "$BANCO_RAIZ" </dev/null >"$BANCO_TMP/t9/salida.log" 2>&1
+  afirmar_codigo 0 "$?" "bc_ad_restaurar_conf (EXISTIA=0, ESCRITO=0) termina en código 0"
+
+  local hay_rm=0 f
+  for f in "$BANCO_TMP"/registro/ssh.stdin.*.args; do
+    [[ -f "$f" ]] || continue
+    grep -qF 'rm' "$f" && hay_rm=1
+  done
+  afirmar_igual "$hay_rm" "0" "ningún 'rm' se envió: adoptar nunca llegó a escribir el temporal"
+}
+
 test_loading_adoptar_does_not_execute_anything
 test_restaurar_conf_sends_the_original_text_verbatim
 test_restaurar_conf_deletes_when_it_did_not_exist
 test_bc_ssh_sudo_delivers_heredoc_intact_when_root
 test_bc_ssh_sudo_delivers_heredoc_intact_when_nonroot_with_sudo
+test_leer_conf_destino_si_existe_lee_el_contenido
+test_leer_conf_destino_no_existe
+test_leer_conf_destino_respuesta_basura_aborta
+test_restaurar_conf_no_manda_rm_si_nunca_se_escribio
 
 fin_de_suite

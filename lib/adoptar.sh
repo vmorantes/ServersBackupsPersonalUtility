@@ -42,6 +42,12 @@ BC_AD_CONF_EXISTIA=0
 # bc_adoptar_run después de bc_cleanup_run adoptar_conf para no terminar con
 # éxito si el destino pudo quedarse apuntando al repositorio rescatado.
 BC_AD_CONF_FALLO=0
+# ¿Llegó adoptar a ESCRIBIR el restic.conf temporal? Si el destino no tenía
+# uno propio (EXISTIA=0) pero la escritura del temporal nunca llegó a
+# intentarse (por ejemplo, bc_die entre leer y escribir), no hay nada que
+# borrar: solo se borra lo que esta misma ejecución puso (ronda #028/#030,
+# C2).
+BC_AD_CONF_ESCRITO=0
 BC_AD_DESTINO=""
 
 # Devuelve el conf/restic.conf del destino a como estaba. Se llama pase lo que
@@ -60,12 +66,48 @@ bc_ad_restaurar_conf() {
     printf '%s\n' "$BC_AD_CONF_ORIGINAL" | bc_ssh_sudo_stdin "cat > '$remoto'" >/dev/null 2>&1 \
       && bc_ok "Devuelta la configuración de respaldo propia del destino." \
       || { bc_err "NO se pudo devolver conf/restic.conf del destino. Revísalo a mano."; BC_AD_CONF_FALLO=1; }
-  else
+  elif (( BC_AD_CONF_ESCRITO )); then
     bc_ssh_sudo "rm -f '$remoto'" >/dev/null 2>&1 \
       && bc_log "Retirado el conf/restic.conf temporal (el destino no tenía uno)." \
       || { bc_err "NO se pudo retirar el conf/restic.conf temporal del destino. Revísalo a mano."; BC_AD_CONF_FALLO=1; }
   fi
-  BC_AD_CONF_ORIGINAL=""; BC_AD_DESTINO=""; BC_AD_CONF_EXISTIA=0
+  # Si EXISTIA=0 y ESCRITO=0, no hay nada que hacer: adoptar nunca llegó a
+  # escribir el temporal, así que tampoco hay nada que borrar.
+  BC_AD_CONF_ORIGINAL=""; BC_AD_DESTINO=""; BC_AD_CONF_EXISTIA=0; BC_AD_CONF_ESCRITO=0
+}
+
+# Pregunta al destino si /usr/local/hestia/conf/restic.conf existe de verdad,
+# y si existe lo lee. Deja el resultado en BC_AD_CONF_EXISTIA/BC_AD_CONF_ORIGINAL
+# (las mismas variables que consulta bc_ad_restaurar_conf). Extraída para
+# poder probarla sola, sin el resto de bc_adoptar_run (ronda #028/#030, C2).
+#
+# Con centinela, NO con el código de salida de "test -e": ese código sale
+# distinto de 0 tanto si el archivo no existe como si la conexión falló, sudo
+# pidió contraseña sin poder preguntarla, o cualquier otro corte — y tratar
+# todo eso como "no existe" llevaría a que bc_ad_restaurar_conf BORRE un
+# restic.conf real del destino que solo no se pudo comprobar (hallazgo ALTA
+# de la ronda de #023). "SI"/"NO" que el propio remoto imprime no deja lugar
+# a esa ambigüedad: cualquier otra respuesta (vacía, basura, un mensaje de
+# error) se trata como "no se pudo preguntar" y aborta ANTES de tocar nada.
+bc_ad_leer_conf_destino() {
+  local remoto="/usr/local/hestia/conf/restic.conf" respuesta
+  respuesta="$(bc_ssh_sudo "if test -e '$remoto'; then echo SI; else echo NO; fi" < /dev/null 2>/dev/null)"
+  case "$respuesta" in
+    SI)
+      BC_AD_CONF_EXISTIA=1
+      BC_AD_CONF_ORIGINAL="$(bc_ssh_sudo "cat '$remoto'" < /dev/null)" \
+        || bc_die "no se pudo leer el restic.conf del destino; no se toca nada."
+      bc_warn "El destino ya tenía su propia configuración de respaldo. Se guarda y se"
+      bc_warn "devolverá al terminar, pase lo que pase."
+      ;;
+    NO)
+      BC_AD_CONF_EXISTIA=0
+      BC_AD_CONF_ORIGINAL=""
+      ;;
+    *)
+      bc_die "no se pudo saber si el destino ya tenía restic.conf (respuesta: '${respuesta:-<vacía>}'); no se toca nada."
+      ;;
+  esac
 }
 
 # Lee las claves rescatadas. Devuelve, por la salida estándar, líneas
@@ -376,22 +418,7 @@ bc_adoptar_run() {
   # --- 6. Apuntar al repositorio ajeno, temporalmente -----------------------
   bc_step "5 · Apuntar al repositorio rescatado (temporal)"
   BC_AD_DESTINO="$destino"
-  # "test -e" primero, y SOLO si existe se lee: "cat ... || true" no
-  # distinguía "no existía" de "no se pudo leer" (fallo de red, sudo pidiendo
-  # contraseña...), y con la cadena vacía resultante bc_ad_restaurar_conf
-  # BORRARÍA un restic.conf real que solo no se pudo leer (hallazgo de
-  # seguridad de la ronda de #022). Si existe y la lectura falla, se aborta
-  # ANTES de pisar nada: no hay nada seguro que devolver más tarde.
-  if bc_ssh_sudo "test -e /usr/local/hestia/conf/restic.conf" < /dev/null 2>/dev/null; then
-    BC_AD_CONF_EXISTIA=1
-    BC_AD_CONF_ORIGINAL="$(bc_ssh_sudo "cat /usr/local/hestia/conf/restic.conf" < /dev/null)" \
-      || bc_die "no se pudo leer el restic.conf del destino; no se toca nada."
-    bc_warn "El destino ya tenía su propia configuración de respaldo. Se guarda y se"
-    bc_warn "devolverá al terminar, pase lo que pase."
-  else
-    BC_AD_CONF_EXISTIA=0
-    BC_AD_CONF_ORIGINAL=""
-  fi
+  bc_ad_leer_conf_destino
   # ADR 0012: registrada ANTES de la escritura, no después. Así, si la propia
   # escritura falla (su bc_die, dos líneas más abajo, sale con exit), la
   # limpieza igual se ejecuta desde bc_cleanup_pending — antes solo ocurría si
@@ -399,6 +426,11 @@ bc_adoptar_run() {
   # respaldándose en el repositorio rescatado). bc_ad_restaurar_conf ya
   # comprueba BC_AD_DESTINO antes de hacer nada: es segura de nombrar ahora.
   bc_cleanup_register adoptar_conf "bc_ad_restaurar_conf"
+  # ESCRITO=1 justo ANTES de intentar el temporal: si esta escritura falla
+  # (bc_die, la línea de abajo), bc_ad_restaurar_conf sabrá que SÍ se llegó a
+  # intentar y que, si el destino no tenía restic.conf propio (EXISTIA=0),
+  # hay que borrar lo que haya quedado a medias (C2).
+  BC_AD_CONF_ESCRITO=1
   printf "REPO='%s'\nSNAPSHOTS='30'\nKEEP_DAILY='8'\nKEEP_WEEKLY='5'\nKEEP_MONTHLY='3'\nKEEP_YEARLY='-1'\n" "${BC_AD_REPO%/}" \
     | bc_ssh_sudo_stdin "cat > /usr/local/hestia/conf/restic.conf" \
     || bc_die "no se pudo apuntar al repositorio rescatado."
