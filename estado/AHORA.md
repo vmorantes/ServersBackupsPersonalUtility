@@ -1,11 +1,20 @@
 # Ahora
 
-- **Actualizado:** 2026-09-14 16:35 — cierre del día, a petición del PO.
-- **Último mensaje:** #024 (ARQ) — ronda de cierre: commitear esta documentación en `master` y
-  dejar el árbol en `master`. Se espera #025. Después, nada en vuelo.
-- **Tramo:** `estado/tramos/2026-09-14-1448-limpieza-al-salir.md`, cerrado al enviar #024.
+- **Actualizado:** 2026-09-16 — mandato del PO: versión 2.1 estable (ADR 0013).
+- **Último mensaje:** #028 (ARQ) — fase 1 (rigor): documentación a `master`, crear
+  `release/2.1`, terminar `fix/limpieza-al-salir` (T2, T21, limpiezas que fallan, señales, aviso
+  falso de `adoptar --como`, `--snapshot`) y fusionarla en `release/2.1` si las revisiones no
+  encuentran nada grave. Se espera #029. (#027: el coder conserva el contexto; árbol en `master`.)
+- **Tramo en curso:** `estado/tramos/2026-09-16-1400-version-2-1.md`. En el árbol, sin commitear:
+  ADR 0013, roadmap, este archivo y el tramo; los commitea la primera ronda.
 
 ## Espera al PO
+
+0. **Decisión tomada por el arquitecto, revertible por ti:** «activar los incrementales sin
+   HestiaCP» se entiende como hacerlo desde la herramienta, sin entrar al panel ni a su consola,
+   pero usando por debajo el mecanismo de Restic de HestiaCP (así la pantalla del panel que lista y
+   restaura esas copias sigue funcionando). Si querías un Restic propio al margen de HestiaCP,
+   dilo.
 
 1. **AVISO para tu migración real** (T21, en `master` hoy):
    - `adoptar --to` puede dejar **vacío** el `/usr/local/hestia/conf/restic.conf` del servidor de
