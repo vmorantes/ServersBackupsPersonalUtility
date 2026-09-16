@@ -33,8 +33,12 @@ contenido: `bc_ssh_sudo_stdin` (108), que cierra stdin **solo en su comprobació
 segunda comprobación (`bc_ssh_can_sudo_nopass`, `ssh.sh:96-98`, sin `< /dev/null`) también se
 come el contenido cuando se entra con un usuario con sudo sin contraseña (CONFIRMADA en
 simulación con un `ssh` falso que lee su entrada, ronda #023; afecta a `adoptar.sh` en cada
-`bc_ssh_sudo_stdin`). Sin corregir. Casos tratados:
-`adoptar.sh:454-460, 861-864`.
+`bc_ssh_sudo_stdin`). Casos tratados: `adoptar.sh:454-460, 861-864`.
+
+**Corregido en su raíz en `fix/limpieza-al-salir`** (commit `d4497b4`, sin fusionar): las
+comprobaciones de `bc_ssh_sudo` (`id -u`) y `bc_ssh_can_sudo_nopass` cierran su entrada; el
+contenido llega a la orden final. Pruebas en `probar_adoptar_conf.sh` (root y no-root). Efectos:
+T22 y T23 dejan de ocurrir.
 
 ### T3. Sin `-p`, cualquier orden usa el perfil real — CONFIRMADA (código)
 
@@ -145,10 +149,16 @@ solo borra `BC_TEMP_DIR` y las credenciales temporales de MySQL. Lo que se queda
   (855); `restic` su temporal (`lib/restic.sh:43`).
 
 Decisión: ADR 0012 (registro de limpiezas al salir). Implementado en `fix/limpieza-al-salir`,
-**sin fusionar** (2026-09-14): pruebas en `probar_limpieza.sh` y `probar_restauracion.sh`. Queda
-abierto: una limpieza que termina en error se da por hecha (no se reintenta); el registro vive
-solo en memoria (un `kill -9` no deja rastro); `trap '' INT TERM` en `bc_cleanup_all` lo heredan
-los hijos (un `ssh` colgado no se puede interrumpir) y no cubre SIGPIPE.
+**sin fusionar**: pruebas en `probar_limpieza.sh` y `probar_restauracion.sh`; una limpieza que
+termina en error sigue registrada y se reintenta al salir (`3e70990`).
+
+**Señales durante la limpieza** (decidido en la ronda #032, tras demostrarlo `security-auditor`):
+Ctrl-C se envía a todo el grupo de procesos, así que un manejador no vacío en el padre no protege
+al `ssh` hijo que está devolviendo un archivo remoto, que muere a mitad y lo deja truncado. Se
+vuelve a `trap '' INT TERM` en `bc_cleanup_all` (los hijos heredan la señal ignorada y terminan
+su escritura). El precio, que un `ssh` colgado no se pueda interrumpir, se acota con
+`ServerAliveInterval`/`ServerAliveCountMax` en la conexión. Abierto: el registro vive solo en
+memoria (un `kill -9` o un corte de luz no dejan rastro).
 
 ### T21. `adoptar` puede dejar vacío o borrar el `restic.conf` del destino — CONFIRMADA (código)
 
@@ -159,11 +169,29 @@ tenía su propio `restic.conf`. Y la lectura del original (277) acaba en `|| tru
 pasajero se toma por «no existía» y la limpieza **borra** el archivo real. Encontrado por
 `security-auditor` (ronda #021).
 
-En `fix/limpieza-al-salir` (sin fusionar): se devuelve con `bc_ssh_sudo_stdin` y un fallo de
-lectura detiene la orden antes de pisar nada. **Sigue abierto**: (a) con un usuario con sudo sin
-contraseña se sigue perdiendo el contenido (T2); (b) el `test -e` que decide si existía no
-distingue «no existe» de «no se pudo comprobar», y la limpieza se registra antes de escribir: un
-fallo pasajero puede acabar en un `rm -f` del `restic.conf` real del destino.
+En `fix/limpieza-al-salir` (sin fusionar): se devuelve con `bc_ssh_sudo_stdin` (también para
+usuarios con sudo sin contraseña tras corregir T2); la existencia se pregunta con centinela
+`SI`/`NO` y cualquier otra respuesta detiene la orden antes de tocar nada; sin haber escrito, no se
+borra (`a635e00`). Pendiente en la ronda #032: que una doble interrupción no trunque la
+devolución (ver T20, «Señales»).
+
+### T22. «Registrar en el panel las bases que HestiaCP no conoce» nunca detectó ninguna — CONFIRMADA (código)
+
+`bc_adoptar_registrar` (`lib/adoptar.sh`, heredoc hacia `bc_ssh_sudo "bash -s …"`) enviaba el
+script que busca en MySQL las bases que el panel no conoce. El `< /dev/null` que lo precede no
+tiene efecto (en bash gana la última redirección) y la comprobación de `id -u` se comía el
+heredoc (T2): la lista salía siempre vacía. Corregido con T2: la orden funciona por primera vez.
+Tiene ensayo (`--dry-run`, «Ensayo: cuáles registraría») y confirmación «n» sin `-y`.
+
+### T23. `hestia rclone` contra un servidor vaciaba su `rclone.conf` — CONFIRMADA (código y simulación)
+
+`bc_hestia_rclone` y `bc_hestia_rclone_desde_repo` escriben `/root/.config/rclone/rclone.conf` del
+servidor por `bc_hestia_root_stdin` → `bc_ssh_sudo` con el contenido por la entrada estándar: con
+un perfil remoto, la comprobación de `id -u` se lo comía (T2) y el archivo quedaba vacío o
+truncado mientras la orden decía «Remoto escrito». En local (HestiaCP en la misma máquina) no
+ocurría. Corregido con T2 en `fix/limpieza-al-salir`. Quien haya usado «Configurar el remoto» o
+«Reusar las claves guardadas» desde la web contra un servidor debe revisar ese archivo (queda
+`rclone.conf.anterior`). Encontrado por `code-reviewer` y `security-auditor` en la ronda #031.
 
 ### Menores — CONFIRMADAS (código)
 

@@ -63,3 +63,6 @@ servidor). Su ADR lleva obligatoriamente:
 | [0011](0011-borrado-de-ramas-fusionadas.md) | El coder borra las ramas locales ya fusionadas (`git branch -d`) | sí | Aceptada |
 | [0012](0012-limpieza-que-sobrevive-a-la-salida.md) | La limpieza se registra y se ejecuta al salir, pase lo que pase | sí | Aceptada (sin implementar) |
 | [0013](0013-programa-version-estable-2-1.md) | Camino a una versión estable: rama `release/2.1`, prueba única del PO, etiqueta | sí | Aceptada |
+| [0014](0014-informe-de-lo-hecho.md) | Toda acción que escribe informa de lo que hizo | sí | Propuesta |
+| [0015](0015-interfaz-por-tareas.md) | La interfaz web se organiza por tareas, no por órdenes | sí | Propuesta |
+| [0016](0016-incrementales-de-punta-a-punta.md) | Respaldos incrementales de punta a punta desde la herramienta | sí | Propuesta |
