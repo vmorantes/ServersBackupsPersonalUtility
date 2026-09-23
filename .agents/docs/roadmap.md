@@ -28,6 +28,17 @@ sin HestiaCP, y que me diga qué hizo; potenciarla; dejar una versión estable»
       HestiaCP sin entrar al panel, usando su mecanismo propio por debajo. Toda acción que escribe
       informa de lo hecho: qué había antes, qué cambió, qué órdenes se ejecutaron y cómo se
       deshace. Necesita verificación en la fuente de HestiaCP y ADR.
+      Exigencias nacidas del incidente del 2026-09-23 en producción (T24, T25):
+      rechazar una ruta de repositorio **relativa** cuando el remoto sea `local` o `alias`, y
+      avisar si la ruta cae dentro de `/home/*/web/*`; mostrar `type` y raíz del remoto antes de
+      registrar nada; decir siempre que el repositorio real es `<ruta>/<cuenta>`; diagnosticar el
+      estado «contraseña sin repositorio» y ofrecer salida; comprobar que el cron está en el
+      crontab de `hestiaweb` con ruta absoluta, no en el de una cuenta del panel; y un aviso
+      permanente sobre guardar las contraseñas de las cuentas fuera del servidor.
+      Corregir además el texto de retención: `lib/hestia.sh:164,360,365,375` y `web/app.js:450`
+      dicen «anuales ilimitadas» para `KEEP_YEARLY=-1`, cuando lo que hay es **ninguna regla
+      anual** (T26). Y mostrar las bases excluidas en `backup-excludes.conf`: en el servidor del
+      PO la base de producción estaba excluida y nada lo decía.
 - [ ] **Fase 3 — Interfaz rigurosa y bonita.** Diagnóstico de tareas, maqueta, ADR; organizada
       por tareas, estado y siguiente paso a la vista, lo avanzado plegado.
 - [ ] **Fase 4 — Salida.** Documentación de usuario al día (incluida

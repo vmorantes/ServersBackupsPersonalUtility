@@ -193,6 +193,37 @@ ocurría. Corregido con T2 en `fix/limpieza-al-salir`. Quien haya usado «Config
 «Reusar las claves guardadas» desde la web contra un servidor debe revisar ese archivo (queda
 `rclone.conf.anterior`). Encontrado por `code-reviewer` y `security-auditor` en la ronda #031.
 
+### T24. Ruta relativa + remoto `local` = respaldos dentro de la web — CONFIRMADA (servidor del PO, 2026-09-23)
+
+Un remoto de rclone de tipo `local` sin raíz resuelve las rutas **relativas al directorio de
+trabajo**. El PO siguió el ejemplo de `docs/hestiacp/protocolo-manual.md` (`restic init -r
+rclone:REMOTO:mi-servidor/hestiacp/`, sin barra inicial) estando dentro de un `public_html` de
+producción: el repositorio se creó dentro de la web, servido por internet. La documentación ya
+está corregida; lo que falta es el código: `hestia restic` acepta cualquier `--repo` sin mirar el
+`type` del remoto ni exigir barra inicial. Para la fase 2 (ADR 0016): rechazar rutas relativas
+cuando el remoto sea `local`/`alias`, y avisar si la ruta cae dentro de `/home/*/web/*`.
+
+### T25. HestiaCP solo inicializa el repositorio si falta la contraseña — CONFIRMADA (fuente 1.10.4)
+
+`v-backup-user-restic` crea el repositorio de una cuenta **solo si no existe**
+`$USER_DATA/restic.conf` ([54-60](https://github.com/hestiacp/hestiacp/blob/1.10.4/bin/v-backup-user-restic#L54-L60));
+si el archivo está, solo comprueba con `restic snapshots` y cualquier fallo sale como `Unable to
+access restic repo` ([68](https://github.com/hestiacp/hestiacp/blob/1.10.4/bin/v-backup-user-restic#L68)),
+tape lo que tape. Un intento fallido deja la contraseña creada y el repositorio no: a partir de
+ahí HestiaCP nunca lo creará solo. Salida: apartar esa contraseña, o `restic init` de
+`<REPO>/<cuenta>` con `--password-file`. Nunca `restic init` sobre `<REPO>`: deja un repositorio
+huérfano por encima de los de las cuentas. `hestia restic` ya no inicializa nada
+(`lib/hestia.sh:437-447`), pero no detecta ni arregla este estado.
+
+### T26. La herramienta dice «anuales ilimitadas» donde no hay regla anual — CONFIRMADA (servidor del PO, 2026-09-23)
+
+`v-backup-user-restic` añade `--keep-yearly` solo si `KEEP_YEARLY >= 0`; con `-1` no pasa el
+tramo anual. En el servidor del PO restic imprimió `Applying Policy: keep 30 latest, 8 daily, 5
+weekly, 3 monthly snapshots`, sin anuales. Nosotros mostramos lo contrario en cuatro sitios:
+`lib/hestia.sh:164` («ilimitadas (-1)»), `:360` (texto del asistente), `:365` (el `bc_ask`
+«-1 = ilimitadas»), `:375`, y `web/app.js:450`. Documentación ya corregida. El código miente al
+usuario sobre cuánto tiempo conserva sus respaldos: arreglarlo en la fase 2.
+
 ### Menores — CONFIRMADAS (código)
 
 | Qué | Dónde |
