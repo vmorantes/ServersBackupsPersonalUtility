@@ -21,7 +21,7 @@ echo "== probar_hestia_retencion =="
 # KEEP_YEARLY >= 0; con -1 no hay tramo anual. La tabla de bc_hestia_restic
 # no puede seguir diciendo "ilimitadas" (mentira: no es "sin límite", es "no
 # hay regla").
-test_anuales_menos_uno_dice_sin_regla_no_ilimitadas() {
+test_yearly_minus_one_says_no_yearly_rule_not_unlimited() {
   nueva_prueba t1
   bash -c '
     source "$1/lib/core.sh"
@@ -33,7 +33,7 @@ test_anuales_menos_uno_dice_sin_regla_no_ilimitadas() {
 }
 
 # Con un valor real (no -1), el texto es el número tal cual, sin adornos.
-test_anuales_con_valor_real_devuelve_el_numero() {
+test_yearly_with_real_value_returns_the_number() {
   nueva_prueba t2
   local salida
   salida="$(bash -c '
@@ -44,7 +44,7 @@ test_anuales_con_valor_real_devuelve_el_numero() {
   afirmar_igual "$salida" "5" "con y=5, el texto es exactamente '5'"
 }
 
-test_anuales_menos_uno_dice_sin_regla_no_ilimitadas
-test_anuales_con_valor_real_devuelve_el_numero
+test_yearly_minus_one_says_no_yearly_rule_not_unlimited
+test_yearly_with_real_value_returns_the_number
 
 fin_de_suite

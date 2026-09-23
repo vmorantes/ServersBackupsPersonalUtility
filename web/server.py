@@ -83,6 +83,15 @@ def _v_snapshot(v):
     return v == "latest" or bool(re.match(r"^[0-9a-f]{8,64}$", v))
 
 
+# Repositorio de Restic para "hestia restic": rclone:remoto:ruta, sin
+# comillas ni espacios (H1, revisión de #038) — es el mismo criterio que
+# bc_hestia_validar_repo aplica del lado de la CLI. Reutilizada por la
+# acción "hestia-restic" y por el alta de un perfil (_alta): un valor que
+# no casa aquí no debe llegar a ninguna de las dos.
+def _v_repo(v):
+    return bool(re.match(r"^rclone:[A-Za-z0-9._-]+:[A-Za-z0-9._\-/]*$", v))
+
+
 A = {
     # --- blindaje ----------------------------------------------------------
     "shield":        (["shield"], [], False),
@@ -97,7 +106,7 @@ A = {
     "hestia-rclone-repo": (["hestia", "rclone", "--desde-repo"], [], True),
     "hestia-cron":   (["hestia", "cron"], [("hour", "--hour", lambda v: v.isdigit()),
                                            ("minute", "--minute", lambda v: v.isdigit())], True),
-    "hestia-restic": (["hestia", "restic"], [("repo", "--repo", lambda v: bool(re.match(r"^rclone:[A-Za-z0-9._-]+:[A-Za-z0-9._\-/]*$", v)))], True),
+    "hestia-restic": (["hestia", "restic"], [("repo", "--repo", _v_repo)], True),
     "remote-shield": (["remote", "shield"], [], False),
     "remote-hestia-status": (["remote", "hestia", "status"], [], False),
     "remote-hestia-verify": (["remote", "hestia", "verify"], [], False),
@@ -981,6 +990,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "nombre de perfil no válido"}, 400)
         if not campos["BC_SETUP_HOST"]:
             return self._json({"error": "falta el servidor"}, 400)
+        # H1: el alta no tenía validador para "repo", a diferencia del botón
+        # de la pestaña HestiaCP — mismo patrón que "hestia-restic" (_v_repo).
+        if campos["BC_SETUP_REPO"] and not _v_repo(campos["BC_SETUP_REPO"]):
+            return self._json({"error": "repositorio de Restic no válido"}, 400)
 
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
