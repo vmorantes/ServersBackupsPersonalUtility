@@ -348,6 +348,51 @@ bc_hestia_texto_anuales_registro() {
   [[ "$1" == "-1" ]] && echo 'sin regla anual' || echo "$1"
 }
 
+# Comprueba una ruta de repositorio ANTES de registrarla en HestiaCP (T24).
+# $1 repositorio tal como se registrará (p. ej. rclone:almacen:/hestiacp)
+# $2 tipo del remoto de rclone (local, alias, s3, …) o vacío si no se pudo saber
+# Devuelve 0 si es aceptable, 1 tras explicar por qué no. Función pura: no
+# conecta a nada, no lee ni escribe, solo mira el texto que se le pasa.
+bc_hestia_validar_repo() {
+  local repo="$1" tipo="${2:-}"
+
+  [[ "$repo" == rclone:* ]] || return 0
+
+  local resto rem ruta
+  resto="${repo#rclone:}"
+  rem="${resto%%:*}"
+  ruta="${resto#*:}"
+
+  if [[ -z "$ruta" ]]; then
+    bc_err "falta la ruta dentro del remoto '$rem'."
+    return 1
+  fi
+
+  if [[ "$tipo" == "local" || "$tipo" == "alias" ]] && [[ "$ruta" != /* ]]; then
+    bc_err "la ruta '$ruta' del remoto '$rem' (tipo $tipo) es RELATIVA."
+    bc_log  "Con un remoto local o alias, rclone la resuelve desde el directorio de"
+    bc_log  "trabajo de quien ejecuta el respaldo — así es como un repositorio acabó"
+    bc_log  "dentro de un sitio web servido por internet (T24)."
+    bc_log  "Escribe una ruta ABSOLUTA, por ejemplo: /IncrementalBackups"
+    return 1
+  fi
+
+  if [[ "$ruta" == /home/*/web/* ]]; then
+    bc_err "la ruta '$ruta' está DENTRO del directorio de un sitio web."
+    bc_log  "Quedaría accesible desde internet. Usa una ruta fuera de /home/*/web/."
+    return 1
+  fi
+
+  if [[ -z "$tipo" && "$ruta" != /* ]]; then
+    bc_warn "no se pudo determinar el tipo del remoto '$rem'."
+    bc_warn "Si fuera de tipo local o alias, rclone resolvería '$ruta' desde el"
+    bc_warn "directorio de trabajo de quien ejecuta el respaldo, no desde la raíz."
+    return 0
+  fi
+
+  return 0
+}
+
 # =============================================================================
 # Registrar el host de respaldo en HestiaCP
 # =============================================================================
@@ -363,7 +408,7 @@ bc_hestia_restic() {
     bc_section "Host de respaldo Restic"
     local rem ruta
     rem="$(bc_ask "Remoto de rclone" "almacenamiento")"
-    ruta="$(bc_ask "Ruta dentro del remoto" "hestiacp/")"
+    ruta="$(bc_ask "Ruta dentro del remoto (absoluta si el remoto es local)" "/hestiacp")"
     repo="rclone:$rem:$ruta"
     bc_log "Política de retención (por defecto: 30 instantáneas, 8 diarias, 5 semanales, 3 mensuales, sin tramo anual)"
     snaps="$(bc_ask "Instantáneas totales" "30")"
@@ -373,6 +418,17 @@ bc_hestia_restic() {
     y="$(bc_ask "Anuales (-1 = sin tramo anual)" "-1")"
   fi
   [[ -n "$repo" ]] || bc_die "hace falta el repositorio."
+
+  # T24: antes de pintar nada ni pedir confirmación, se rechaza una ruta que
+  # dejaría el repositorio dentro de una web o resuelta de forma imprevista.
+  if [[ "$repo" == rclone:* ]]; then
+    bc_hestia_requiere_rclone || return 1
+    local rem_nombre tipo_remoto
+    rem_nombre="${repo#rclone:}"; rem_nombre="${rem_nombre%%:*}"
+    tipo_remoto="$( { bc_hestia_root "rclone config show '$rem_nombre' 2>/dev/null" || true; } \
+                    | tr -d '\r' | sed -n 's/^type *= *//p' | head -1)"
+    bc_hestia_validar_repo "$repo" "$tipo_remoto" || { BC_DELIBERATE_EXIT=1; return 1; }
+  fi
 
   bc_section "Registrar el host de respaldo"
   bc_log "Repositorio: $repo"
