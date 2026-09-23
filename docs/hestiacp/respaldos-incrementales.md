@@ -129,9 +129,11 @@ aparecen.
 backupctl hestia restic
 ```
 
-Registra el repositorio en HestiaCP y, si hace falta, **lo inicializa**
-(`restic init`), que es el paso que HestiaCP no hace y que provoca el clásico
-«el repositorio no existe».
+Registra el destino en HestiaCP y te dice dónde quedará el repositorio de cada
+cuenta: `<ruta registrada>/<cuenta>`. **No inicializa nada, a propósito**: los
+repositorios son uno por cuenta y los crea `v-backup-user-restic` la primera vez
+que respalda cada una. Un `restic init` sobre la ruta registrada solo deja un
+repositorio huérfano por encima de los buenos.
 
 !!! danger "El error de retención más común"
     `v-add-backup-host-restic REPO 30 8 5 3 -1` **no** significa
@@ -143,7 +145,7 @@ Registra el repositorio en HestiaCP y, si hace falta, **lo inicializa**
     | 2ª | `KEEP_DAILY` | 8 diarias |
     | 3ª | `KEEP_WEEKLY` | 5 semanales |
     | 4ª | `KEEP_MONTHLY` | 3 mensuales |
-    | 5ª | `KEEP_YEARLY` | anuales **ilimitadas** |
+    | 5ª | `KEEP_YEARLY` | con `-1`, **ninguna regla anual** (no «ilimitadas») |
 
     Es fácil creer que tienes «3 años» cuando lo que tienes es «3 mensuales y
     anuales para siempre». `backupctl hestia status` te lo muestra ya
