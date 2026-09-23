@@ -38,8 +38,8 @@ a transportar.
 
 **Nombres de sesión.** Una sesión nueva recibe un nombre automático; el de `/rename` solo
 vuelve si se reanuda esa misma sesión, y no hay forma documentada de fijarlo desde la
-extensión de VS Code (desde terminal, `claude -n <nombre>`). Por eso, al empezar o retomar el
-trabajo, lo primero que el arquitecto da al PO es:
+extensión de VS Code (desde terminal, `claude -n <nombre>`). Por eso, **al empezar y al cerrar**
+cada sesión —sin que el PO lo pida— lo primero y lo último que el arquitecto le da es:
 
 ```
 /rename ServersBackupsPersonalUtility-Arquitecto-Main     ← en la sesión del arquitecto

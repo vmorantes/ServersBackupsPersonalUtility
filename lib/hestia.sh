@@ -161,7 +161,7 @@ bc_hestia_status() {
       printf 'Diarias\t%s\n'   "$d"
       printf 'Semanales\t%s\n' "$w"
       printf 'Mensuales\t%s\n' "$m"
-      printf 'Anuales\t%s\n'   "$([[ "$y" == "-1" ]] && echo "ilimitadas (-1)" || echo "$y")"
+      printf 'Anuales\t%s\n'   "$(bc_hestia_texto_anuales_registro "$y" " (-1)")"
     } | bc_table | sed 's/^/        /'
   fi
 
@@ -340,6 +340,149 @@ $( [[ -n "$region" ]] && echo "region = $region" )acl = private
   fi
 }
 
+# Texto de la fila "Anuales" (T26): v-backup-user-restic solo añade
+# --keep-yearly si KEEP_YEARLY >= 0 (HestiaCP 1.10.4); con -1 no hay tramo
+# anual, así que nunca se dice "ilimitadas". Usada por la tabla de registro
+# (bc_hestia_restic) y por la de estado (más arriba, con $2 para que siga
+# mostrando el "(-1)" que ya llevaba: la regla vive en un solo sitio, el
+# formato puede seguir siendo distinto en cada tabla). Función pura (sin
+# ssh, sin efectos) para poder probarla sin conectar a nada.
+bc_hestia_texto_anuales_registro() {
+  local y="${1:-}" sufijo="${2:-}"
+  [[ "$y" == "-1" ]] && echo "sin regla anual${sufijo}" || echo "$y"
+}
+
+# Comprueba un repositorio ANTES de registrarlo en HestiaCP (T24, endurecida
+# tras la revisión de #038: H1 — $repo llegaba sin validar hasta una orden
+# ejecutada como root; H2 — antes solo se miraba si empezaba por "rclone:",
+# así que una ruta local reproducía el incidente sin que nada lo dijera).
+# $1 repositorio tal como se registrará: rclone:remoto:ruta, una ruta local
+#    absoluta (/ruta), u otro esquema de restic (sftp:, s3:, b2:…)
+# $2 tipo del remoto de rclone (local, alias, s3, …) o vacío si no se pudo
+#    saber, o si el repositorio no es de tipo rclone:
+# Devuelve 0 si es aceptable, 1 tras explicar por qué no. Función pura: no
+# conecta a nada, no lee ni escribe, solo mira el texto que se le pasa.
+bc_hestia_validar_repo() {
+  local repo="${1:-}" tipo="${2:-}"
+  tipo="${tipo,,}"  # comparación en minúsculas: H4, "Local" pasaba
+
+  # --- Forma y juego de caracteres, antes de mirar nada más (H1, H9) -------
+  # El mismo criterio que ya aplica la web (web/server.py): sin esto, una
+  # comilla simple en $repo llega intacta hasta una orden que se ejecuta
+  # como root (bc_hestia_v "v-add-backup-host-restic '$repo' ...").
+  # Qué forma tiene $repo: de eso depende qué comprobaciones tienen sentido
+  # más abajo. El tipo del remoto SOLO se puede consultar para "rclone"
+  # (rclone config show); en "otro" (sftp:, s3:, b2:…) lo que sigue al
+  # esquema no es necesariamente una ruta del sistema de archivos —puede ser
+  # host:puerto/bucket o una URL entera—, así que las reglas pensadas para
+  # rutas de archivo (tipo de remoto, "//") no se le aplican (revisión de
+  # #041: rechazaban repositorios válidos de restic con un mensaje que
+  # hablaba de otra cosa).
+  local esquema ruta rem=""
+  if [[ "$repo" == rclone:* ]]; then
+    esquema=rclone
+    if [[ ! "$repo" =~ ^rclone:[A-Za-z0-9._-]+:[A-Za-z0-9._/-]*$ ]]; then
+      bc_err "repositorio no válido: '$repo'."
+      bc_log  "Con rclone:, el nombre del remoto y la ruta solo admiten letras,"
+      bc_log  "números, '.', '_', '-' y '/'. Nada de comillas, espacios ni ';'."
+      return 1
+    fi
+    local resto="${repo#rclone:}"
+    rem="${resto%%:*}"
+    ruta="${resto#*:}"
+  elif [[ "$repo" == /* ]]; then
+    esquema=local
+    if [[ ! "$repo" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+      bc_err "repositorio no válido: '$repo'."
+      bc_log  "Una ruta local solo admite letras, números, '.', '_', '-' y '/'."
+      return 1
+    fi
+    ruta="$repo"
+  else
+    esquema=otro
+    if [[ ! "$repo" =~ ^[A-Za-z0-9._:/-]+$ ]]; then
+      bc_err "repositorio no válido: '$repo'."
+      bc_log  "Solo se admiten letras, números, '.', '_', '-', ':' y '/'."
+      return 1
+    fi
+    ruta="${repo##*:}"
+  fi
+
+  if [[ -z "$ruta" ]]; then
+    bc_err "falta la ruta${rem:+ dentro del remoto '$rem'}."
+    return 1
+  fi
+
+  # --- No se intenta normalizar: una ruta con ".." se rechaza tal cual (H8)
+  # — no se puede resolver sin tocar el servidor, y una normalización a
+  # medias es peor que un rechazo. Esto vale para los tres esquemas.
+  if [[ "$ruta" == *..* ]]; then
+    bc_err "la ruta '$ruta' no puede llevar '..'. Escríbela limpia."
+    return 1
+  fi
+
+  # "//" solo se rechaza en rclone y en una ruta local: ahí es siempre parte
+  # del propio sistema de archivos. En "otro" esquema puede ser el "//" de
+  # una URL (s3:https://s3.example.org/bucket) y no dice nada malo (#041).
+  if [[ "$esquema" != "otro" && "$ruta" == *//* ]]; then
+    bc_err "la ruta '$ruta' no puede llevar '//'. Escríbela limpia."
+    return 1
+  fi
+
+  # --- Dentro de una web: la ruta exacta o con algo detrás (H8) ------------
+  if [[ "$ruta" == /home/*/web || "$ruta" == /home/*/web/* ]]; then
+    bc_err "la ruta '$ruta' está DENTRO del directorio de un sitio web."
+    bc_log  "Quedaría accesible desde internet. Usa una ruta fuera de /home/*/web/."
+    return 1
+  fi
+
+  # --- Según el tipo de remoto (H4: local vs envolvente vs desconocido) ---
+  # Solo para "rclone": el tipo únicamente se puede consultar (rclone config
+  # show) para un remoto de rclone. En "otro" esquema no hay tipo que
+  # consultar y estas reglas no aplican — lo que sigue al esquema no es
+  # necesariamente una ruta del sistema de archivos (#041).
+  if [[ "$esquema" != "rclone" ]]; then
+    return 0
+  fi
+
+  local envolvente=0
+  case "$tipo" in
+    alias|crypt|union|combine|chunker|compress) envolvente=1 ;;
+  esac
+
+  if [[ "$tipo" == "local" ]] && [[ "$ruta" != /* ]]; then
+    bc_err "la ruta '$ruta'${rem:+ del remoto '$rem'} (tipo local) es RELATIVA."
+    bc_log  "rclone la resuelve desde el directorio de trabajo de quien ejecuta el"
+    bc_log  "respaldo — así es como un repositorio acabó dentro de un sitio web"
+    bc_log  "servido por internet (T24). Escribe una ruta ABSOLUTA, por ejemplo:"
+    bc_log  "/IncrementalBackups"
+    return 1
+  fi
+
+  if (( envolvente )); then
+    if [[ "$ruta" != /* ]]; then
+      bc_err "la ruta '$ruta'${rem:+ del remoto '$rem'} (tipo $tipo) es RELATIVA."
+      bc_log  "Un remoto de este tipo envuelve a OTRO remoto: rclone también puede"
+      bc_log  "resolverla desde el directorio de trabajo. Escribe una ruta ABSOLUTA."
+      return 1
+    fi
+    bc_warn "el remoto${rem:+ '$rem'} es de tipo $tipo: envuelve a OTRO remoto."
+    bc_warn "Una ruta absoluta NO garantiza nada aquí — la raíz del remoto real es"
+    bc_warn "la que manda, y desde aquí no se puede saber a dónde apunta."
+    bc_warn "Comprueba tú mismo que su destino no está dentro de una web."
+    return 0
+  fi
+
+  if [[ -z "$tipo" ]] && [[ "$ruta" != /* ]]; then
+    bc_err "no se pudo determinar el tipo del remoto${rem:+ '$rem'}."
+    bc_log  "No se registra a ciegas una ruta relativa: escríbela absoluta, o"
+    bc_log  "comprueba que el remoto existe en el servidor."
+    return 1
+  fi
+
+  return 0
+}
+
 # =============================================================================
 # Registrar el host de respaldo en HestiaCP
 # =============================================================================
@@ -355,16 +498,43 @@ bc_hestia_restic() {
     bc_section "Host de respaldo Restic"
     local rem ruta
     rem="$(bc_ask "Remoto de rclone" "almacenamiento")"
-    ruta="$(bc_ask "Ruta dentro del remoto" "hestiacp/")"
+    ruta="$(bc_ask "Ruta dentro del remoto (absoluta si el remoto es local)" "/hestiacp")"
     repo="rclone:$rem:$ruta"
-    bc_log "Política de retención (por defecto: 30 instantáneas, 8 diarias, 5 semanales, 3 mensuales, anuales ilimitadas)"
+    bc_log "Política de retención (por defecto: 30 instantáneas, 8 diarias, 5 semanales, 3 mensuales, sin tramo anual)"
     snaps="$(bc_ask "Instantáneas totales" "30")"
     d="$(bc_ask "Diarias a conservar" "8")"
     w="$(bc_ask "Semanales" "5")"
     m="$(bc_ask "Mensuales" "3")"
-    y="$(bc_ask "Anuales (-1 = ilimitadas)" "-1")"
+    y="$(bc_ask "Anuales (-1 = sin tramo anual)" "-1")"
   fi
   [[ -n "$repo" ]] || bc_die "hace falta el repositorio."
+
+  # T24/H1-H5 (revisión de #038): la validación TEXTUAL corre SIEMPRE, antes
+  # de pintar nada y de pedir confirmación — es pura, no toca el servidor.
+  # La consulta del TIPO del remoto sí toca el servidor (rclone config show),
+  # así que se salta en --dry-run (H3: antes se ejecutaba —e incluso podía
+  # instalar rclone por apt— antes de enseñar nada).
+  local rem_nombre="" tipo_remoto=""
+  if [[ "$repo" == rclone:* ]]; then
+    rem_nombre="${repo#rclone:}"; rem_nombre="${rem_nombre%%:*}"
+    if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
+      bc_log "Simulación (--dry-run): no se comprueba el tipo del remoto en el servidor."
+    else
+      # El filtrado corre EN EL SERVIDOR (awk), no en local: "rclone config
+      # show" imprime credenciales en claro, y así no cruzan el canal más de
+      # lo necesario (H11). Sin "head" en la tubería LOCAL: con pipefail,
+      # cortar antes de que el productor termine mata todo con SIGPIPE (H10,
+      # mismo motivo que bc_gen_password en core.sh). Esta consulta ocurre
+      # ANTES de que bc_hestia_validar_repo compruebe el juego de caracteres
+      # de $repo (unas líneas más abajo): $rem_nombre se cita con printf %q
+      # como defensa en profundidad (lib/ssh.sh:112), no porque se confíe en
+      # que ya esté validado.
+      tipo_remoto="$( { bc_hestia_root "rclone config show $(printf '%q' "$rem_nombre") 2>/dev/null \
+          | awk '/^type[[:space:]]*=/{sub(/^type[[:space:]]*=[[:space:]]*/,\"\"); print; exit}'" \
+          || true; } | tr -d '\r' )"
+    fi
+  fi
+  bc_hestia_validar_repo "$repo" "$tipo_remoto" || { BC_DELIBERATE_EXIT=1; return 1; }
 
   bc_section "Registrar el host de respaldo"
   bc_log "Repositorio: $repo"
@@ -372,7 +542,7 @@ bc_hestia_restic() {
     printf 'Instantáneas totales\t%s\n' "$snaps"
     printf 'Diarias\t%s\n' "$d"; printf 'Semanales\t%s\n' "$w"
     printf 'Mensuales\t%s\n' "$m"
-    printf 'Anuales\t%s\n' "$([[ "$y" == "-1" ]] && echo 'ilimitadas' || echo "$y")"
+    printf 'Anuales\t%s\n' "$(bc_hestia_texto_anuales_registro "$y")"
   } | bc_table | sed 's/^/        /'
   bc_warn "El PRIMER número es el total de instantáneas, no los días. Es el error"
   bc_warn "más común al configurar esto a mano."

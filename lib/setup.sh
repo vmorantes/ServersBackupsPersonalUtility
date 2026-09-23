@@ -102,8 +102,17 @@ bc_setup_auto() {
 
     if [[ -n "${BC_SETUP_REPO:-}" ]]; then
       BC_OPT_REPO="$BC_SETUP_REPO"
-      BC_ASSUME_YES=1 bc_hestia_restic || bc_warn "no se pudo registrar el host de respaldo."
-      BC_ASSUME_YES=1 bc_hestia_cron   || bc_warn "no se pudo activar el cron de Restic."
+      if BC_ASSUME_YES=1 bc_hestia_restic; then
+        BC_ASSUME_YES=1 bc_hestia_cron || bc_warn "no se pudo activar el cron de Restic."
+      else
+        # H6: programar el cron sin host registrado dejaría el respaldo
+        # nocturno apuntando a una configuración vieja o inexistente. Se
+        # restaura BC_DELIBERATE_EXIT: bc_hestia_restic lo puso en 1 al
+        # rechazar el repositorio, y sin esto el trap ERR queda mudo el
+        # resto del alta (cualquier fallo real posterior pasaría inadvertido).
+        bc_err "no se pudo registrar el host de respaldo: se omite el cron de Restic."
+        BC_DELIBERATE_EXIT=0
+      fi
     fi
 
     # El paso que nadie recuerda: sin estas claves, todo lo anterior es inútil

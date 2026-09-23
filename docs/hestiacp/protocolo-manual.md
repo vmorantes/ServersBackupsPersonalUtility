@@ -20,7 +20,7 @@ Todo lo que hace `backupctl hestia setup`, paso a paso y sin la herramienta.
 | 1 · Elegir destino | Decidir tú | — |
 | 2 · Remoto de rclone | `rclone config` | `hestia rclone` |
 | 3 · Host de respaldo | `v-add-backup-host-restic` | `hestia restic` |
-| 4 · Inicializar | `restic init` | incluido en `hestia restic` |
+| 4 · Inicializar | lo hace `v-backup-user-restic` | lo hace `v-backup-user-restic` |
 | 5 · Cron | Panel de HestiaCP | `hestia cron` |
 | 6 · Rescatar claves | `cp` a mano | `hestia keys` |
 | 7 · Comprobar | `restic snapshots` | `hestia verify` |
@@ -104,8 +104,30 @@ v-add-backup-host-restic 'rclone:REMOTO:RUTA/' SNAPSHOTS DIARIAS SEMANALES MENSU
 ```
 
 ```bash
-v-add-backup-host-restic 'rclone:mi-almacenamiento:mi-servidor/hestiacp/' 30 8 5 3 -1
+v-add-backup-host-restic 'rclone:mi-almacenamiento:mi-bucket/hestiacp' 30 8 5 3 -1
 ```
+
+!!! danger "La ruta, absoluta siempre que el remoto sea `local`"
+    Con un remoto de tipo `local` (o un `alias` sin raíz fija), rclone resuelve
+    una ruta **sin barra inicial desde el directorio en el que estés parado**.
+    Registrar `mi-servidor/hestiacp/` estando dentro de `public_html` crea los
+    respaldos **dentro de la web**, servidos por internet. Ocurrió en un servidor
+    real el 2026-09-23, siguiendo un ejemplo de esta misma página.
+
+    | Tipo de remoto | Cómo se escribe la ruta |
+    |---|---|
+    | `local`, `alias`, `sftp` | absoluta: `'rclone:almacen:/IncrementalBackups'` |
+    | Bucket (S3, B2, Mega S4) | empieza por el bucket: `'rclone:mi-almacenamiento:mi-bucket/hestiacp'` |
+
+    Comprueba dónde apunta el remoto antes de registrarlo:
+
+    ```bash
+    rclone config show mi-almacenamiento | grep -E '^(type|root|remote) ='
+    ```
+
+    La barra **final** da igual: `v-add-backup-host-restic` la quita
+    ([líneas 85-87](https://github.com/hestiacp/hestiacp/blob/1.10.4/bin/v-add-backup-host-restic#L85-L87)).
+    La que importa es la inicial.
 
 !!! danger "El orden de los cinco números"
     **No** son «días, semanas, meses, años, total». El primero es el total de
@@ -117,7 +139,13 @@ v-add-backup-host-restic 'rclone:mi-almacenamiento:mi-servidor/hestiacp/' 30 8 5
     | 2ª | `KEEP_DAILY` | 8 diarias |
     | 3ª | `KEEP_WEEKLY` | 5 semanales |
     | 4ª | `KEEP_MONTHLY` | 3 mensuales |
-    | 5ª | `KEEP_YEARLY` | anuales **ilimitadas** (`-1`) |
+    | 5ª | `KEEP_YEARLY` | con `-1`, **ninguna regla anual** |
+
+    `-1` **no** significa «ilimitadas»: `v-backup-user-restic` solo añade
+    `--keep-yearly` cuando el valor es `>= 0`, así que con `-1` la política que
+    se aplica no tiene tramo anual. Comprobado en un servidor real el
+    2026-09-23, donde restic imprimió `Applying Policy: keep 30 latest, 8 daily,
+    5 weekly, 3 monthly snapshots` — sin anuales.
 
     Compruébalo siempre, porque es fácil creer que tienes «3 años» cuando lo que
     tienes es «3 mensuales y anuales para siempre»:
@@ -130,14 +158,47 @@ v-add-backup-host-restic 'rclone:mi-almacenamiento:mi-servidor/hestiacp/' 30 8 5
 
 ## 4 · Inicializar el repositorio
 
-HestiaCP **no** lo hace. Si el primer respaldo falla diciendo que el repositorio
-no existe, es esto:
+**Normalmente no hay nada que hacer en este paso.** Lo hace HestiaCP, pero con
+una condición que no es evidente: `v-backup-user-restic` crea el repositorio de
+una cuenta **solo si todavía no existe su archivo de contraseña**,
+`/usr/local/hestia/data/users/<cuenta>/restic.conf`
+([líneas 54-60](https://github.com/hestiacp/hestiacp/blob/1.10.4/bin/v-backup-user-restic#L54-L60)).
+Si ese archivo ya está, da por hecho que el repositorio existe y se limita a
+comprobarlo.
+
+!!! danger "Nunca inicialices la ruta que registraste"
+    Esa ruta es el **padre**, no un repositorio. HestiaCP le añade `/<cuenta>` y
+    guarda **un repositorio por cuenta**, cada uno con la contraseña de 32
+    caracteres que él mismo genera
+    ([línea 58](https://github.com/hestiacp/hestiacp/blob/1.10.4/bin/v-backup-user-restic#L58)).
+
+    Un `restic init` sobre el padre deja un repositorio huérfano por encima de
+    los de verdad, cifrado con una contraseña que HestiaCP no conoce, y **no
+    arregla el error**: el respaldo seguirá fallando exactamente igual.
+
+Si el primer respaldo falla con `unable to open config file: <config/> does not
+exist`, significa que la contraseña de la cuenta ya existía y su repositorio no.
+Hay dos salidas:
 
 ```bash
-restic init -r rclone:mi-almacenamiento:mi-servidor/hestiacp/
+# a) Que lo haga HestiaCP: apartar la contraseña y repetir el respaldo
+mv /usr/local/hestia/data/users/<cuenta>/restic.conf /root/clave-vieja.conf
+v-backup-user-restic <cuenta>
+
+# b) Crearlo a mano, con la contraseña que HestiaCP ya tiene
+restic init -r rclone:mi-almacenamiento:mi-bucket/hestiacp/<cuenta> \
+  --password-file /usr/local/hestia/data/users/<cuenta>/restic.conf
 ```
 
-Una sola vez, y solo la primera.
+La opción (a) solo es segura si esa contraseña no abre ningún repositorio con
+instantáneas dentro: si lo abre y la pierdes, esas copias no se recuperan nunca.
+
+!!! tip "Distinguir los dos fallos"
+    `unable to open config file` = no hay repositorio en esa ruta.
+    `wrong password or no key found` = el repositorio está, pero la contraseña no
+    es la suya. HestiaCP los tapa a los dos con el mismo `Unable to access restic
+    repo` ([línea 68](https://github.com/hestiacp/hestiacp/blob/1.10.4/bin/v-backup-user-restic#L68)),
+    así que hay que leer la línea de restic que va justo encima.
 
 ---
 
@@ -151,18 +212,9 @@ Una sola vez, y solo la primera.
 **a) Habilitar en el paquete.** *Packages* → editar el paquete de tus usuarios
 (`default`) y comprobar que los respaldos están activos.
 
-**b) Añadir el cron.** En la sección *Cron* del panel, como `admin`:
-
-```
-Comando:  v-backup-users-restic
-Horario:  45 05 * * *
-```
-
-A una hora distinta de los respaldos tradicionales, que corren a las 05:10.
-
-O desde la línea de órdenes, siguiendo el mismo idioma que usa HestiaCP en
-`v-add-cron-restart-job` — comprobar con `grep`, añadir al final, y dejar los
-permisos como estaban:
+**b) Añadir el cron.** Va en el crontab de `hestiaweb`, **no en la pestaña
+*Cron* del panel**. Comprobar con `grep`, añadir al final, y dejar los permisos
+como estaban:
 
 ```bash
 CT=/var/spool/cron/crontabs/hestiaweb
@@ -170,6 +222,22 @@ grep -q v-backup-users-restic "$CT" \
   || echo "45 05 * * * sudo /usr/local/hestia/bin/v-backup-users-restic" >> "$CT"
 chmod 600 "$CT"; chown hestiaweb:hestiaweb "$CT"
 ```
+
+A una hora distinta de los respaldos tradicionales, que corren a las 05:10.
+
+!!! danger "Por qué no vale la pestaña *Cron* del panel"
+    Es el atajo que parece razonable y falla en silencio. La pestaña escribe la
+    tarea en el crontab de **esa cuenta del panel**, y ahí pasan tres cosas:
+
+    - El `PATH` de cron no incluye `/usr/local/hestia/bin`, así que
+      `v-backup-users-restic` a secas no se encuentra.
+    - Sin `sudo`, esa cuenta no puede respaldar a las demás.
+    - `v-rebuild-cron-jobs` regenera el crontab de una cuenta del panel desde su
+      `cron.conf`, y puede llevarse la línea por delante.
+
+    Resultado: una línea que existe, que se ve en el panel, y que no respalda
+    nada. Encontrada así en un servidor real el 2026-09-23
+    (`30 5 * * * v-backup-users-restic` en el crontab de una cuenta).
 
 !!! warning "No es una tarea de un usuario del panel"
     `v-backup-users-restic` recorre **todas** las cuentas: es una tarea del
@@ -255,8 +323,7 @@ Y después los pasos 3 a 5 con **otra ruta dentro del mismo bucket**, para que
 los dos servidores no se pisen:
 
 ```bash
-v-add-backup-host-restic 'rclone:mi-almacenamiento:servidor-nuevo/hestiacp/' 30 8 5 3 -1
-restic init -r rclone:mi-almacenamiento:servidor-nuevo/hestiacp/
+v-add-backup-host-restic 'rclone:mi-almacenamiento:mi-bucket/servidor-nuevo' 30 8 5 3 -1
 grep -q v-backup-users-restic /var/spool/cron/crontabs/hestiaweb \
   || echo "45 05 * * * sudo /usr/local/hestia/bin/v-backup-users-restic" \
      >> /var/spool/cron/crontabs/hestiaweb

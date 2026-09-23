@@ -1,69 +1,66 @@
 # Ahora
 
-- **Actualizado:** 2026-09-16 — mandato del PO: versión 2.1 estable (ADR 0013).
-- **Último mensaje:** #032 (ARQ) — fase 1, segunda vuelta: corregir los hallazgos graves de las
-  revisiones de #031 y volver a revisar. Se espera #033. (#031: C1–C7 commiteados en
-  `fix/limpieza-al-salir`; no se fusionó: las revisiones encontraron que las señales podían truncar
-  la devolución de `restic.conf`, una expansión aritmética con datos del servidor que permite
-  ejecutar órdenes locales, una limpieza con secretos que no avisa si falla, y menciones a agentes
-  en comentarios de código.)
-- **Tramo en curso:** `estado/tramos/2026-09-16-1400-version-2-1.md`. En el árbol, sin commitear:
-  ADR 0013, roadmap, este archivo y el tramo; los commitea la primera ronda.
+- **Actualizado:** 2026-09-23, incidente en producción del PO (servidor `stc-admin`).
+- **Último mensaje:** #035 (ARQ). El próximo será #036. Ronda en vuelo con el coder.
+- **Tramo abierto:** `estado/tramos/2026-09-23-2145-incidente-incrementales.md`. El del 16 quedó
+  cerrado.
+- **El PO no está.** Dijo: «No estaré, así que trabajen solos», y que sea rápido, solo estos
+  hallazgos. Nada de ampliar el alcance ni esperarle.
+- **Sin commitear:** este archivo, el tramo del 16, y las correcciones de documentación de hoy
+  (`docs/hestiacp/protocolo-manual.md`, `docs/hestiacp/respaldos-incrementales.md`,
+  `.agents/context/30-trampas.md`, `.agents/docs/roadmap.md`). Rama `fix/limpieza-al-salir`.
+  Las commitea la primera ronda de la próxima sesión, en commits `docs:` y `docs(estado):`.
+
+## El incidente del 2026-09-23 (documentación que hizo daño)
+
+El PO configuró incrementales en un servidor de **producción** siguiendo
+`docs/hestiacp/protocolo-manual.md`. Tres errores de esa guía, los tres corregidos hoy:
+
+1. El ejemplo de `restic init` usaba una **ruta relativa**. Con su remoto de rclone de tipo
+   `local`, la ruta se resolvió desde el directorio de trabajo y el repositorio se creó **dentro
+   de un `public_html`**, servido por internet (T24).
+2. Mandaba inicializar la **ruta registrada**, que es el padre: HestiaCP guarda un repositorio
+   **por cuenta** en `<ruta>/<cuenta>`. El repositorio quedó huérfano y el respaldo siguió
+   fallando (T25).
+3. Ofrecía la **pestaña *Cron* del panel** para programar `v-backup-users-restic`. Eso escribe en
+   el crontab de una cuenta, sin `sudo` ni `PATH`: el PO tenía ahí
+   `30 5 * * * v-backup-users-restic`, que probablemente no ha respaldado nunca.
+
+Sobre el remoto `local` el arquitecto se precipitó: dio por hecho que era la trampa T23 (nuestra
+herramienta vaciando `rclone.conf`) y el PO aclaró que el destino local es **intencionado**.
+
+Guía de recuperación entregada al PO: apartar la contraseña de la cuenta para que HestiaCP
+inicialice solo, rehacer `/IncrementalBackups` con permisos 700, activar `BACKUPS_INCREMENTAL`,
+respaldo manual, comprobación con `restic snapshots` y copia de las contraseñas fuera del
+servidor. Pendiente de su salida.
 
 ## Espera al PO
 
-- **AVISO nuevo (T23)**: si alguna vez usaste en la web «Configurar el remoto» o «Reusar las
-  claves guardadas» (pestaña HestiaCP) contra un servidor, la versión actual pudo dejar **vacío**
-  su `/root/.config/rclone/rclone.conf` diciendo que lo había escrito. Compruébalo en ese
-  servidor: `wc -c /root/.config/rclone/rclone.conf` (si da 0 o muy poco, la copia anterior está
-  en `/root/.config/rclone/rclone.conf.anterior`). Sin ese archivo, los respaldos incrementales
-  de ese servidor no pueden llegar al almacenamiento.
+1. Ejecutar `/root/rehacer-incrementales.sh` y pegar la salida.
+2. Bajarse a su máquina `/root/claves-restic-*.tgz`: sin esas contraseñas, ningún repositorio se
+   vuelve a abrir.
+3. Mañana, comprobar si el cron de las 05:30 respaldó de verdad (`restic ... snapshots`). Si no,
+   moverlo al crontab de `hestiaweb` con ruta absoluta.
+4. Fuera del alcance de los respaldos, visto en su servidor: `public_html` entero en `777` y los
+   directorios `secure-keys/` y `dumps/` dentro de la raíz web.
+5. **AVISO (T21):** antes de un `adoptar --to` real, copiar el `restic.conf` del destino y
+   compararlo al terminar.
+6. En este servidor, no usar todavía `backupctl hestia rclone` ni «Configurar el remoto» de la
+   web (T23, corregido en `fix/limpieza-al-salir`, sin publicar).
+7. `git push` de `master` cuando quiera. `rm ~/.local/bin/backupctl` sigue pendiente.
+8. Los dos `/rename`, que el arquitecto le da al abrir y al cerrar cada sesión (pedido el
+   2026-09-23; antes solo al abrir).
 
-0. **Decisión tomada por el arquitecto, revertible por ti:** «activar los incrementales sin
-   HestiaCP» se entiende como hacerlo desde la herramienta, sin entrar al panel ni a su consola,
-   pero usando por debajo el mecanismo de Restic de HestiaCP (así la pantalla del panel que lista y
-   restaura esas copias sigue funcionando). Si querías un Restic propio al margen de HestiaCP,
-   dilo.
+## Siguiente (mandato del PO: versión 2.1, ADR 0013)
 
-1. **AVISO para tu migración real** (T21, en `master` hoy):
-   - `adoptar --to` puede dejar **vacío** el `/usr/local/hestia/conf/restic.conf` del servidor de
-     destino **al terminar, aunque todo vaya bien**, y decir que lo devolvió; y si falla al leerlo,
-     puede **borrarlo**. Solo importa si ese servidor ya tenía su propio respaldo Restic.
-   - Antes de migrar, en el destino:
-     `cp /usr/local/hestia/conf/restic.conf /root/restic.conf.antes-de-adoptar`
-   - Después: `diff /usr/local/hestia/conf/restic.conf /root/restic.conf.antes-de-adoptar` → sin
-     diferencias. Si difiere, está vacío o no existe:
-     `cp /root/restic.conf.antes-de-adoptar /usr/local/hestia/conf/restic.conf`
-   - No interrumpas `adoptar` (Ctrl-C ni cerrar la web) durante una migración.
-2. **Todavía no hay nada que probar en el servidor.** La rama `fix/limpieza-al-salir` arregla
-   parte de T20/T21, pero las revisiones encontraron dos agujeros graves abiertos (roadmap). Se
-   cierran en el próximo tramo y entonces te llega la guía.
-3. **Quitar el enlace de `~/.local/bin`**: `rm ~/.local/bin/backupctl` (solo el enlace; el
-   lanzador de escritorio no lo necesita).
-4. **`git push` de `master`** cuando quieras.
-5. **En cada sesión nueva, los dos `/rename`**: `ServersBackupsPersonalUtility-Arquitecto-Main` y
-   `ServersBackupsPersonalUtility-Coder-Main`.
-6. Resuelto hoy: tu pregunta 5. Quitaste el respaldo Restic nocturno del cron del servidor de
-   pruebas: ya no poda (detalle en `.agents/context/50-hestiacp.md`, «Retención de Restic»).
-   Comprobación de solo lectura, en ese servidor:
-   `grep -rn restic /var/spool/cron/crontabs/ /etc/cron.d/ /etc/crontab` → sin
-   `v-backup-users-restic`.
+Fase 1, segunda vuelta (#032), en `fix/limpieza-al-salir`: quedan S4 (menciones a agentes en
+comentarios; hoy `verificar.sh` falla solo por `lib/adoptar.sh:39`), S5, S6, S7, S8 y la parte C
+(revisiones y fusión en `release/2.1`). Hechos: A, S1, S2, S3.
 
-## En curso
-
-Ronda #024: el coder commitea en `master` la documentación de cierre (trampas T2/T20/T21,
-roadmap, `estado/`) y deja el árbol en `master`. Si se corta: solo es documentación.
-
-## Siguiente (nombrado por el PO: T20, «Adelante, trabajen»)
-
-Cerrar en `fix/limpieza-al-salir` los cuatro puntos del roadmap «Antes de pedir la prueba al PO»:
-`bc_ssh_sudo_stdin` con usuario no-root (T2), existencia de `restic.conf` con centinela, limpieza
-que termina en error, y `trap '' INT TERM` heredado. Después, revisión y guía de prueba para el PO.
-La rama necesitará antes traer `master` otra vez (`git merge --no-ff master`).
+La fase 2 (ADR 0016) crece con lo aprendido hoy: ver el bloque nuevo del roadmap. Lo de hoy no es
+teoría, es un servidor de producción que se rompió siguiendo nuestra documentación.
 
 ## Para una sesión nueva
 
-- Lee también el tramo de hoy y `.agents/context/30-trampas.md` T2, T20 y T21.
-- El árbol queda en `master`; el trabajo sigue en `fix/limpieza-al-salir` (sin fusionar).
-- `serversbackupspersonalutility-68` y `humilde_trabajador_presente_backups` no son parte del
-  trabajo. El coder es `ServersBackupsPersonalUtility-Coder-Main`.
+- Lee el tramo del 16, ADR 0013–0016 y `.agents/context/30-trampas.md` T2, T20–T25.
+- Ramas: `master` (estable), `release/2.1` (versión en curso), `fix/limpieza-al-salir` (fase 1).

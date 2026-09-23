@@ -447,7 +447,7 @@ async function cargarEstadoHestia(nombre) {
       '<dt>Repositorio</dt><dd>' + esc(R.repo) + '</dd>' +
       '<dt>Instantáneas</dt><dd>' + esc(R.snapshots || '?') + ' en total</dd>' +
       '<dt>Retención</dt><dd>' + esc(R.diarias) + ' diarias · ' + esc(R.semanales) + ' semanales · ' +
-        esc(R.mensuales) + ' mensuales · ' + (R.anuales === '-1' ? 'anuales ilimitadas' : esc(R.anuales) + ' anuales') + '</dd>' +
+        esc(R.mensuales) + ' mensuales · ' + (R.anuales === '-1' ? 'sin regla anual' : esc(R.anuales) + ' anuales') + '</dd>' +
       '</dl>' +
       '<span class="aviso-pisa">«Registrar en HestiaCP» <strong>sustituye</strong> estos valores para todas las cuentas. ' +
       'Si solo querías mirar, no lo pulses.</span>');
