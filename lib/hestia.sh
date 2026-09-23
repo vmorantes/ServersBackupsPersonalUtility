@@ -161,7 +161,7 @@ bc_hestia_status() {
       printf 'Diarias\t%s\n'   "$d"
       printf 'Semanales\t%s\n' "$w"
       printf 'Mensuales\t%s\n' "$m"
-      printf 'Anuales\t%s\n'   "$([[ "$y" == "-1" ]] && echo "ilimitadas (-1)" || echo "$y")"
+      printf 'Anuales\t%s\n'   "$([[ "$y" == "-1" ]] && echo "sin regla anual (-1)" || echo "$y")"
     } | bc_table | sed 's/^/        /'
   fi
 
@@ -340,6 +340,14 @@ $( [[ -n "$region" ]] && echo "region = $region" )acl = private
   fi
 }
 
+# Texto de la fila "Anuales" de la tabla de registro (T26): v-backup-user-restic
+# solo añade --keep-yearly si KEEP_YEARLY >= 0 (HestiaCP 1.10.4); con -1 no hay
+# tramo anual, así que nunca se dice "ilimitadas". Función pura (sin ssh, sin
+# efectos) para poder probarla sin conectar a nada.
+bc_hestia_texto_anuales_registro() {
+  [[ "$1" == "-1" ]] && echo 'sin regla anual' || echo "$1"
+}
+
 # =============================================================================
 # Registrar el host de respaldo en HestiaCP
 # =============================================================================
@@ -357,12 +365,12 @@ bc_hestia_restic() {
     rem="$(bc_ask "Remoto de rclone" "almacenamiento")"
     ruta="$(bc_ask "Ruta dentro del remoto" "hestiacp/")"
     repo="rclone:$rem:$ruta"
-    bc_log "Política de retención (por defecto: 30 instantáneas, 8 diarias, 5 semanales, 3 mensuales, anuales ilimitadas)"
+    bc_log "Política de retención (por defecto: 30 instantáneas, 8 diarias, 5 semanales, 3 mensuales, sin tramo anual)"
     snaps="$(bc_ask "Instantáneas totales" "30")"
     d="$(bc_ask "Diarias a conservar" "8")"
     w="$(bc_ask "Semanales" "5")"
     m="$(bc_ask "Mensuales" "3")"
-    y="$(bc_ask "Anuales (-1 = ilimitadas)" "-1")"
+    y="$(bc_ask "Anuales (-1 = sin tramo anual)" "-1")"
   fi
   [[ -n "$repo" ]] || bc_die "hace falta el repositorio."
 
@@ -372,7 +380,7 @@ bc_hestia_restic() {
     printf 'Instantáneas totales\t%s\n' "$snaps"
     printf 'Diarias\t%s\n' "$d"; printf 'Semanales\t%s\n' "$w"
     printf 'Mensuales\t%s\n' "$m"
-    printf 'Anuales\t%s\n' "$([[ "$y" == "-1" ]] && echo 'ilimitadas' || echo "$y")"
+    printf 'Anuales\t%s\n' "$(bc_hestia_texto_anuales_registro "$y")"
   } | bc_table | sed 's/^/        /'
   bc_warn "El PRIMER número es el total de instantáneas, no los días. Es el error"
   bc_warn "más común al configurar esto a mano."
