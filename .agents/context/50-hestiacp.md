@@ -61,6 +61,26 @@ enlace), **SIN VERIFICAR**. Al verificar algo, se actualiza su estado con el enl
   `restic --repo "${REPO%/}/$user" --password-file $USER_DATA/restic.conf forget <política> --prune`:
   `--keep-last $SNAPSHOTS` y `--keep-daily/weekly/monthly/yearly` si la variable es `>= 0`.
   **La poda va dentro del respaldo** y la retención es **global** del panel. FUENTE.
+- Esa condición `>= 0` gobierna **las cinco** variables, no solo la anual: un `-1` en cualquiera
+  de ellas hace que esa regla **no se pase a `restic forget`**. `-1` no es «ilimitadas»: es «sin
+  ese tramo». Con `-1` en todas, `forget --prune` se queda sin política. Verificado en la fuente
+  el 2026-09-23 y en una salida real del servidor del PO (`Applying Policy: keep 30 latest, 8
+  daily, 5 weekly, 3 monthly snapshots`, sin anuales). FUENTE + SERVIDOR.
+
+### Clásico e incremental son independientes (verificado en la fuente, 2026-09-23)
+
+- Cada uno mira **su propio interruptor** en `user.conf`: `v-backup-user` comprueba `BACKUPS`
+  (`is_backup_enabled`), `v-backup-user-restic` comprueba `BACKUPS_INCREMENTAL`
+  (`is_incremental_backup_enabled`). `BACKUPS=0` **no** detiene Restic. FUENTE.
+- **Pero comparten `is_system_enabled "$BACKUP_SYSTEM"`**: si `BACKUP_SYSTEM` está vacío o es
+  `no`, se detienen **los dos**, aunque `BACKUP_INCREMENTAL` sea `yes`
+  ([v-backup-user-restic:36](https://github.com/hestiacp/hestiacp/blob/1.10.4/bin/v-backup-user-restic#L36)).
+  Para quedarse solo con incrementales se quita del cron el trabajo clásico, no el permiso.
+- Restic **no usa el `.tar`**: `v-backup-user-restic` llama a `v-backup-user-config` (volcados de
+  BD y configuración en `/home/<u>/backup/`) y luego `restic backup /home/<u>`
+  ([73-76](https://github.com/hestiacp/hestiacp/blob/1.10.4/bin/v-backup-user-restic#L73-L76)).
+- Ese `/home/<u>/backup/` **no se borra al terminar** (solo se pisa en la corrida siguiente) y
+  **entra dentro de la instantánea**: el respaldo no lleva ninguna exclusión. FUENTE.
 - No hay `v-change-*` para la retención: se repite `v-add-backup-host-restic` con el mismo
   `REPO` o se edita el archivo. FUENTE (listado de `bin/` en la etiqueta).
 - `v-delete-backup-host-restic` borra `conf/restic.conf` y pone `BACKUP_INCREMENTAL=no`: detiene

@@ -331,13 +331,51 @@ grep -q v-backup-users-restic /var/spool/cron/crontabs/hestiaweb \
 
 ---
 
-## Los `.tar` residuales
+## Quedarse solo con los incrementales
 
-HestiaCP exige que `Backups` en el paquete sea **al menos 1**. Con `0`, los
-respaldos de Restic salen en carpetas vacías; y si se desactiva el respaldo local
-globalmente (`local = no`), la pestaña *Backups* desaparece del panel.
+Los dos respaldos son independientes y cada uno mira **su propio interruptor**:
 
-Lo práctico es `Backups = 1` y aceptar un único `.tar` residual.
+| Respaldo | Lo lanza | Comprueba en `user.conf` | Produce |
+|---|---|---|---|
+| Clásico | `v-backup-user` | `BACKUPS` (un número; `0` lo desactiva) | `/backup/<cuenta>.<fecha>.tar` |
+| Incremental | `v-backup-user-restic` | `BACKUPS_INCREMENTAL` (`yes`/`no`) | una instantánea en el repositorio |
+
+Son variables distintas: apagar una no apaga la otra. **Restic no necesita el
+`.tar`**: prepara sus propios volcados con `v-backup-user-config` y después hace
+`restic backup /home/<cuenta>` directamente sobre el disco
+([v-backup-user-restic:73-76](https://github.com/hestiacp/hestiacp/blob/1.10.4/bin/v-backup-user-restic#L73-L76)).
+
+Para dejar de generar `.tar` sin tocar nada más, se quita del crontab de
+`hestiaweb` la línea del respaldo clásico:
+
+```bash
+crontab -u hestiaweb -e     # borrar la línea de v-backup-users
+```
+
+Es reversible y deja el `Backups` del paquete intacto, así que se puede seguir
+lanzando un respaldo clásico a mano desde el panel.
+
+!!! danger "No vacíes `BACKUP_SYSTEM` para conseguir esto"
+    `v-backup-user-restic` comprueba `BACKUP_SYSTEM` igual que el clásico
+    ([línea 36](https://github.com/hestiacp/hestiacp/blob/1.10.4/bin/v-backup-user-restic#L36)):
+    si está vacío o es `no`, **también se detienen los incrementales**, aunque
+    `BACKUP_INCREMENTAL` sea `yes`. Se apaga el trabajo que crea los `.tar`, no
+    el permiso.
+
+!!! warning "El tercer consumo de disco que nadie mira"
+    `v-backup-user-config` prepara los volcados en `/home/<cuenta>/backup/` y
+    **no los borra al terminar**: se quedan sin cifrar hasta que la siguiente
+    corrida los pisa. Además, como `restic backup` se lanza sobre
+    `/home/<cuenta>` sin ninguna exclusión, esa carpeta entra dentro de cada
+    instantánea.
+
+    ```bash
+    du -sh /home/*/backup/
+    ```
+
+Verificado en la fuente de HestiaCP 1.10.4 el 2026-09-23. La versión anterior de
+esta página afirmaba que `Backups` debía ser **al menos 1** o los respaldos de
+Restic saldrían vacíos: es falso, `v-backup-user-restic` no mira esa variable.
 
 ---
 
