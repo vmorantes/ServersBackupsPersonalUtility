@@ -1,66 +1,47 @@
 # Ahora
 
-- **Actualizado:** 2026-09-23, incidente en producción del PO (servidor `stc-admin`).
-- **Último mensaje:** #035 (ARQ). El próximo será #036. Ronda en vuelo con el coder.
-- **Tramo abierto:** `estado/tramos/2026-09-23-2145-incidente-incrementales.md`. El del 16 quedó
-  cerrado.
-- **El PO no está.** Dijo: «No estaré, así que trabajen solos», y que sea rápido, solo estos
-  hallazgos. Nada de ampliar el alcance ni esperarle.
-- **Sin commitear:** este archivo, el tramo del 16, y las correcciones de documentación de hoy
-  (`docs/hestiacp/protocolo-manual.md`, `docs/hestiacp/respaldos-incrementales.md`,
-  `.agents/context/30-trampas.md`, `.agents/docs/roadmap.md`). Rama `fix/limpieza-al-salir`.
-  Las commitea la primera ronda de la próxima sesión, en commits `docs:` y `docs(estado):`.
-
-## El incidente del 2026-09-23 (documentación que hizo daño)
-
-El PO configuró incrementales en un servidor de **producción** siguiendo
-`docs/hestiacp/protocolo-manual.md`. Tres errores de esa guía, los tres corregidos hoy:
-
-1. El ejemplo de `restic init` usaba una **ruta relativa**. Con su remoto de rclone de tipo
-   `local`, la ruta se resolvió desde el directorio de trabajo y el repositorio se creó **dentro
-   de un `public_html`**, servido por internet (T24).
-2. Mandaba inicializar la **ruta registrada**, que es el padre: HestiaCP guarda un repositorio
-   **por cuenta** en `<ruta>/<cuenta>`. El repositorio quedó huérfano y el respaldo siguió
-   fallando (T25).
-3. Ofrecía la **pestaña *Cron* del panel** para programar `v-backup-users-restic`. Eso escribe en
-   el crontab de una cuenta, sin `sudo` ni `PATH`: el PO tenía ahí
-   `30 5 * * * v-backup-users-restic`, que probablemente no ha respaldado nunca.
-
-Sobre el remoto `local` el arquitecto se precipitó: dio por hecho que era la trampa T23 (nuestra
-herramienta vaciando `rclone.conf`) y el PO aclaró que el destino local es **intencionado**.
-
-Guía de recuperación entregada al PO: apartar la contraseña de la cuenta para que HestiaCP
-inicialice solo, rehacer `/IncrementalBackups` con permisos 700, activar `BACKUPS_INCREMENTAL`,
-respaldo manual, comprobación con `restic snapshots` y copia de las contraseñas fuera del
-servidor. Pendiente de su salida.
+- **Actualizado:** 2026-09-23, cierre del día.
+- **Último mensaje:** #042 (COD). El próximo será #043. Ninguna ronda en vuelo.
+- **Tramo:** `estado/tramos/2026-09-23-2145-incidente-incrementales.md`, cerrado.
+- **Rama del árbol:** `release/2.1`, con la fase del incidente ya fusionada (`b811405`).
+- **Sin commitear:** este archivo, el cierre del tramo, la sección nueva de
+  `docs/hestiacp/protocolo-manual.md` («Quedarse solo con los incrementales») y lo añadido a
+  `.agents/context/50-hestiacp.md`. Los commitea la ronda #043.
 
 ## Espera al PO
 
-1. Ejecutar `/root/rehacer-incrementales.sh` y pegar la salida.
-2. Bajarse a su máquina `/root/claves-restic-*.tgz`: sin esas contraseñas, ningún repositorio se
-   vuelve a abrir.
-3. Mañana, comprobar si el cron de las 05:30 respaldó de verdad (`restic ... snapshots`). Si no,
-   moverlo al crontab de `hestiaweb` con ruta absoluta.
-4. Fuera del alcance de los respaldos, visto en su servidor: `public_html` entero en `777` y los
-   directorios `secure-keys/` y `dumps/` dentro de la raíz web.
-5. **AVISO (T21):** antes de un `adoptar --to` real, copiar el `restic.conf` del destino y
+1. **Su servidor de producción quedó funcionando**: repositorio en `/IncrementalBackups/stc-admin`,
+   instantánea `200953a7` comprobada con `restic snapshots`, cron a la 01:00 en el crontab de
+   `hestiaweb`. Nada urgente pendiente ahí.
+2. **Mañana:** comprobar que el cron respaldó (una instantánea con fecha del 24, y un directorio
+   por cada cuenta del panel) y rehacer el `.tgz` de las claves, porque cada cuenta nueva trae la
+   suya. Sin esas contraseñas ningún repositorio se abre.
+3. **Decidido con él, sin ejecutar:** puede quitar el respaldo clásico (`v-backup-users` de las
+   05:10 en el crontab de `hestiaweb`) y borrar `/backup/*.tar`. **No** debe vaciar
+   `BACKUP_SYSTEM`: apagaría también los incrementales.
+4. Fuera del alcance de los respaldos, visto en su servidor: `public_html` entero en `777`, y
+   `secure-keys/` y `dumps/` dentro de la raíz web. Sin mirar todavía.
+5. `git push` cuando quiera (`master` y `release/2.1`). `rm ~/.local/bin/backupctl` sigue
+   pendiente.
+6. **AVISO (T21):** antes de un `adoptar --to` real, copiar el `restic.conf` del destino y
    compararlo al terminar.
-6. En este servidor, no usar todavía `backupctl hestia rclone` ni «Configurar el remoto» de la
-   web (T23, corregido en `fix/limpieza-al-salir`, sin publicar).
-7. `git push` de `master` cuando quiera. `rm ~/.local/bin/backupctl` sigue pendiente.
-8. Los dos `/rename`, que el arquitecto le da al abrir y al cerrar cada sesión (pedido el
-   2026-09-23; antes solo al abrir).
+7. Los dos `/rename`, que el arquitecto le da al abrir y al cerrar cada sesión.
 
 ## Siguiente (mandato del PO: versión 2.1, ADR 0013)
 
-Fase 1, segunda vuelta (#032), en `fix/limpieza-al-salir`: quedan S4 (menciones a agentes en
-comentarios; hoy `verificar.sh` falla solo por `lib/adoptar.sh:39`), S5, S6, S7, S8 y la parte C
-(revisiones y fusión en `release/2.1`). Hechos: A, S1, S2, S3.
-
-La fase 2 (ADR 0016) crece con lo aprendido hoy: ver el bloque nuevo del roadmap. Lo de hoy no es
-teoría, es un servidor de producción que se rompió siguiendo nuestra documentación.
+- **Fase 1**, en `fix/limpieza-al-salir`: quedan S4–S8 de la instrucción #032 y la revisión final.
+  Al fusionarla en `release/2.1` habrá conflicto en los archivos de documentación del incidente
+  (están duplicados por los cherry-pick `f16f18c` y `b07d51e`): se resuelve **quedándose con la
+  versión de `release/2.1`**, que es la posterior.
+- **Fase 2** (ADR 0016): crecida con lo aprendido hoy; la lista está en el roadmap. Lo más
+  urgente de ahí: diagnosticar «hay contraseña pero no hay repositorio», comprobar dónde está el
+  cron, mostrar las bases excluidas, y avisar del área de preparación que nadie limpia.
+- Fases 3 (ADR 0015) y 4 sin empezar.
 
 ## Para una sesión nueva
 
-- Lee el tramo del 16, ADR 0013–0016 y `.agents/context/30-trampas.md` T2, T20–T25.
-- Ramas: `master` (estable), `release/2.1` (versión en curso), `fix/limpieza-al-salir` (fase 1).
+- Lee el tramo del 23, el del 16, ADR 0013–0016 y `.agents/context/30-trampas.md` T2, T20–T26.
+- Ramas: `master` (estable), `release/2.1` (versión en curso, con lo del incidente),
+  `fix/limpieza-al-salir` (fase 1, sin fusionar).
+- Lo verificado hoy en la fuente de HestiaCP 1.10.4 está en `.agents/context/50-hestiacp.md`: no
+  se vuelve a verificar.
