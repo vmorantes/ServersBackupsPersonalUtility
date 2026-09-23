@@ -370,8 +370,17 @@ bc_hestia_validar_repo() {
   # El mismo criterio que ya aplica la web (web/server.py): sin esto, una
   # comilla simple en $repo llega intacta hasta una orden que se ejecuta
   # como root (bc_hestia_v "v-add-backup-host-restic '$repo' ...").
-  local ruta rem=""
+  # Qué forma tiene $repo: de eso depende qué comprobaciones tienen sentido
+  # más abajo. El tipo del remoto SOLO se puede consultar para "rclone"
+  # (rclone config show); en "otro" (sftp:, s3:, b2:…) lo que sigue al
+  # esquema no es necesariamente una ruta del sistema de archivos —puede ser
+  # host:puerto/bucket o una URL entera—, así que las reglas pensadas para
+  # rutas de archivo (tipo de remoto, "//") no se le aplican (revisión de
+  # #041: rechazaban repositorios válidos de restic con un mensaje que
+  # hablaba de otra cosa).
+  local esquema ruta rem=""
   if [[ "$repo" == rclone:* ]]; then
+    esquema=rclone
     if [[ ! "$repo" =~ ^rclone:[A-Za-z0-9._-]+:[A-Za-z0-9._/-]*$ ]]; then
       bc_err "repositorio no válido: '$repo'."
       bc_log  "Con rclone:, el nombre del remoto y la ruta solo admiten letras,"
@@ -382,6 +391,7 @@ bc_hestia_validar_repo() {
     rem="${resto%%:*}"
     ruta="${resto#*:}"
   elif [[ "$repo" == /* ]]; then
+    esquema=local
     if [[ ! "$repo" =~ ^[A-Za-z0-9._/-]+$ ]]; then
       bc_err "repositorio no válido: '$repo'."
       bc_log  "Una ruta local solo admite letras, números, '.', '_', '-' y '/'."
@@ -389,6 +399,7 @@ bc_hestia_validar_repo() {
     fi
     ruta="$repo"
   else
+    esquema=otro
     if [[ ! "$repo" =~ ^[A-Za-z0-9._:/-]+$ ]]; then
       bc_err "repositorio no válido: '$repo'."
       bc_log  "Solo se admiten letras, números, '.', '_', '-', ':' y '/'."
@@ -402,11 +413,19 @@ bc_hestia_validar_repo() {
     return 1
   fi
 
-  # --- No se intenta normalizar: una ruta con ".." o "//" se rechaza tal
-  # cual (H8) — no se puede resolver sin tocar el servidor, y una
-  # normalización a medias es peor que un rechazo.
-  if [[ "$ruta" == *..* || "$ruta" == *//* ]]; then
-    bc_err "la ruta '$ruta' no puede llevar '..' ni '//'. Escríbela limpia."
+  # --- No se intenta normalizar: una ruta con ".." se rechaza tal cual (H8)
+  # — no se puede resolver sin tocar el servidor, y una normalización a
+  # medias es peor que un rechazo. Esto vale para los tres esquemas.
+  if [[ "$ruta" == *..* ]]; then
+    bc_err "la ruta '$ruta' no puede llevar '..'. Escríbela limpia."
+    return 1
+  fi
+
+  # "//" solo se rechaza en rclone y en una ruta local: ahí es siempre parte
+  # del propio sistema de archivos. En "otro" esquema puede ser el "//" de
+  # una URL (s3:https://s3.example.org/bucket) y no dice nada malo (#041).
+  if [[ "$esquema" != "otro" && "$ruta" == *//* ]]; then
+    bc_err "la ruta '$ruta' no puede llevar '//'. Escríbela limpia."
     return 1
   fi
 
@@ -418,6 +437,14 @@ bc_hestia_validar_repo() {
   fi
 
   # --- Según el tipo de remoto (H4: local vs envolvente vs desconocido) ---
+  # Solo para "rclone": el tipo únicamente se puede consultar (rclone config
+  # show) para un remoto de rclone. En "otro" esquema no hay tipo que
+  # consultar y estas reglas no aplican — lo que sigue al esquema no es
+  # necesariamente una ruta del sistema de archivos (#041).
+  if [[ "$esquema" != "rclone" ]]; then
+    return 0
+  fi
+
   local envolvente=0
   case "$tipo" in
     alias|crypt|union|combine|chunker|compress) envolvente=1 ;;

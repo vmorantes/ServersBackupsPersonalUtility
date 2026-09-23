@@ -132,6 +132,52 @@ test_absolute_path_without_scheme_passes() {
   afirmar_contiene "$BANCO_TMP/t12/salida.log" "CODIGO:0" "'/IncrementalBackups' sin esquema: pasa"
 }
 
+# #041: el tipo del remoto solo se puede consultar para "rclone:"; en otros
+# esquemas de restic (sftp:, s3:, b2:…) lo que sigue no es necesariamente una
+# ruta del sistema de archivos, así que las reglas de tipo de remoto y "//"
+# no se les aplican. Repositorio válido de restic, sin rclone de por medio.
+test_other_scheme_s3_bare_host_passes_without_warning() {
+  nueva_prueba t13
+  local salida; salida="$(ejecutar_validar_repo "s3:s3.amazonaws.com/mi-bucket/hestiacp" "")"
+  echo "$salida" > "$BANCO_TMP/t13/salida.log"
+  afirmar_contiene "$BANCO_TMP/t13/salida.log" "CODIGO:0" "s3:s3.amazonaws.com/... pasa"
+  afirmar_no_contiene "$BANCO_TMP/t13/salida.log" "AVISO" "sin avisar: no es un remoto de rclone"
+}
+
+# El "//" de una URL (s3:https://...) no es un "//" de ruta: no se rechaza
+# fuera de rclone/local.
+test_other_scheme_s3_url_with_double_slash_passes() {
+  nueva_prueba t14
+  local salida; salida="$(ejecutar_validar_repo "s3:https://s3.example.org/mi-bucket" "")"
+  echo "$salida" > "$BANCO_TMP/t14/salida.log"
+  afirmar_contiene "$BANCO_TMP/t14/salida.log" "CODIGO:0" "s3:https://s3.example.org/mi-bucket pasa (el '//' de la URL no lo tumba)"
+}
+
+test_other_scheme_sftp_absolute_path_passes() {
+  nueva_prueba t15
+  local salida; salida="$(ejecutar_validar_repo "sftp:servidor.example.org:/respaldos/hestiacp" "")"
+  echo "$salida" > "$BANCO_TMP/t15/salida.log"
+  afirmar_contiene "$BANCO_TMP/t15/salida.log" "CODIGO:0" "sftp:servidor.example.org:/respaldos/hestiacp pasa"
+}
+
+# Pero "dentro de una web" SÍ se comprueba para los tres esquemas: si un
+# sftp: apunta a la carpeta de una web, el problema es el mismo.
+test_other_scheme_sftp_inside_a_website_is_rejected() {
+  nueva_prueba t16
+  local salida; salida="$(ejecutar_validar_repo "sftp:servidor.example.org:/home/u/web/example.org/copias" "")"
+  echo "$salida" > "$BANCO_TMP/t16/salida.log"
+  afirmar_contiene "$BANCO_TMP/t16/salida.log" "CODIGO:1" "sftp: dentro de /home/*/web/* se rechaza"
+  afirmar_contiene "$BANCO_TMP/t16/salida.log" "sitio web" "el mensaje menciona la web"
+}
+
+# Y ".." tampoco se perdona en ningún esquema.
+test_other_scheme_s3_with_dotdot_is_rejected() {
+  nueva_prueba t17
+  local salida; salida="$(ejecutar_validar_repo "s3:bucket/../otro" "")"
+  echo "$salida" > "$BANCO_TMP/t17/salida.log"
+  afirmar_contiene "$BANCO_TMP/t17/salida.log" "CODIGO:1" "s3:bucket/../otro se rechaza por los '..'"
+}
+
 test_single_quote_is_rejected
 test_shell_metacharacters_are_rejected
 test_rclone_repo_without_second_colon_is_rejected
@@ -144,5 +190,10 @@ test_type_alias_with_absolute_path_passes_with_warning
 test_unknown_type_with_relative_path_is_rejected
 test_type_s3_with_relative_path_passes_without_warning
 test_absolute_path_without_scheme_passes
+test_other_scheme_s3_bare_host_passes_without_warning
+test_other_scheme_s3_url_with_double_slash_passes
+test_other_scheme_sftp_absolute_path_passes
+test_other_scheme_sftp_inside_a_website_is_rejected
+test_other_scheme_s3_with_dotdot_is_rejected
 
 fin_de_suite
