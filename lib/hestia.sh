@@ -714,6 +714,274 @@ bc_hestia_diag_ruta_repo() {
 }
 
 # =============================================================================
+# Desactivar el respaldo incremental
+# =============================================================================
+# ESTA ORDEN NO BORRA NI UN BYTE DE LAS COPIAS. Deja de hacer copias nuevas;
+# las que hay siguen donde están, ocupando lo mismo, y se puede volver atrás.
+#
+# Desactivar son TRES cosas, y hacer solo una deja el servidor a medias sin que
+# nadie lo note (fuente 1.10.4):
+#   1. Quitar la línea del cron.
+#   2. Borrar el host de respaldo. Esto pone el interruptor DE SISTEMA en 'no'
+#      y borra la configuración global... pero NO TOCA NINGUNA CUENTA.
+#   3. Poner la marca de cada cuenta en 'no', una por una. Esto es lo único que
+#      de verdad impide que una cuenta respalde: si mañana se registra otro
+#      repositorio, las cuentas que sigan marcadas EMPIEZAN A RESPALDAR SOLAS.
+#
+# Y antes de nada, una comprobación que no está en el plan original: si hay
+# cuentas con copias cuya clave no está rescatada, desactivar las deja con
+# copias que nadie podrá abrir si se pierde la máquina. Con -y, que es como
+# llama la web, la orden se NIEGA: un aviso que nadie lee no protege nada, y
+# esta es la única orden del ciclo cuyo daño no se ve hasta que es tarde.
+bc_hestia_desactivar() {
+  bc_hestia_conectar
+  trap 'bc_hestia_cerrar' RETURN
+
+  bc_section "Desactivar el respaldo incremental"
+  bc_log "Esto NO borra ninguna copia: deja de hacer copias nuevas. Las que hay"
+  bc_log "siguen donde están y se puede volver a activar."
+
+  # --- Lo que hay ahora, todo de lectura ------------------------------------
+  local conf repo snaps d w m y
+  conf="$(bc_hestia_read "cat $(printf '%q' "$HESTIA_CONF_RESTIC")" || true)"
+  repo="$(bc_hestia_conf_valor "$conf" REPO)"
+  snaps="$(bc_hestia_conf_valor "$conf" SNAPSHOTS)"
+  d="$(bc_hestia_conf_valor "$conf" KEEP_DAILY)"
+  w="$(bc_hestia_conf_valor "$conf" KEEP_WEEKLY)"
+  m="$(bc_hestia_conf_valor "$conf" KEEP_MONTHLY)"
+  y="$(bc_hestia_conf_valor "$conf" KEEP_YEARLY)"
+
+  local lista
+  lista="$(bc_hestia_read "$HESTIA_DIR/bin/v-list-users plain" || true)"
+  if [[ -z "$lista" ]]; then
+    bc_err "no se pudo leer la lista de cuentas: no se desactiva nada a ciegas."
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+
+  local marcadas=() con_copias_sin_clave=() u
+  local rescate rescate_txt=""
+  rescate="$(bc_hestia_rescate_anterior "$(bc_hestia_salida)" "")"
+  [[ -n "$rescate" ]] && rescate_txt="$(cat "$rescate" 2>/dev/null || true)"
+
+  while IFS= read -r u; do
+    u="$(awk '{print $1}' <<<"$u")"
+    [[ -z "$u" || "$u" == "USER" ]] && continue
+    [[ "$(bc_hestia_sondear "grep -q \"^BACKUPS_INCREMENTAL='yes'\" $(printf '%q' "$HESTIA_DIR/data/users/$u/user.conf")")" == "1" ]] \
+      && marcadas+=("$u")
+    # ¿Tiene copias y su clave NO está rescatada aquí? Solo se mira si el
+    # bloque existe: el valor no se lee ni se enseña.
+    if [[ -n "$repo" && "$(bc_hestia_sondear_repo "$repo" "$u")" == "1" ]]; then
+      [[ -n "$(bc_hestia_bloque_rescatado "$rescate_txt" "$u")" ]] || con_copias_sin_clave+=("$u")
+    fi
+  done <<<"$lista"
+
+  bc_log "Cuentas marcadas para respaldo incremental: ${#marcadas[@]}"
+  [[ -n "$repo" ]] && bc_log "Repositorio registrado: $repo"
+
+  # --- La comprobación que protege de lo irreversible ------------------------
+  if (( ${#con_copias_sin_clave[@]} > 0 )); then
+    echo
+    bc_err "TIENEN COPIAS Y SU CLAVE NO ESTÁ RESCATADA (${#con_copias_sin_clave[@]}): ${con_copias_sin_clave[*]}"
+    bc_log  "Si desactivas ahora, dejas de hacer copias de un servidor cuyas copias"
+    bc_log  "existentes NO se podrían abrir si se pierde la máquina: la contraseña"
+    bc_log  "que las descifra vive solo dentro de él."
+    bc_log  "Rescátalas primero:  backupctl -p $BC_PROFILE hestia keys"
+    if [[ "${BC_ASSUME_YES:-0}" == "1" ]]; then
+      echo
+      bc_err "NO se desactiva nada. Con --yes esta orden no pasa de aquí."
+      bc_log  "Un aviso que nadie lee no protege nada, y este daño no se ve hasta"
+      bc_log  "que ya es tarde. Rescata las claves y vuelve a intentarlo."
+      BC_DELIBERATE_EXIT=1
+      return 1
+    fi
+    bc_confirm "¿Desactivar DE TODOS MODOS, sin esas claves rescatadas?" n \
+      || { bc_log "Cancelado. Rescata las claves primero."; return 0; }
+  fi
+
+  if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
+    echo
+    bc_step "Simulación (--dry-run): esto es lo que PASARÍA, no lo que ha pasado."
+    bc_log "Se quitaría la línea del cron de $BC_HESTIA_CRONTAB_SIS."
+    bc_log "Se borraría el host de respaldo (la configuración global)."
+    if (( ${#marcadas[@]} > 0 )); then
+      bc_log "Se desmarcarían ${#marcadas[@]} cuenta(s): ${marcadas[*]}"
+    else
+      bc_log "No hay ninguna cuenta marcada que desmarcar."
+    fi
+    bc_log "NO se borraría ninguna copia del almacenamiento."
+    bc_ok "No se ha tocado nada, y no se ha guardado ningún informe."
+    return 0
+  fi
+
+  echo
+  bc_confirm "¿Desactivar el respaldo incremental?" n \
+    || { bc_log "Cancelado."; return 0; }
+
+  bc_informe_abrir "Desactivar el respaldo incremental" "${DEPLOY_HOST:-este servidor}"
+  # Lo primero del informe, porque es lo primero que alguien se preguntará.
+  bc_informe_dato "Las copias del almacenamiento" "" \
+    "NO se borran: esta orden solo deja de hacer copias nuevas"
+  bc_informe_dato "Espacio liberado" "" "ninguno: no se borra nada"
+  bc_informe_dato "Repositorio que estaba registrado" "$repo" "(ninguno)"
+  bc_informe_dato "Retención que tenía" "$(bc_hestia_retencion_pedida "$snaps" "$d" "$w" "$m" "$y")" "(ninguna)"
+  bc_informe_deshacer "Para volver a activarlo con los MISMOS valores: backupctl -p $BC_PROFILE hestia restic --repo '$repo' (la retención se pide por teclado: $snaps, $d, $w, $m, $y) y después: backupctl -p $BC_PROFILE hestia cron"
+
+  local rc=0
+
+  # --- 1. El cron -----------------------------------------------------------
+  bc_hestia_desactivar_cron || rc=1
+
+  # --- 2. El host de respaldo ----------------------------------------------
+  bc_hestia_desactivar_host || rc=1
+
+  # --- 3. Las cuentas, una por una -----------------------------------------
+  local fallidas=0
+  if (( ${#marcadas[@]} == 0 )); then
+    bc_ok "No hay ninguna cuenta marcada: nada que desmarcar."
+    bc_informe_paso "Desmarcar cuentas" SIN_CAMBIO "no había ninguna marcada"
+  else
+    for u in "${marcadas[@]}"; do
+      echo
+      bc_log "Cuenta '$u':"
+      bc_hestia_desmarcar_cuenta "$u" || { fallidas=$(( fallidas + 1 )); rc=1; }
+    done
+  fi
+
+  echo
+  if (( fallidas > 0 )); then
+    bc_err "$fallidas cuenta(s) SIGUEN MARCADAS para respaldo incremental."
+    bc_log  "Eso significa que si mañana registras otro repositorio, esas cuentas"
+    bc_log  "EMPEZARÁN A RESPALDAR SOLAS, sin que nadie lo pida. Quítales la marca"
+    bc_log  "a mano o vuelve a ejecutar esta orden."
+  fi
+  bc_log "Las copias que había siguen en el almacenamiento: no se ha borrado nada."
+
+  local estado; estado="$([[ $rc -eq 0 ]] && echo HECHO || echo FALLO)"
+  bc_informe_paso "Desactivar" "$estado" \
+    "$([[ $fallidas -gt 0 ]] && echo "$fallidas cuenta(s) siguen marcadas" || echo "cron, host y cuentas")"
+  local ruta; ruta="$(bc_informe_cerrar "$estado")"
+  [[ -n "$ruta" ]] && bc_log "Informe de lo hecho: $ruta"
+  (( rc != 0 )) && BC_DELIBERATE_EXIT=1
+  return "$rc"
+}
+
+# 1. Quitar la línea del cron, con su copia fechada.
+bc_hestia_desactivar_cron() {
+  local ct; ct="$(printf '%q' "$BC_HESTIA_CRONTAB_SIS")"
+  local copia=""
+  if ! copia="$(bc_hestia_copia_fechada "$BC_HESTIA_CRONTAB_SIS")"; then
+    bc_err "no se pudo copiar el crontab: NO se toca la programación."
+    bc_informe_paso "Quitar del cron" FALLO "no se pudo copiar el crontab"
+    return 1
+  fi
+  [[ -n "$copia" ]] && { bc_informe_copia "$BC_HESTIA_CRONTAB_SIS" "$copia"; \
+    bc_log "  Copia del crontab: $copia"; }
+
+  local orden="sed -i '/v-backup-users\\?-restic/d' $ct && chmod 600 $ct && chown hestiaweb:hestiaweb $ct"
+  bc_informe_orden "$orden"
+  local datos
+  datos="$(bc_hestia_escribir_y_confirmar "Quitar del cron" "$orden" "cat $ct" \
+      bc_hestia_sin_cron_ya_estaba bc_hestia_sin_cron_se_hizo)"
+
+  case "$(bc_hestia_dato_de "$datos" estado)" in
+    HECHO)      bc_ok "Programación quitada del cron, y comprobado."
+                bc_informe_paso "Quitar del cron" HECHO "la línea ya no está"; return 0 ;;
+    SIN_CAMBIO) bc_ok "No había ninguna programación en ese crontab."
+                bc_informe_paso "Quitar del cron" SIN_CAMBIO "no había nada que quitar"; return 0 ;;
+    SIN_CONFIRMAR)
+                bc_err "Se pidió quitar la línea del cron y AL RELEER SIGUE AHÍ."
+                bc_log  "El respaldo seguirá ejecutándose cada noche. Mira $BC_HESTIA_CRONTAB_SIS."
+                bc_informe_paso "Quitar del cron" SIN_CONFIRMAR "la línea sigue en el crontab"; return 1 ;;
+    *)          bc_err "No se pudo quitar la línea del cron."
+                bc_informe_paso "Quitar del cron" FALLO "no se pudo quitar"; return 1 ;;
+  esac
+}
+
+# Los jueces del cron al revés: cumple cuando NO hay ninguna línea.
+bc_hestia_sin_cron_ya_estaba() { [[ -z "$(bc_hestia_cron_linea_de "${1:-}")" ]]; }
+bc_hestia_sin_cron_se_hizo()   { [[ -z "$(bc_hestia_cron_linea_de "${2:-}")" ]]; }
+
+# 2. Borrar el host de respaldo. OJO: esto NO toca ninguna cuenta.
+bc_hestia_desactivar_host() {
+  local conf; conf="$(printf '%q' "$HESTIA_CONF_RESTIC")"
+  local copia=""
+  copia="$(bc_hestia_copia_fechada "$HESTIA_CONF_RESTIC")" || copia=""
+  [[ -n "$copia" ]] && { bc_informe_copia "$HESTIA_CONF_RESTIC" "$copia"; \
+    bc_log "  Copia de la configuración: $copia"; }
+
+  local orden="$HESTIA_DIR/bin/v-delete-backup-host-restic"
+  bc_informe_orden "$orden"
+  local datos
+  datos="$(bc_hestia_escribir_y_confirmar "Borrar el host de respaldo" "$orden" \
+      "cat $conf 2>/dev/null || true" bc_hestia_sin_host_ya_estaba bc_hestia_sin_host_se_hizo)"
+
+  case "$(bc_hestia_dato_de "$datos" estado)" in
+    HECHO)      bc_ok "Host de respaldo borrado, y comprobado."
+                bc_informe_paso "Borrar el host" HECHO "ya no hay repositorio registrado"; return 0 ;;
+    SIN_CAMBIO) bc_ok "No había ningún host de respaldo registrado."
+                bc_informe_paso "Borrar el host" SIN_CAMBIO "no había nada registrado"; return 0 ;;
+    SIN_CONFIRMAR)
+                bc_err "Se pidió borrar el host y la configuración SIGUE AHÍ."
+                bc_informe_paso "Borrar el host" SIN_CONFIRMAR "la configuración sigue registrada"; return 1 ;;
+    *)          bc_err "No se pudo borrar el host de respaldo."
+                bc_informe_paso "Borrar el host" FALLO "no se pudo borrar"; return 1 ;;
+  esac
+}
+
+# Cumple cuando ya no queda ningún repositorio registrado.
+bc_hestia_sin_host_ya_estaba() { [[ -z "$(bc_hestia_conf_valor "${1:-}" REPO)" ]]; }
+bc_hestia_sin_host_se_hizo()   { [[ -z "$(bc_hestia_conf_valor "${2:-}" REPO)" ]]; }
+
+# 3. Desmarcar UNA cuenta. Es lo único que de verdad impide que respalde.
+bc_hestia_desmarcar_cuenta() {
+  local u="${1:-}"
+  local archivo="$HESTIA_DIR/data/users/$u/user.conf"
+  local esc; esc="$(printf '%q' "$archivo")"
+
+  local copia=""
+  if ! copia="$(bc_hestia_copia_fechada "$archivo")" || [[ -z "$copia" ]]; then
+    bc_err "  no se pudo copiar su user.conf: NO se toca esta cuenta."
+    bc_informe_paso "Desmarcar $u" FALLO "no se pudo copiar su user.conf"
+    return 1
+  fi
+  bc_informe_copia "$archivo" "$copia"
+  bc_informe_deshacer "cp -p $copia $archivo   # cuenta $u"
+
+  local orden="$HESTIA_DIR/bin/v-change-user-config-value $(printf '%q' "$u") BACKUPS_INCREMENTAL no"
+  bc_informe_orden "$orden"
+  local datos
+  datos="$(bc_hestia_escribir_y_confirmar "Desmarcar $u" "$orden" "cat $esc" \
+      bc_hestia_desmarcada_ya_estaba bc_hestia_desmarcada_se_hizo)"
+
+  local antes despues
+  antes="$(bc_hestia_restaurar_saltos "$(bc_hestia_dato_de "$datos" antes)")"
+  despues="$(bc_hestia_restaurar_saltos "$(bc_hestia_dato_de "$datos" despues)")"
+  bc_informe_dato "Cuenta $u — respaldo incremental" \
+    "$(bc_hestia_marca_de "$antes")" "$(bc_hestia_marca_de "$despues")"
+
+  case "$(bc_hestia_dato_de "$datos" estado)" in
+    HECHO)      bc_ok "  desmarcada, y comprobado leyendo su user.conf de vuelta."
+                bc_informe_paso "Desmarcar $u" HECHO "desmarcada y confirmada"; return 0 ;;
+    SIN_CAMBIO) bc_ok "  ya estaba desmarcada."
+                bc_informe_paso "Desmarcar $u" SIN_CAMBIO "ya estaba desmarcada"; return 0 ;;
+    SIN_CONFIRMAR)
+                bc_err "  la orden dijo que fue bien y su user.conf SIGUE MARCADO."
+                bc_informe_paso "Desmarcar $u" SIN_CONFIRMAR "sigue marcada"; return 1 ;;
+    ESCRITO_SIN_COMPROBAR)
+                bc_err "  se escribió y no se pudo volver a leer su user.conf."
+                bc_informe_paso "Desmarcar $u" ESCRITO_SIN_COMPROBAR "sin comprobar"; return 1 ;;
+    *)          bc_err "  no se pudo desmarcar."
+                bc_informe_paso "Desmarcar $u" FALLO "no se pudo desmarcar"; return 1 ;;
+  esac
+}
+
+# Cumple cuando la cuenta NO está marcada. Una cuenta sin la clave tampoco
+# está marcada: no respalda, que es lo que aquí se busca.
+bc_hestia_desmarcada_ya_estaba() { [[ "$(bc_hestia_marca_de "${1:-}")" != "yes" ]]; }
+bc_hestia_desmarcada_se_hizo()   { [[ "$(bc_hestia_marca_de "${2:-}")" != "yes" ]]; }
+
+# =============================================================================
 # La primera copia, COMPROBADA
 # =============================================================================
 # El paso que cierra el ciclo, y el único que demuestra que todo lo anterior
