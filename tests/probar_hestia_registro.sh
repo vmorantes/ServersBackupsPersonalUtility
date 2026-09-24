@@ -253,6 +253,20 @@ test_an_unreadable_state_writes_nothing() {
     "ninguna orden de escritura enviada"
 }
 
+# Un rechazo del destino también deja informe: responde a «¿por qué mi
+# servidor no cambió el martes?», que es la mitad del motivo por el que existe
+# ese archivo. (Con una ruta local no hay destino que sondear, así que esto se
+# comprueba por el otro lado: que el informe del camino normal exista y diga
+# qué se pidió, incluso antes de tocar nada.)
+test_the_report_records_what_was_asked_for() {
+  nueva_prueba t8
+  registrar t8 "@vacio" "conf-igual" 0 ok si >/dev/null
+  local informe; informe="$(informe_de t8)"
+  afirmar_contiene "$informe" "\| Repositorio pedido \|  \| $REPO_PEDIDO \|" \
+    "el informe deja constancia de lo que se pidió, no solo de lo que pasó"
+  afirmar_contiene "$informe" "\| Retención pedida \|" "y de la retención pedida"
+}
+
 test_an_unconfigured_server_is_written_and_confirmed
 test_an_already_configured_server_is_not_touched
 test_a_write_that_reports_success_but_changes_nothing_fails_the_command
@@ -260,5 +274,6 @@ test_a_failed_backup_copy_stops_everything
 test_a_dry_run_writes_nothing_and_files_nothing
 test_a_registered_host_without_restic_is_not_a_success
 test_an_unreadable_state_writes_nothing
+test_the_report_records_what_was_asked_for
 
 fin_de_suite

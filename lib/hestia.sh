@@ -1513,52 +1513,21 @@ bc_hestia_restic() {
 
   bc_confirm "¿Registrarlo en HestiaCP?" y || { bc_log "Cancelado."; return 0; }
 
-  # v-add-backup-host-restic ejecuta `rclone lsd` sobre el repositorio y aborta
-  # con «Rclone repository does not exist» si no puede listarlo. Ese mensaje no
-  # distingue entre las tres causas posibles, así que se comprueban aquí antes,
-  # una por una, y se dice cuál es.
-  if [[ "$repo" == rclone:* ]]; then
-    bc_hestia_requiere_rclone || return 1
-    local ruta_rclone="${repo#rclone:}"
-    bc_log "Comprobando que el destino existe y responde..."
-    if ! bc_hestia_root "rclone lsd '$ruta_rclone'" >/dev/null 2>&1; then
-      bc_err "rclone no puede listar '$ruta_rclone'. HestiaCP rechazará el registro."
-      bc_log  "Las causas posibles, en orden:"
-      bc_log  "  1. El remoto '${ruta_rclone%%:*}' no está configurado en el servidor."
-      bc_log  "     Hazlo en el paso 1, «Configurar el remoto»."
-      bc_log  "  2. El bucket no existe todavía en tu proveedor. Créalo en su panel:"
-      bc_log  "     esto no lo puede hacer nadie desde aquí."
-      bc_log  "  3. Las claves o el endpoint son incorrectos."
-      bc_log  "Salida de rclone:"
-      bc_hestia_root "rclone lsd '$ruta_rclone' 2>&1 | head -5" | sed 's/^/        /' || true
-      BC_DELIBERATE_EXIT=1
-      return 1
-    fi
-    bc_ok "El destino responde."
+  # El informe se abre ANTES de comprobar el destino: un rechazo por ruta
+  # inaccesible o por ruta compartida es INFORMACIÓN, no un no-suceso.
+  # Responde a «¿por qué mi servidor no cambió el martes?», que es la mitad
+  # del motivo por el que existe este archivo. No es como el ensayo: allí no
+  # llegó a haber ni intento; aquí hubo intento y hubo una decisión.
+  bc_informe_abrir "Registrar el host de respaldo" "${DEPLOY_HOST:-este servidor}"
+  bc_informe_dato "Repositorio pedido" "" "$repo"
+  bc_informe_dato "Retención pedida" "" "$BC_HESTIA_PEDIDO_RETENCION"
 
-    # -----------------------------------------------------------------------
-    # ¿Esa ruta ya la usa otro servidor?
-    # -----------------------------------------------------------------------
-    # Dentro de la ruta, HestiaCP guarda un repositorio por cuenta. Si ya hay
-    # carpetas y NO es la ruta que este mismo servidor tiene registrada, lo
-    # normal es que sean de otro servidor. Compartirla es destructivo: tras
-    # cada respaldo cada uno ejecuta `restic forget --prune` con su política,
-    # y las cuentas con el mismo nombre acabarían en el mismo repositorio.
-    # Con la interfaz todo se confirma solo, así que aquí no se pregunta: se
-    # rechaza, y solo se permite a propósito con --ruta-compartida.
-    local ocupantes actual
-    ocupantes="$( { bc_hestia_root "rclone lsd '$ruta_rclone' 2>/dev/null" || true; } | awk '{print $NF}' | sed '/^$/d')"
-    actual="$(bc_hestia_read "sed -n \"s/^REPO='\\(.*\\)'$/\\1/p\" '$HESTIA_CONF_RESTIC'" || true)"
-    if [[ -n "$ocupantes" && "${actual%/}" != "${repo%/}" && "${BC_OPT_RUTA_COMPARTIDA:-0}" != "1" ]]; then
-      bc_err "Esa ruta YA CONTIENE repositorios que este servidor no tiene registrados:"
-      sed 's/^/          - /' <<<"$ocupantes" >&2
-      bc_log "Si son de otro servidor, compartirla haría que la retención de uno"
-      bc_log "borrara las copias del otro. Usa otro bucket u otra ruta."
-      bc_log "Si de verdad es a propósito (este servidor continúa esos respaldos):"
-      bc_log "    backupctl -p $BC_PROFILE hestia restic --repo '$repo' --ruta-compartida"
-      BC_DELIBERATE_EXIT=1
-      return 1
-    fi
+  if ! bc_hestia_restic_destino_usable "$repo"; then
+    bc_informe_paso "Comprobar el destino" FALLO \
+      "el destino no se puede usar; no se ha registrado nada"
+    bc_informe_cerrar "FALLO" >/dev/null
+    BC_DELIBERATE_EXIT=1
+    return 1
   fi
 
   # ---------------------------------------------------------------------------
@@ -1568,7 +1537,6 @@ bc_hestia_restic() {
   # de la propia orden como única prueba. Es exactamente lo que el ADR 0017
   # dice que no se puede hacer —HestiaCP registra éxitos que no ocurrieron— y
   # además impedía escribir el informe justo en el caso en que más falta hace.
-  bc_informe_abrir "Registrar el host de respaldo" "${DEPLOY_HOST:-este servidor}"
 
   # La copia a la que volver, ANTES de tocar nada. Si no se puede hacer, no se
   # escribe: sin poder volver atrás no se toca un servidor de producción.
@@ -1606,7 +1574,14 @@ $(printf '%q' "$snaps") $(printf '%q' "$d") $(printf '%q' "$w") $(printf '%q' "$
   # igualmente (fuente 1.10.4). Es la misma familia de fallo que el del
   # respaldo incremental: dar por bueno lo que no se comprobó. Así que se
   # pregunta aparte, y es de solo lectura.
-  local restic_vivo; restic_vivo="$(bc_hestia_comprobar_restic)"
+  #
+  # Solo se pregunta si el registro salió bien: si no, es una consulta de más
+  # a un servidor que justo ahora está teniendo problemas, y su respuesta no
+  # cambiaría nada de lo que hay que decir.
+  local restic_vivo="?"
+  case "$(bc_hestia_dato_de "$datos" estado)" in
+    HECHO|SIN_CAMBIO) restic_vivo="$(bc_hestia_comprobar_restic)" ;;
+  esac
 
   local rc=0
   bc_hestia_informar_restic "$datos" "$repo" "$copia" "$restic_vivo" || rc=$?
@@ -1628,6 +1603,67 @@ $(printf '%q' "$snaps") $(printf '%q' "$d") $(printf '%q' "$w") $(printf '%q' "$
   bc_log "Cada cuenta tendrá su propio repositorio en ${repo%/}/<usuario>."
   bc_log "HestiaCP los crea solo la primera vez que las respalde: tras activar el"
   bc_log "cron, al día siguiente deberían aparecer en «Configuración de Restic»."
+  return 0
+}
+
+# -----------------------------------------------------------------------------
+# ¿Se puede usar ese destino?
+# -----------------------------------------------------------------------------
+# Todo lo que hay que mirar ANTES de tocar nada. Va aparte porque el paso
+# siguiente necesita engancharse en el mismo sitio, y porque una función que
+# pregunta, valida, comprueba el destino, escribe e informa no la revisa nadie
+# de verdad. Esta SOLO LEE. Devuelve 0 si se puede seguir.
+# $1 repositorio pedido
+bc_hestia_restic_destino_usable() {
+  local repo="${1:-}"
+  [[ "$repo" == rclone:* ]] || return 0   # una ruta local no se sondea aquí
+
+  bc_hestia_requiere_rclone || return 1
+  local ruta_rclone="${repo#rclone:}"
+
+  # v-add-backup-host-restic ejecuta un listado sobre el repositorio y aborta
+  # con «Rclone repository does not exist» si no puede verlo. Ese mensaje no
+  # distingue entre las tres causas posibles, así que se comprueban aquí
+  # antes, una por una, y se dice cuál es.
+  bc_log "Comprobando que el destino existe y responde..."
+  if ! bc_hestia_root "rclone lsd $(printf '%q' "$ruta_rclone")" >/dev/null 2>&1; then
+    bc_err "no se puede listar '$ruta_rclone'. HestiaCP rechazará el registro."
+    bc_log  "Las causas posibles, en orden:"
+    bc_log  "  1. El remoto '${ruta_rclone%%:*}' no está configurado en el servidor."
+    bc_log  "     Hazlo en el paso 1, «Configurar el remoto»."
+    bc_log  "  2. El bucket no existe todavía en tu proveedor. Créalo en su panel:"
+    bc_log  "     esto no lo puede hacer nadie desde aquí."
+    bc_log  "  3. Las claves o el endpoint son incorrectos."
+    bc_log  "Lo que respondió el servidor:"
+    bc_hestia_root "rclone lsd $(printf '%q' "$ruta_rclone") 2>&1 | head -5" \
+      | sed 's/^/        /' || true
+    return 1
+  fi
+  bc_ok "El destino responde."
+
+  # ---------------------------------------------------------------------------
+  # ¿Esa ruta ya la usa otro servidor?
+  # ---------------------------------------------------------------------------
+  # Dentro de la ruta, HestiaCP guarda un repositorio por cuenta. Si ya hay
+  # carpetas y NO es la ruta que este mismo servidor tiene registrada, lo
+  # normal es que sean de otro servidor. Compartirla es destructivo: tras cada
+  # respaldo cada uno aplica SU política de retención sobre el mismo sitio, y
+  # las cuentas con el mismo nombre acabarían en el mismo repositorio. Con la
+  # interfaz todo se confirma solo, así que aquí no se pregunta: se rechaza, y
+  # solo se permite a propósito con --ruta-compartida.
+  local ocupantes actual
+  ocupantes="$( { bc_hestia_root "rclone lsd $(printf '%q' "$ruta_rclone") 2>/dev/null" || true; } \
+                | awk '{print $NF}' | sed '/^$/d')"
+  actual="$(bc_hestia_read "sed -n \"s/^REPO='\\(.*\\)'$/\\1/p\" '$HESTIA_CONF_RESTIC'" || true)"
+  if [[ -n "$ocupantes" && "${actual%/}" != "${repo%/}" && "${BC_OPT_RUTA_COMPARTIDA:-0}" != "1" ]]; then
+    bc_err "Esa ruta YA CONTIENE repositorios que este servidor no tiene registrados:"
+    sed 's/^/          - /' <<<"$ocupantes" >&2
+    bc_log "Si son de otro servidor, compartirla haría que la retención de uno"
+    bc_log "borrara las copias del otro. Usa otro bucket u otra ruta."
+    bc_log "Si de verdad es a propósito (este servidor continúa esos respaldos):"
+    bc_log "    backupctl -p $BC_PROFILE hestia restic --repo '$repo' --ruta-compartida"
+    return 1
+  fi
   return 0
 }
 
@@ -1676,6 +1712,16 @@ bc_hestia_plan_restic() {
 #
 # Devuelve 0 solo si el servidor quedó como se pidió. Lo que decide NO es el
 # código de HestiaCP: es el estado que se leyó después.
+# Saca un campo de los datos que devuelve bc_hestia_escribir_y_confirmar.
+# $1 los datos   $2 el nombre del campo
+bc_hestia_dato_de() {
+  local datos="${1:-}" nombre="${2:-}" clave valor
+  while IFS="$BC_HESTIA_SEP" read -r clave valor; do
+    [[ "$clave" == "$nombre" ]] && { printf '%s' "$valor"; return 0; }
+  done <<<"$datos"
+  return 0
+}
+
 # ¿Responde restic en el servidor? 1 sí, 0 no, '?' no se pudo preguntar.
 # Solo lectura: preguntar la versión no toca ningún repositorio ni necesita
 # ninguna contraseña.
@@ -1685,19 +1731,13 @@ bc_hestia_comprobar_restic() {
 
 bc_hestia_informar_restic() {
   local datos="${1:-}" repo="${2:-}" copia="${3:-}" restic_vivo="${4:-?}"
-  local estado antes despues codigo salida clave valor
-
-  while IFS="$BC_HESTIA_SEP" read -r clave valor; do
-    case "$clave" in
-      estado)  estado="$valor" ;;
-      antes)   antes="$valor" ;;
-      despues) despues="$valor" ;;
-      codigo)  codigo="$valor" ;;
-      salida)  salida="$valor" ;;
-    esac
-  done <<<"$datos"
-  estado="${estado:-CIEGO}"; antes="${antes:-}"; despues="${despues:-}"
-  codigo="${codigo:-}"; salida="${salida:-}"
+  local estado antes despues codigo salida
+  estado="$(bc_hestia_dato_de "$datos" estado)"
+  antes="$(bc_hestia_dato_de "$datos" antes)"
+  despues="$(bc_hestia_dato_de "$datos" despues)"
+  codigo="$(bc_hestia_dato_de "$datos" codigo)"
+  salida="$(bc_hestia_dato_de "$datos" salida)"
+  estado="${estado:-CIEGO}"
 
   # Los dos datos por separado, aunque la orden sea una sola: un «no lo puedo
   # confirmar» que no dice CUÁL de los dos no cuadró obliga a mirar a ciegas.
