@@ -152,6 +152,7 @@ ${BC_BLD}EMPEZAR${BC_RST}
 ${BC_BLD}BLINDAJE (HestiaCP)${BC_RST}
   ${BC_GRN}·${BC_RST} ${BC_CYA}shield${BC_RST}                 ¿qué perdería si mañana pierdo el servidor?
   ${BC_GRN}·${BC_RST} ${BC_CYA}hestia status${BC_RST}          estado de los respaldos incrementales
+      0 todo bien · 1 hay un fallo o algo no se pudo leer · 2 no pudo ni empezar
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia setup${BC_RST}           montarlo todo: rclone, Restic, cron y claves
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia rclone${BC_RST}          configurar el remoto (S3/Mega S4, disco, NAS)
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia restic${BC_RST}          registrar el host de respaldo y su retención

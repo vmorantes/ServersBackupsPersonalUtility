@@ -164,11 +164,17 @@ bc_hestia_sondear_repo() {
   if [[ "$repo" == rclone:* ]]; then
     base="${repo#rclone:}"; base="${base%/}"
     cuenta="$(bc_hestia_sondear "rclone lsf $(printf '%q' "$base/$u/config") 2>/dev/null | grep -q .")"
+    # La sonda del padre mira si el listado TERMINA BIEN, no si devuelve
+    # líneas. Un repositorio global recién registrado está vacío, y un padre
+    # vacío que se lista sin error demuestra lo que hace falta demostrar: que
+    # el almacenamiento responde. Con la otra forma, ese servidor recién
+    # montado decía «no se pudo comprobar» en todas sus cuentas.
     [[ "$cuenta" == 1 ]] \
-      || padre="$(bc_hestia_sondear "rclone lsf $(printf '%q' "$base/") 2>/dev/null | grep -q .")"
+      || padre="$(bc_hestia_sondear "rclone lsf $(printf '%q' "$base/") >/dev/null 2>&1")"
   elif [[ "$repo" == /* ]]; then
     base="${repo%/}"
     cuenta="$(bc_hestia_sondear "test -f $(printf '%q' "$base/$u/config")")"
+    # `test -d` ya es «terminó bien o no»: un directorio vacío existe igual.
     [[ "$cuenta" == 1 ]] \
       || padre="$(bc_hestia_sondear "test -d $(printf '%q' "$base")")"
   else
@@ -499,12 +505,12 @@ bc_hestia_status() {
   # --- Diagnóstico: ¿esto respalda de verdad? --------------------------------
   # Lo que sigue no describe la configuración: dice si funciona. El juicio vive
   # en las funciones puras de arriba; aquí solo se LEE del servidor y se pinta.
-  # El `|| fallos_diag=$?` no sobra: con `set -e` activo (bin/backupctl), una
-  # llamada suelta que devuelve el número de fallos ABORTA la orden entera, y
-  # justo entonces —cuando hay algo que contar— se perdería el resto del
-  # informe y el cierre deliberado de abajo.
-  local fallos_diag=0
-  bc_hestia_diagnosticar "$conf" "$donde" "$usuarios" || fallos_diag=$?
+  # El `|| diag_rc=$?` no sobra: con `set -e` activo, una llamada suelta que
+  # devuelve distinto de cero ABORTA la orden entera, y justo entonces —cuando
+  # hay algo que contar— se perdería el resto del informe y el cierre
+  # deliberado de abajo.
+  local diag_rc=0
+  bc_hestia_diagnosticar "$conf" "$donde" "$usuarios" || diag_rc=$?
 
   # --- Claves rescatadas -----------------------------------------------------
   local restic_local rclone_local
@@ -517,9 +523,11 @@ bc_hestia_status() {
   else bc_err "el rclone.conf NO está rescatado. Sin él no se puede LLEGAR al repositorio."; fi
   (( restic_local == 0 || rclone_local == 0 )) && bc_log "Rescátalas con:  sudo backupctl hestia keys"
 
-  # Código de salida 1 si el diagnóstico encontró algún FALLO: así esta orden
-  # sirve para encadenar en una comprobación automática, igual que `status`.
-  (( fallos_diag > 0 )) && { BC_DELIBERATE_EXIT=1; return 1; }
+  # Código de salida 1 si el diagnóstico encontró un FALLO O si algo no se pudo
+  # leer: las dos cosas «requieren atención», que es lo que el 1 significa en
+  # este proyecto. El 2 sigue siendo «no se pudo ni empezar», que es lo que da
+  # bc_die cuando no hay HestiaCP o no se puede conectar, y no se toca.
+  (( diag_rc != 0 )) && { BC_DELIBERATE_EXIT=1; return 1; }
   return 0
 }
 
@@ -528,14 +536,16 @@ bc_hestia_status() {
 # -----------------------------------------------------------------------------
 # $1 el contenido de conf/restic.conf   $2 la salida de bc_hestia_cron_donde
 # $3 la lista de cuentas del panel
-# Devuelve cuántos FALLO ha encontrado.
+# Devuelve 1 si encontró algún FALLO o si algo no se pudo leer; 0 si no.
 #
-# Ninguna lectura que falla se muestra como vacío ni como cero: se dice «no se
-# pudo leer» (40-salvaguardas.md §5). De la contraseña de una cuenta solo se
-# dice si está o no: nunca su contenido.
+# Los datos que no se pudieron leer se cuentan APARTE de los avisos. No son lo
+# mismo: un aviso es algo que se miró y no gusta; un dato ciego es algo que no
+# se miró, y mezclarlos deja al usuario creyendo que el diagnóstico fue
+# completo cuando no lo fue (40-salvaguardas.md §5). De la contraseña de una
+# cuenta solo se dice si está o no: nunca su contenido.
 bc_hestia_diagnosticar() {
   local conf="${1:-}" donde="${2:-}" usuarios="${3:-}"
-  local fallos=0 avisos=0
+  local fallos=0 avisos=0 ciegos=0
 
   echo
   bc_step "¿Los respaldos funcionan de verdad?"
@@ -586,9 +596,9 @@ bc_hestia_diagnosticar() {
   # --- Cuenta por cuenta -----------------------------------------------------
   if [[ -z "$usuarios" ]]; then
     bc_warn "No se pudo leer la lista de cuentas del panel: el diagnóstico por cuenta se omite."
-    echo
-    bc_log "Resumen del diagnóstico: $fallos fallo(s), $avisos aviso(s)."
-    return "$fallos"
+    ciegos=$(( ciegos + 1 ))
+    bc_hestia_resumen_diag "$fallos" "$avisos" "$ciegos"
+    return 1
   fi
 
   local ahora; ahora="$(date +%s)"
@@ -625,22 +635,57 @@ bc_hestia_diagnosticar() {
     bc_hestia_pintar_veredicto "  estado" "$(bc_hestia_diag_cuenta "$clave" "$repo_existe" "$marcada")" \
       fallos avisos
 
+    # Cada dato que no se pudo leer se cuenta aparte. El '-' no cuenta: no es
+    # ceguera, es que no hay ningún repositorio registrado y eso ya se dijo.
+    local dato
+    for dato in "$clave" "$repo_existe" "$marcada"; do
+      [[ "$dato" == "?" ]] && ciegos=$(( ciegos + 1 ))
+    done
+
     # La última instantánea, SIEMPRE con json explícito: con un formato que no
     # reconoce, v-list-user-backups-restic devuelve vacío y código 0, que se
     # leería como «no tiene copias» (ADR 0017).
     fecha="$(bc_hestia_ultima_instantanea "$u")"
     if [[ "$fecha" == "__ILEGIBLE__" ]]; then
       bc_warn "  última copia: no se pudo leer la lista de instantáneas."
-      avisos=$(( avisos + 1 ))
+      ciegos=$(( ciegos + 1 ))
     else
       bc_hestia_pintar_veredicto "  última copia" \
         "$(bc_hestia_diag_instantanea "$fecha" "$ahora" "$cada_h")" fallos avisos
     fi
   done <<<"$usuarios"
 
+  bc_hestia_resumen_diag "$fallos" "$avisos" "$ciegos"
+  bc_hestia_codigo_diag "$fallos" "$avisos" "$ciegos"
+}
+
+# Código de salida del diagnóstico a partir de sus tres contadores. Pura, y
+# aparte, para que el banco la pruebe sin montar un servidor.
+# $1 fallos   $2 avisos   $3 datos que no se pudieron leer
+#
+# Un AVISO no cambia el código: una cuenta que a propósito no entra en los
+# respaldos no es un problema. Lo cambian un FALLO y una CEGUERA, porque las
+# dos «requieren atención», que es lo que el 1 significa en este proyecto
+# (docs/referencia/codigos.md). Un diagnóstico ciego saliendo con 0 sería un
+# éxito sin comprobación (40-salvaguardas.md §5).
+bc_hestia_codigo_diag() {
+  local fallos="${1:-0}" avisos="${2:-0}" ciegos="${3:-0}"
+  (( fallos > 0 || ciegos > 0 )) && return 1
+  return 0
+}
+
+# Cierre del diagnóstico. Separada y pura salvo por lo que imprime, para que el
+# banco pueda comprobar el texto sin montar un servidor entero.
+# $1 fallos   $2 avisos   $3 datos que no se pudieron leer
+bc_hestia_resumen_diag() {
+  local fallos="${1:-0}" avisos="${2:-0}" ciegos="${3:-0}"
   echo
-  bc_log "Resumen del diagnóstico: $fallos fallo(s), $avisos aviso(s)."
-  return "$fallos"
+  bc_log "Resumen del diagnóstico: $fallos fallo(s) · $avisos aviso(s) · $ciegos dato(s) que no se pudieron leer."
+  if (( ciegos > 0 )); then
+    bc_warn "El diagnóstico está INCOMPLETO: con $ciegos dato(s) sin leer no se"
+    bc_warn "puede afirmar que los respaldos funcionen. Arregla primero el acceso."
+  fi
+  return 0
 }
 
 # Fecha ISO de la última instantánea de una cuenta, o vacío si no tiene

@@ -394,6 +394,87 @@ test_non_json_output_is_not_read_as_no_backups() {
     "no disponible" "salida que no es json: no disponible, no 'ninguna'"
 }
 
+# --- el cierre del diagnóstico -----------------------------------------------
+#
+# Dos cosas que no pueden confundirse: un AVISO es algo que se miró y no gusta;
+# un dato ciego es algo que NO se pudo mirar. Si los dos se cuentan juntos y
+# ninguno cambia el código de salida, un cron que solo mira `$?` lee «los
+# respaldos van bien» de un diagnóstico que no pudo leer nada.
+
+# Devuelve el código de salida de bc_hestia_codigo_diag.
+codigo_diag() {
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/hestia.sh"
+    bc_hestia_codigo_diag "$2" "$3" "$4"
+  ' _ "$BANCO_RAIZ" "$1" "$2" "$3" >/dev/null 2>&1
+  echo $?
+}
+
+test_exit_code_is_zero_when_everything_was_read_and_fine() {
+  nueva_prueba t42
+  afirmar_igual "$(codigo_diag 0 0 0)" "0" "sin fallos, sin avisos y sin ciegos: 0"
+}
+
+test_warnings_alone_do_not_change_the_exit_code() {
+  nueva_prueba t43
+  afirmar_igual "$(codigo_diag 0 3 0)" "0" \
+    "solo avisos: 0 (una cuenta fuera de los respaldos no es un problema)"
+}
+
+test_a_failure_changes_the_exit_code() {
+  nueva_prueba t44
+  afirmar_igual "$(codigo_diag 1 0 0)" "1" "un fallo: 1"
+}
+
+# El caso del que va todo esto: no hubo ningún fallo porque no se pudo mirar.
+test_a_blind_reading_changes_the_exit_code() {
+  nueva_prueba t45
+  afirmar_igual "$(codigo_diag 0 0 1)" "1" \
+    "sin fallos pero con un dato sin leer: 1, no 0"
+}
+
+# Y el resumen tiene que DECIRLO, no solo devolver un número.
+test_summary_counts_blind_readings_apart() {
+  nueva_prueba t46
+  local salida
+  salida="$(bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/hestia.sh"
+    BC_NO_COLOR=1
+    bc_hestia_resumen_diag 2 1 3
+  ' _ "$BANCO_RAIZ" 2>&1)"
+  case "$salida" in
+    *"3 dato(s) que no se pudieron leer"*)
+      afirmar_igual "si" "si" "el resumen cuenta los datos ciegos aparte" ;;
+    *) afirmar_igual "no ('$salida')" "si" "el resumen cuenta los datos ciegos aparte" ;;
+  esac
+  case "$salida" in
+    *INCOMPLETO*) afirmar_igual "si" "si" "el resumen dice que el diagnóstico está incompleto" ;;
+    *) afirmar_igual "no" "si" "el resumen dice que el diagnóstico está incompleto" ;;
+  esac
+}
+
+test_summary_says_nothing_about_blindness_when_there_is_none() {
+  nueva_prueba t47
+  local salida
+  salida="$(bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/hestia.sh"
+    BC_NO_COLOR=1
+    bc_hestia_resumen_diag 0 1 0
+  ' _ "$BANCO_RAIZ" 2>&1)"
+  case "$salida" in
+    *INCOMPLETO*) afirmar_igual "lo dice" "no lo dice" \
+      "sin datos ciegos no se habla de diagnóstico incompleto" ;;
+    *) afirmar_igual "no lo dice" "no lo dice" \
+      "sin datos ciegos no se habla de diagnóstico incompleto" ;;
+  esac
+}
+
 # --- ruta del repositorio ----------------------------------------------------
 
 test_repo_path_missing_is_a_failure() {
@@ -463,6 +544,12 @@ test_last_snapshot_is_the_most_recent_trimmed
 test_snapshot_count_does_not_depend_on_lines
 test_empty_array_means_none
 test_non_json_output_is_not_read_as_no_backups
+test_exit_code_is_zero_when_everything_was_read_and_fine
+test_warnings_alone_do_not_change_the_exit_code
+test_a_failure_changes_the_exit_code
+test_a_blind_reading_changes_the_exit_code
+test_summary_counts_blind_readings_apart
+test_summary_says_nothing_about_blindness_when_there_is_none
 test_repo_path_missing_is_a_failure
 test_repo_path_relative_with_local_remote_is_a_failure
 test_repo_path_inside_a_website_is_a_failure
