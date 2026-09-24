@@ -29,8 +29,17 @@ con `NO_MKDOCS_2_WARNING=1`. Lo que sí tiene fecha es el fin de los parches de 
 Ningún tema vivo de MkDocs tiene la estética de `readthedocs`: los que se le parecen llevan
 muertos entre 2018 y 2023.
 
-**Nadie ha construido el sitio todavía**: ni `mkdocs build` ni `mkdocs serve` están permitidos
-aquí. Lo comprueba el PO.
+El PO construyó el sitio y lo revisó el arquitecto leyendo el HTML de `site/` (construirlo sigue
+sin estar permitido aquí; leerlo, sí). Resultado: sin restos de Material, `extra.css`,
+`pygments.css` y `copiar.js` enlazados, avisos y tablas bien renderizados, y `.rst-content`
+envuelve el contenido, así que el selector de tablas del CSS **sí** aplica (la duda que dejó el
+coder en #048 queda cerrada).
+
+Hallazgo del PO, corregido: al convertir las pestañas se perdió **la decisión**. Dos apartados
+seguidos parecen dos pasos, no dos alternativas. Se añadió el marco explícito donde hay que
+elegir: `protocolo-manual.md` (Opción A/B con un aviso), `empezar/instalacion.md` (Opción A/B),
+`todo-de-una-vez.md` (Caso A/B) y `hestiacp/respaldos-incrementales.md` (Opción 1/2/3). En las
+demás conversiones no hacía falta: eran casos de consulta, no alternativas.
 
 ## Espera al PO
 
