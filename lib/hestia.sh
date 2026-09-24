@@ -596,6 +596,21 @@ bc_hestia_tipo_de() {
   printf '%s' "${linea#*$'\t'}"
 }
 
+# Lo que se pide al escribir un remoto. Los jueces solo reciben el texto
+# leído, así que lo pedido viaja por aquí.
+BC_HESTIA_RC_NOMBRE=""
+BC_HESTIA_RC_TIPO=""
+
+# ¿Este archivo ya tiene el remoto pedido, del tipo pedido?
+bc_hestia_remoto_cumple() {
+  local texto="${1:-}"
+  [[ -n "$(bc_hestia_nombres_de "$texto")" ]] || return 1
+  [[ "$(bc_hestia_tipo_de "$texto" "$BC_HESTIA_RC_NOMBRE")" == "$BC_HESTIA_RC_TIPO" ]]
+}
+
+bc_hestia_remoto_ya_estaba() { bc_hestia_remoto_cumple "${1:-}"; }
+bc_hestia_remoto_se_hizo()   { bc_hestia_remoto_cumple "${2:-}"; }
+
 # Los nombres que estaban antes y ya NO están. Uno por línea.
 # Un remoto perdido es un almacenamiento al que ya no se llega, y eso no se
 # descubre hasta el día que hace falta.
@@ -1483,7 +1498,13 @@ bc_hestia_cuenta_se_hizo()   { [[ "$(bc_hestia_marca_de "${2:-}")" == "yes" ]]; 
 # por la diferencia. Esto es esa secuencia, escrita una vez.
 #
 #   bc_hestia_escribir_y_confirmar <etiqueta> <orden_escritura> <orden_lectura> \
-#                                  <ya_estaba> <se_hizo>
+#                                  <ya_estaba> <se_hizo> [<por_stdin>]
+#
+# El sexto argumento es opcional: lo que haya que mandarle a la orden por la
+# ENTRADA ESTÁNDAR. Existe porque un secreto NO puede viajar en la línea de
+# órdenes —ahí lo ve cualquier otro usuario del servidor con `ps`— y sin esto
+# el único paso que manda credenciales tenía que repetir toda la secuencia por
+# su cuenta, con lo que eso acaba costando cuando hay dos.
 #
 # DOS JUECES, NO UNO. Los dos son funciones puras que trae cada paso:
 #   ya_estaba <antes>            0 si el estado leído ya cumple el criterio.
@@ -1528,7 +1549,7 @@ bc_hestia_cuenta_se_hizo()   { [[ "$(bc_hestia_marca_de "${2:-}")" == "yes" ]]; 
 #                  campo viene vacío es justo lo que no se hace aquí.
 bc_hestia_escribir_y_confirmar() {
   local etiqueta="${1:-}" orden_escritura="${2:-}" orden_lectura="${3:-}"
-  local ya_estaba="${4:-}" se_hizo="${5:-}"
+  local ya_estaba="${4:-}" se_hizo="${5:-}" por_stdin="${6:-}"
   local antes despues rc=0 salida=""
 
   # La etiqueta viaja con los datos para que quien informe sepa de qué paso
@@ -1551,7 +1572,16 @@ bc_hestia_escribir_y_confirmar() {
   fi
 
   # 3. Escribir. El código se guarda como DATO, nunca como prueba.
-  salida="$(bc_hestia_root "$orden_escritura" 2>&1)" || rc=$?
+  #
+  # Si el paso trae algo por la ENTRADA ESTÁNDAR, va por ahí y no en la línea
+  # de órdenes: un secreto en la línea de órdenes es visible en `ps` para
+  # cualquier otro usuario del servidor. El nombre del sexto argumento es lo
+  # único que distingue los dos caminos, y por eso se llama así.
+  if [[ -n "$por_stdin" ]]; then
+    salida="$(printf '%s' "$por_stdin" | bc_hestia_root_stdin "$orden_escritura" 2>&1)" || rc=$?
+  else
+    salida="$(bc_hestia_root "$orden_escritura" 2>&1)" || rc=$?
+  fi
 
   # 4. El DESPUÉS. Si no se puede leer, NO es lo mismo que no haber podido
   #    leer el antes: allí no se tocó nada y aquí sí. Se dice con su propio
@@ -2199,14 +2229,11 @@ $( [[ -n "$region" ]] && echo "region = $region" )acl = private
   fi
 
   # --- Escribir -------------------------------------------------------------
-  # Esta escritura NO pasa por bc_hestia_escribir_y_confirmar: las credenciales
-  # viajan por la ENTRADA ESTÁNDAR, y esa primitiva no la lleva. Pasarlas como
-  # argumento las haría visibles en `ps` para cualquier otro usuario del
-  # servidor. Así que la secuencia —leer, escribir, releer, juzgar— se hace
-  # aquí a mano, con los mismos estados.
+  # Las credenciales van por la ENTRADA ESTÁNDAR, nunca en la línea de órdenes:
+  # ahí las vería cualquier otro usuario del servidor con `ps`. La primitiva
+  # las lleva por su sexto argumento.
   local conf_esc; conf_esc="$(printf '%q' "$BC_HESTIA_RCLONE_CONF")"
-  local rc=0
-  printf '%s' "$seccion" | bc_hestia_root_stdin "
+  local orden_escritura="
     umask 077
     mkdir -p \"\$(dirname $conf_esc)\"
     touch $conf_esc
@@ -2219,12 +2246,29 @@ $( [[ -n "$region" ]] && echo "region = $region" )acl = private
     printf '%s\n' \"\$nueva\" >> $conf_esc.tmp
     mv $conf_esc.tmp $conf_esc
     chmod 600 $conf_esc
-  " >/dev/null 2>&1 || rc=$?
-  bc_informe_dato "Código de la orden (dato, no prueba)" "" "$rc"
+  "
+  BC_HESTIA_RC_NOMBRE="$nombre"; BC_HESTIA_RC_TIPO="$tipo"
+  local datos
+  datos="$(bc_hestia_escribir_y_confirmar "Escribir el remoto" "$orden_escritura" \
+      "$lectura" bc_hestia_remoto_ya_estaba bc_hestia_remoto_se_hizo "$seccion")"
+  local rc; rc="$(bc_hestia_dato_de "$datos" codigo)"
+  bc_informe_dato "Código de la orden (dato, no prueba)" "" "${rc:-0}"
 
   # --- Releer y juzgar ------------------------------------------------------
+  # La primitiva ya releyó, pero lo que devuelve es un estado general. Lo que
+  # hay que decir aquí es MÁS preciso —quedó vacío, falta un remoto, el tipo no
+  # es el pedido— y cada caso lleva su propia salida, así que se vuelve a mirar
+  # el después que ella trajo.
   local despues
-  if ! despues="$(bc_hestia_leer_texto "$lectura")"; then
+  despues="$(bc_hestia_restaurar_saltos "$(bc_hestia_dato_de "$datos" despues)")"
+  if [[ "$(bc_hestia_dato_de "$datos" estado)" == "CIEGO" ]]; then
+    bc_err "no se pudo leer $BC_HESTIA_RCLONE_CONF: NO se ha escrito nada."
+    bc_informe_paso "Escribir el remoto" CIEGO "no se pudo leer el estado de partida"
+    bc_informe_cerrar "CIEGO" >/dev/null
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+  if [[ "$(bc_hestia_dato_de "$datos" estado)" == "ESCRITO_SIN_COMPROBAR" ]]; then
     bc_err "SE ESCRIBIÓ y no se pudo volver a leer $BC_HESTIA_RCLONE_CONF."
     bc_log  "No se sabe cómo quedó. La copia anterior está en: ${copia:-<no había>}"
     bc_informe_paso "Escribir el remoto" ESCRITO_SIN_COMPROBAR "se escribió y no se pudo leer"
