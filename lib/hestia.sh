@@ -117,6 +117,42 @@ bc_hestia_root() {
   fi
 }
 
+# PREGUNTA DE SÍ O NO, con tres respuestas posibles: 1, 0 o '?'.
+# La orden que se le pasa se ejecuta en el servidor y su respuesta viaja como
+# un centinela en la SALIDA, no como código de salida. Así «el archivo no
+# está» (0) se distingue de «la orden ni siquiera llegó a correr» ('?'):
+# conexión caída, sudo denegado, HestiaCP en otro sitio. Rellenar ese hueco
+# con un 0 es lo que convierte un diagnóstico en una mentira con forma de dato
+# leído (ADR 0017).
+# Compone el texto que se ejecutará en el servidor. Va aparte, y es pura, para
+# que el banco pueda comprobar SIN SERVIDOR que ese texto sobrevive a que le
+# antepongan cosas.
+#
+# La orden va dentro de su PROPIO `bash -c`, escapada con printf '%q'. No es
+# adorno: bc_hestia_root puede anteponer texto a lo que recibe (bc_ssh_sudo
+# hace `ssh "sudo -n $*"`, lib/ssh.sh:132), y entonces un grupo `{ orden; }`
+# quedaría detrás de `sudo`, donde `{` ya no es palabra reservada y `}` es un
+# error de sintaxis. Con el `bash -c` propio, la orden se parsea igual venga
+# por donde venga.
+#
+# Solo el código 1 es un «no». Cualquier otro es la orden quejándose —`grep`
+# sale con 2 si el archivo no existe o no se puede leer, no con 1—, y eso es
+# «no lo pude preguntar».
+bc_hestia_sondear_orden() {
+  local guion="rc=0; $* || rc=\$?; case \$rc in 0) echo BC_SI;; 1) echo BC_NO;; *) echo BC_ERR;; esac"
+  printf 'bash -c %s' "$(printf '%q' "$guion")"
+}
+
+bc_hestia_sondear() {
+  local salida
+  salida="$( { bc_hestia_root "$(bc_hestia_sondear_orden "$@")" 2>/dev/null || true; } | tr -d '\r' )"
+  case "$salida" in
+    *BC_SI*)  echo 1 ;;
+    *BC_NO*)  echo 0 ;;
+    *)        echo '?' ;;
+  esac
+}
+
 # Igual, pero enviando algo por la entrada estándar. Es la vía por la que
 # viajan las credenciales.
 bc_hestia_root_stdin() {
@@ -241,20 +277,42 @@ bc_hestia_edad_llana() {
 
 # Cruza los tres datos de una cuenta: ¿tiene contraseña de repositorio?, ¿existe
 # el repositorio?, ¿está marcada con BACKUPS_INCREMENTAL?
-# $1 clave 0|1   $2 repo 0|1   $3 marcada 0|1
+# $1 clave 0|1|?   $2 repo 0|1|?   $3 marcada 0|1|?
+#
+# Tres estados, no dos. El '?' significa «no se pudo leer», y NO es lo mismo
+# que «no»: si una conexión se cae o un permiso falta, tratar eso como un 0
+# fabrica un diagnóstico que suena a dato leído. Por eso las comparaciones son
+# de CADENA (==) y no aritméticas: en aritmética un '?' no vale, y el 0 por
+# defecto volvería a colarse. Un '?' nunca produce OK.
 bc_hestia_diag_cuenta() {
-  local clave="${1:-0}" repo="${2:-0}" marcada="${3:-0}"
+  local clave="${1:-?}" repo="${2:-?}" marcada="${3:-?}"
 
-  if (( marcada && clave && ! repo )); then
+  # Lo desconocido se declara antes que nada: con un dato que falta no se puede
+  # afirmar ni que está bien ni que está mal.
+  if [[ "$clave" == "?" || "$repo" == "?" || "$marcada" == "?" ]]; then
+    local faltan=""
+    [[ "$marcada" == "?" ]] && faltan+=", si está marcada para respaldo incremental"
+    [[ "$clave"   == "?" ]] && faltan+=", si tiene contraseña de repositorio"
+    [[ "$repo"    == "?" ]] && faltan+=", si su repositorio existe"
+    bc_hestia_veredicto AVISO "no se pudo comprobar${faltan#,}. Sin ese dato no se puede decir si esta cuenta se respalda: compruébalo en el servidor"
+    return 0
+  fi
+
+  if [[ "$marcada" == 1 && "$clave" == 1 && "$repo" == 0 ]]; then
     # El estado exacto del incidente del 2026-09-23: HestiaCP solo crea el
     # repositorio si NO existe la contraseña, así que con la contraseña puesta
     # y el repositorio ausente no lo creará nunca más por su cuenta.
     bc_hestia_veredicto FALLO "tiene contraseña de repositorio pero el repositorio NO existe: HestiaCP ya no lo creará solo. Salida: apartar esa contraseña para que la vuelva a crear, o crear el repositorio con ella"
-  elif (( marcada && ! clave && ! repo )); then
+  elif [[ "$marcada" == 1 && "$repo" == 1 && "$clave" == 0 ]]; then
+    # El repositorio está ahí, con copias dentro, pero HestiaCP no tiene su
+    # contraseña. Al siguiente respaldo generará una NUEVA, y una contraseña
+    # nueva NO abre las copias que ya hay: quedarían ilegibles para siempre.
+    bc_hestia_veredicto FALLO "el repositorio existe pero HestiaCP NO tiene su contraseña: una contraseña nueva no abriría las copias que ya hay. Salida: recuperar la contraseña original ('backupctl hestia keys') y devolverla a \$HESTIA/data/users/<cuenta>/restic.conf ANTES del siguiente respaldo"
+  elif [[ "$marcada" == 1 && "$clave" == 0 && "$repo" == 0 ]]; then
     bc_hestia_veredicto OK "marcada para respaldo incremental; todavía no ha respaldado nunca, el primer respaldo creará su repositorio"
-  elif (( ! marcada && repo )); then
+  elif [[ "$marcada" == 0 && "$repo" == 1 ]]; then
     bc_hestia_veredicto AVISO "tiene copias pero YA NO se respalda: no está marcada para respaldo incremental"
-  elif (( ! marcada && ! repo )); then
+  elif [[ "$marcada" == 0 && "$repo" == 0 ]]; then
     bc_hestia_veredicto AVISO "esta cuenta no entra en los respaldos incrementales"
   else
     bc_hestia_veredicto OK "marcada y con repositorio"
@@ -352,8 +410,12 @@ bc_hestia_status() {
   # --- Diagnóstico: ¿esto respalda de verdad? --------------------------------
   # Lo que sigue no describe la configuración: dice si funciona. El juicio vive
   # en las funciones puras de arriba; aquí solo se LEE del servidor y se pinta.
-  bc_hestia_diagnosticar "$conf" "$donde" "$usuarios"
-  local fallos_diag=$?
+  # El `|| fallos_diag=$?` no sobra: con `set -e` activo (bin/backupctl), una
+  # llamada suelta que devuelve el número de fallos ABORTA la orden entera, y
+  # justo entonces —cuando hay algo que contar— se perdería el resto del
+  # informe y el cierre deliberado de abajo.
+  local fallos_diag=0
+  bc_hestia_diagnosticar "$conf" "$donde" "$usuarios" || fallos_diag=$?
 
   # --- Claves rescatadas -----------------------------------------------------
   local restic_local rclone_local
@@ -447,29 +509,47 @@ bc_hestia_diagnosticar() {
     echo
     bc_log "Cuenta '$u':"
 
+    # Las tres lecturas devuelven un CENTINELA (SI/NO), no un código de salida.
+    # Motivo: `test -f` y `grep -q` salen con 1 tanto si la respuesta es «no»
+    # como si la orden no llegó a ejecutarse (conexión caída, sudo denegado).
+    # Con el centinela, «no me respondió» se convierte en '?' y no en un 0 que
+    # el diagnóstico presentaría como un hecho leído.
+
     # ¿Tiene contraseña de repositorio? Solo SI o NO; el contenido no se lee.
-    clave=0
-    bc_hestia_root "test -f $(printf '%q' "$HESTIA_DIR/data/users/$u/restic.conf")" \
-      >/dev/null 2>&1 && clave=1
+    clave="$(bc_hestia_sondear "test -f $(printf '%q' "$HESTIA_DIR/data/users/$u/restic.conf")")"
 
     # ¿Está marcada? BACKUPS_INCREMENTAL, con S, en el user.conf de la cuenta.
     # Con `grep -q` y su código de salida, no contando coincidencias: contar
     # aquí no aporta nada, y contar con un cero por defecto detrás acaba
     # imprimiendo ese cero dos veces (el propio contador ya escribe "0" antes
     # de salir con 1). Es el patrón que vigila tests/probar_patrones.sh.
-    marcada=0
-    bc_hestia_root "grep -q \"^BACKUPS_INCREMENTAL='yes'\" $(printf '%q' "$HESTIA_DIR/data/users/$u/user.conf")" \
-      >/dev/null 2>&1 && marcada=1
+    marcada="$(bc_hestia_sondear "grep -q \"^BACKUPS_INCREMENTAL='yes'\" $(printf '%q' "$HESTIA_DIR/data/users/$u/user.conf")")"
 
     # ¿Existe el repositorio de esta cuenta? Un repositorio de restic siempre
     # tiene un archivo "config" en su raíz: se pregunta por él. Es solo lectura
     # y no necesita la contraseña.
-    repo_existe=0
+    #
+    # Hay TRES caminos porque el REPO registrado tiene tres formas distintas,
+    # las mismas que distingue bc_hestia_validar_repo (verificado en la fuente
+    # de HestiaCP 1.10.4 el 2026-09-24):
+    #   rclone:<remoto>:<ruta>  se sondea con `rclone lsf`, que no necesita la
+    #                           contraseña del repositorio.
+    #   /ruta/absoluta          es el sistema de archivos del propio servidor:
+    #                           basta `test -e`.
+    #   otro esquema (sftp:, s3:, b2:, rest:…)  restic hablaría el protocolo,
+    #                           pero abrir el repositorio para mirar dentro
+    #                           exige su contraseña, y aquí no se usan
+    #                           contraseñas. No se puede sondear: '?'.
+    # Un '?' aquí es más honrado que un 0: decir «no existe» de un repositorio
+    # que sí existe llevaría a recrearlo y a perder las copias.
     local ruta_cuenta
     if [[ "$repo" == rclone:* ]]; then
       ruta_cuenta="${repo#rclone:}"
-      bc_hestia_root "rclone lsf $(printf '%q' "${ruta_cuenta%/}/$u/config") 2>/dev/null | grep -q ." \
-        >/dev/null 2>&1 && repo_existe=1
+      repo_existe="$(bc_hestia_sondear "rclone lsf $(printf '%q' "${ruta_cuenta%/}/$u/config") 2>/dev/null | grep -q .")"
+    elif [[ "$repo" == /* ]]; then
+      repo_existe="$(bc_hestia_sondear "test -e $(printf '%q' "${repo%/}/$u/config")")"
+    else
+      repo_existe='?'
     fi
     bc_hestia_pintar_veredicto "  estado" "$(bc_hestia_diag_cuenta "$clave" "$repo_existe" "$marcada")" \
       fallos avisos

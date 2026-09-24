@@ -170,6 +170,103 @@ test_account_marked_with_repo_is_ok() {
     "marcada y con repositorio: OK"
 }
 
+# El repositorio está ahí, con copias dentro, y HestiaCP no tiene su
+# contraseña: al siguiente respaldo generará una nueva, que NO abre lo que ya
+# hay. Esto no es «todo en orden», es una pérdida programada.
+test_account_marked_with_repo_but_no_key_is_a_failure() {
+  nueva_prueba t22
+  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "0" "1" "1")" "FALLO" \
+    "marcada, con repositorio y sin contraseña: FALLO" "no abriría las copias que ya hay"
+}
+
+# --- lo que no se pudo leer ('?') --------------------------------------------
+#
+# Un '?' es «no se pudo preguntar», no «no». Las tres pruebas siguientes
+# comprueban dos cosas a la vez: que el nivel NO es OK, y que el mensaje dice
+# cuál de los tres datos falta. Lo segundo es lo que distingue este veredicto
+# de los que salen al tratar el '?' como un 0, que también son AVISO pero
+# afirman algo que nadie comprobó.
+
+test_account_with_unreadable_key_is_a_warning() {
+  nueva_prueba t23
+  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "?" "1" "1")" "AVISO" \
+    "contraseña ilegible: AVISO, no OK" "si tiene contraseña de repositorio"
+}
+
+test_account_with_unreadable_repo_is_a_warning() {
+  nueva_prueba t24
+  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "1" "?" "1")" "AVISO" \
+    "repositorio no sondeable: AVISO, no OK" "si su repositorio existe"
+}
+
+test_account_with_unreadable_mark_is_a_warning() {
+  nueva_prueba t25
+  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "1" "1" "?")" "AVISO" \
+    "marca ilegible: AVISO, no OK" "si está marcada para respaldo incremental"
+}
+
+test_account_with_nothing_readable_is_a_warning() {
+  nueva_prueba t26
+  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "?" "?" "?")" "AVISO" \
+    "los tres datos ilegibles: AVISO, no OK" "no se pudo comprobar"
+}
+
+# El '?' tampoco puede colarse como 0 cuando el 0 daría un veredicto peor: sin
+# saber si está marcada, no se puede decir «esta cuenta no entra».
+test_unreadable_mark_is_not_treated_as_zero() {
+  nueva_prueba t27
+  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "0" "0" "?")" "AVISO" \
+    "marca ilegible y nada más: no se afirma que no entre" "si está marcada para respaldo incremental"
+}
+
+# --- la orden que compone la sonda -------------------------------------------
+#
+# bc_hestia_sondear_orden es pura: compone el texto que se ejecutaría en el
+# servidor. Aquí NO se conecta a nada: el texto se ejecuta con `bash -c` en
+# esta misma máquina, con órdenes inocuas (true, false, exit 2).
+
+# Devuelve el texto compuesto para una orden dada.
+orden_sonda() {
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/hestia.sh"
+    bc_hestia_sondear_orden "$2"
+  ' _ "$BANCO_RAIZ" "$1" 2>&1
+}
+
+# El fallo que esto vigila: bc_ssh_sudo ANTEPONE texto a la orden
+# (`ssh "sudo -n $*"`, lib/ssh.sh). Un texto que se parsea suelto puede ser un
+# error de sintaxis detrás de `sudo -n`, y el servidor no dice nada: la salida
+# vacía se leería como «no se pudo preguntar» en TODAS las cuentas.
+test_probe_text_survives_a_sudo_prefix() {
+  nueva_prueba t28
+  local texto; texto="$(orden_sonda "test -f /etc/hosts")"
+  bash -n -c "sudo -n $texto" 2>"$BANCO_TMP/t28.err"
+  afirmar_codigo 0 "$?" "el texto de la sonda se parsea detrás de 'sudo -n'"
+  afirmar_igual "$(cat "$BANCO_TMP/t28.err")" "" \
+    "sin errores de sintaxis detrás de 'sudo -n'"
+}
+
+test_probe_reports_yes_no_and_error_apart() {
+  nueva_prueba t29
+  afirmar_igual "$(bash -c "$(orden_sonda 'true')")"      "BC_SI"  "orden que sale con 0: BC_SI"
+  afirmar_igual "$(bash -c "$(orden_sonda 'false')")"     "BC_NO"  "orden que sale con 1: BC_NO"
+  # El caso real: `grep` sale con 2 cuando el archivo no existe o no se puede
+  # leer, y con 1 cuando simplemente no hay coincidencia. Confundirlos es
+  # afirmar «esta cuenta no está marcada» sin haber leído su user.conf.
+  afirmar_igual "$(bash -c "$(orden_sonda "grep -q x /no/existe/ninguno 2>/dev/null")")" \
+    "BC_ERR" "grep sobre un archivo que no existe: BC_ERR, no BC_NO"
+}
+
+# Una tubería dentro de la sonda (la del repositorio con rclone) no puede
+# romper la composición.
+test_probe_accepts_a_pipeline() {
+  nueva_prueba t30
+  afirmar_igual "$(bash -c "$(orden_sonda "printf 'x\n' | grep -q .")")" "BC_SI" \
+    "una tubería dentro de la sonda: BC_SI"
+}
+
 # --- ruta del repositorio ----------------------------------------------------
 
 test_repo_path_missing_is_a_failure() {
@@ -219,6 +316,15 @@ test_account_marked_without_key_or_repo_is_ok
 test_account_unmarked_with_repo_is_a_warning
 test_account_unmarked_without_repo_is_a_warning
 test_account_marked_with_repo_is_ok
+test_account_marked_with_repo_but_no_key_is_a_failure
+test_account_with_unreadable_key_is_a_warning
+test_account_with_unreadable_repo_is_a_warning
+test_account_with_unreadable_mark_is_a_warning
+test_account_with_nothing_readable_is_a_warning
+test_unreadable_mark_is_not_treated_as_zero
+test_probe_text_survives_a_sudo_prefix
+test_probe_reports_yes_no_and_error_apart
+test_probe_accepts_a_pipeline
 test_repo_path_missing_is_a_failure
 test_repo_path_relative_with_local_remote_is_a_failure
 test_repo_path_inside_a_website_is_a_failure
