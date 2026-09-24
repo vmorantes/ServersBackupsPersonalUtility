@@ -468,6 +468,117 @@ bc_hestia_diag_ruta_repo() {
 }
 
 # =============================================================================
+# Escribir en el servidor y COMPROBARLO
+# =============================================================================
+# La regla del ADR 0017: HestiaCP puede decir que hizo algo y no haberlo hecho
+# —la orden del respaldo incremental registra éxito aunque el respaldo falle—.
+# Por eso nada que escriba en un servidor puede fiarse del código de salida de
+# la orden: hay que leer el estado antes, escribir, volver a leerlo y juzgar
+# por la diferencia. Esto es esa secuencia, escrita una vez.
+#
+#   bc_hestia_escribir_y_confirmar <etiqueta> <orden_escritura> <orden_lectura> <juez>
+#
+# El JUEZ es una función pura que recibe (antes, después) y devuelve 0 si el
+# criterio se cumple. Cada paso trae el suyo. Con el después vacío, se le está
+# preguntando «¿esto ya estaba hecho?».
+#
+# Devuelve DATOS, no texto para nadie: una línea por campo, con el mismo
+# separador y el mismo cuidado que el diagnóstico. No pinta, no sabe qué nivel
+# es cada estado ni qué color lleva.
+#
+#   estado    SIN_CAMBIO|HECHO|SIN_CONFIRMAR|FALLO|CIEGO
+#   antes     lo que se leyó antes de tocar nada
+#   despues   lo que se leyó después (vacío si no se pudo leer)
+#   codigo    el código con el que salió la orden de escritura (vacío si no se
+#             llegó a ejecutar)
+#   salida    lo que imprimió la orden de escritura
+#
+# LOS CINCO ESTADOS
+#   SIN_CAMBIO     el antes ya cumplía. NO se escribió nada. No es un éxito
+#                  disfrazado: se dice «no había nada que cambiar».
+#   HECHO          se escribió y la relectura lo confirma.
+#   SIN_CONFIRMAR  se escribió, la orden dijo que bien, y la relectura NO lo
+#                  confirma. Este estado existe por el ADR 0017 y no puede
+#                  caer en FALLO: la acción que toca es distinta —ir a mirar
+#                  por qué el servidor dice una cosa y enseña otra—, no
+#                  reintentar.
+#   FALLO          la orden falló y la relectura tampoco confirma el cambio.
+#   CIEGO          no se pudo leer el estado. Si es el ANTES, no se escribe
+#                  nada: sin saber qué había no se puede informar ni deshacer.
+bc_hestia_escribir_y_confirmar() {
+  local etiqueta="${1:-}" orden_escritura="${2:-}" orden_lectura="${3:-}" juez="${4:-}"
+  local antes despues rc=0 salida=""
+
+  # La etiqueta viaja con los datos para que quien informe sepa de qué paso
+  # son sin tener que acordarse del orden en que los pidió.
+  bc_hestia_registro etiqueta "$etiqueta"
+
+  # 1. El ANTES. Se lee con centinela: una salida vacía puede ser un valor
+  #    vacío legítimo, y no es lo mismo que no haber podido preguntar.
+  if ! antes="$(bc_hestia_leer_texto "$orden_lectura")"; then
+    bc_hestia_escribir_datos CIEGO "" "" "" ""
+    return 0
+  fi
+
+  # 2. ¿Ya estaba? Se pregunta ANTES de escribir. Escribir sobre algo que ya
+  #    cumple es tocar un servidor sin motivo, y en esta herramienta tocar de
+  #    más es justo lo que hay que evitar.
+  if "$juez" "$antes" ""; then
+    bc_hestia_escribir_datos SIN_CAMBIO "$antes" "$antes" "" ""
+    return 0
+  fi
+
+  # 3. Escribir. El código se guarda como DATO, nunca como prueba.
+  salida="$(bc_hestia_root "$orden_escritura" 2>&1)" || rc=$?
+
+  # 4. El DESPUÉS. Si no se puede leer, es CIEGO — y queda dicho que sí se
+  #    escribió, que es lo que el usuario necesita para ir a mirar.
+  if ! despues="$(bc_hestia_leer_texto "$orden_lectura")"; then
+    bc_hestia_escribir_datos CIEGO "$antes" "" "$rc" "$salida"
+    return 0
+  fi
+
+  # 5. Juzgar por la diferencia, no por el código.
+  local estado
+  if "$juez" "$antes" "$despues"; then
+    estado=HECHO
+  elif (( rc == 0 )); then
+    estado=SIN_CONFIRMAR
+  else
+    estado=FALLO
+  fi
+  bc_hestia_escribir_datos "$estado" "$antes" "$despues" "$rc" "$salida"
+  return 0
+}
+
+# Los cinco campos de salida, siempre los cinco y siempre en el mismo orden.
+bc_hestia_escribir_datos() {
+  bc_hestia_registro estado  "${1:-}"
+  bc_hestia_registro antes   "${2:-}"
+  bc_hestia_registro despues "${3:-}"
+  bc_hestia_registro codigo  "${4:-}"
+  bc_hestia_registro salida  "${5:-}"
+}
+
+# Lee un texto del servidor distinguiendo «vacío» de «no se pudo leer».
+# Imprime el texto y devuelve 0; devuelve 1 si la lectura no llegó a ocurrir.
+#
+# El centinela es el mismo truco que bc_hestia_sondear: el código de salida de
+# la orden no distingue «el archivo está vacío» de «la conexión se cayó», y
+# confundirlos hace que un paso escriba creyendo que no había nada. La orden va
+# dentro de su propio `bash -c` por lo mismo que allí: el camino con sudo
+# antepone texto y un grupo de llaves detrás de sudo es un error de sintaxis.
+bc_hestia_leer_texto() {
+  local orden="${1:-}" guion salida
+  guion="{ $orden; } 2>/dev/null; printf 'BC_FIN\n'"
+  salida="$( { bc_hestia_root "bash -c $(printf '%q' "$guion")" 2>/dev/null || true; } | tr -d '\r' )"
+  [[ "$salida" == *BC_FIN* ]] || return 1
+  # La última línea es el centinela; lo que quede por encima es el valor.
+  printf '%s' "$(sed '$d' <<<"$salida")"
+  return 0
+}
+
+# =============================================================================
 # Estado
 # =============================================================================
 bc_hestia_status() {
@@ -695,9 +806,15 @@ bc_hestia_leer_diagnostico() {
 BC_HESTIA_SEP=$'\x1f'
 
 bc_hestia_registro() {
-  local campo salida=""
+  local campo valor salida=""
   for campo in "$@"; do
-    salida+="${campo//$BC_HESTIA_SEP/ }$BC_HESTIA_SEP"
+    # Un salto de línea dentro de un valor partiría el registro en dos, y el
+    # que lee no tiene forma de distinguir esa mitad de un registro nuevo. Se
+    # aplanan a espacios: lo que sale de aquí son DATOS para informar, no el
+    # contenido original. Quien necesite el texto tal cual (el juez de
+    # bc_hestia_escribir_y_confirmar) lo recibe antes de pasar por aquí.
+    valor="${campo//$BC_HESTIA_SEP/ }"
+    salida+="${valor//$'\n'/ }$BC_HESTIA_SEP"
   done
   printf '%s\n' "${salida%$BC_HESTIA_SEP}"
 }
