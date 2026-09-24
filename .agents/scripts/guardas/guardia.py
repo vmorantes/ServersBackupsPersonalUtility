@@ -431,18 +431,49 @@ def tokens(partes):
     return partes
 
 
+ES_COMMIT = re.compile(r"\bgit(\s+-[cC]\s+\S+)*\s+commit\b")
+
+# El valor de -m / --message de un commit: comillas simples, dobles o $'...'.
+VALOR_MENSAJE = re.compile(
+    r"""(-m|--message)(=|\s+)('(?:[^']|'\\'')*'|"(?:\\.|[^"\\])*"|\$'(?:\\.|[^'\\])*')""",
+    re.S,
+)
+
+
+def sin_mensajes_de_commit(comando):
+    """Sustituye el TEXTO del mensaje de un commit por un marcador.
+
+    Un mensaje de varias líneas se parte por saltos de línea igual que una
+    secuencia de órdenes, así que una línea del cuerpo que empiece por el
+    nombre de una herramienta prohibida se analizaba como si fuera esa orden:
+    describir en un commit lo que hace `v-list-...` quedaba bloqueado. El
+    mensaje no se ejecuta; es texto. Lo que sí se ejecuta —una sustitución
+    `$(...)` dentro del mensaje, o lo que venga después de `&&`— se sigue
+    revisando, porque esto solo tapa el literal entrecomillado.
+
+    La comprobación de menciones a IA se hace aparte, sobre el comando
+    entero: esa sí tiene que mirar el texto.
+    """
+    if not ES_COMMIT.search(comando):
+        return comando
+    return VALOR_MENSAJE.sub(lambda m: f"{m.group(1)}{m.group(2)}'MENSAJE'", comando)
+
+
 def revisar_bash(comando, profundidad=0):
     if profundidad > 3:
         bloquear("comando anidado demasiado profundo para revisarlo: prohibido por prudencia.")
     if re.search(r"(curl|wget)\b[^|]*\|\s*(sudo\s+)?(ba|z|da)?sh\b", comando):
         bloquear("descargar y ejecutar un script remoto está prohibido.")
-    if REDIRECCION_AL_SISTEMA.search(comando):
+    # El análisis por órdenes ignora el texto de un mensaje de commit; todo lo
+    # demás del comando se revisa igual.
+    analizable = sin_mensajes_de_commit(comando)
+    if REDIRECCION_AL_SISTEMA.search(analizable):
         bloquear("escribir en rutas del sistema está prohibido (40-salvaguardas.md §2).")
     # Un mensaje de commit puede llegar por heredoc o $(cat ...), fuera del
     # alcance del análisis por argumentos: se examina el comando entero.
     # Solo ante una invocación real de "git [opciones globales] commit": la
     # palabra "commit" en una ruta (git-hooks/commit-msg) no cuenta.
-    if re.search(r"\bgit(\s+-[cC]\s+\S+)*\s+commit\b", comando):
+    if ES_COMMIT.search(comando):
         hallazgos = buscar(comando)
         if hallazgos:
             bloquear(f"el commit menciona IA ({hallazgos[0][1]!r}): prohibido (40-salvaguardas.md §4).")
@@ -451,7 +482,7 @@ def revisar_bash(comando, profundidad=0):
     for interior in re.findall(r"\$\(([^()]*)\)", comando):
         revisar_bash(interior, profundidad + 1)
 
-    for seg in segmentos(comando):
+    for seg in segmentos(analizable):
         partes = tokens(seg)
         if not partes:
             continue

@@ -50,6 +50,11 @@ BASH_BLOQUEA = [
     "git branch -c a b",
     "git commit -m 'feat: x' -m 'Co-Authored-By: Claude <noreply@anthropic.com>'",
     "git commit -m 'docs: generado con IA'",
+    # Tapar el texto del mensaje no puede tapar lo que SÍ se ejecuta:
+    # lo que va después del commit, ni una sustitución dentro del propio mensaje.
+    "git commit -m 'fix: x' && restic snapshots",
+    "git commit -m 'fix: x'; rclone lsd almacen:",
+    "git commit -m \"fix: $(rm -rf /home/vmorantes/algo)\"",
     "git commit -m \"$(cat <<'EOF'\nfeat: x\n\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>\nEOF\n)\"",
     # Servidores, bases de datos, almacenamiento remoto, HestiaCP.
     "sudo ls",
@@ -137,6 +142,15 @@ BASH_PERMITE = [
     "git add lib/core.sh",
     "git commit -m 'fix(backup): leer stderr de mysqldump'",
     "git commit -m \"$(cat <<'EOF'\nchore(agentes): adaptar el andamiaje\nEOF\n)\"",
+    # El CUERPO de un mensaje de commit es texto, no una secuencia de órdenes.
+    # Antes se partía por saltos de línea y una línea que empezara por el
+    # nombre de una herramienta prohibida se tomaba por esa orden: describir
+    # en un commit lo que hace un comando del panel quedaba bloqueado, y el
+    # mensaje había que empobrecerlo. Encontrado por el coder (#060).
+    "git commit -m 'fix: pedir json\n\nv-list-user-backups-restic no valida el formato.'",
+    "git commit -m 'fix: sonda\n\nrestic decide el formato de la lista, no el panel.'",
+    "git commit -m 'fix: sonda doble\n\nrclone lsf sobre el padre distingue los dos casos.'",
+    "git commit --message='fix: x\n\nmysqldump necesita SHOW VIEW.'",
     "git restore --staged lib/core.sh",
     "git config --get user.name",
     "git remote",
