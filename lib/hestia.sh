@@ -474,8 +474,11 @@ bc_hestia_cuantas_de() { grep -c . <<<"${1:-}" || true; }
 # No todas las versiones lo traen, y un dato inventado es peor que ninguno.
 bc_hestia_tamano_anadido() {
   local json="${1:-}" bytes
+  # El recorte va por los DOS PUNTOS, no por espacios: en un json compacto no
+  # hay ni un espacio entre la clave y el valor, y recortando por espacios se
+  # quedaba la clave pegada al número.
   bytes="$(grep -oE '"data_added"[[:space:]]*:[[:space:]]*[0-9]+' <<<"$json" \
-           | sed 's/.*[[:space:]]//' | sort -n | tail -1)"
+           | sed 's/.*:[[:space:]]*//' | sort -n | tail -1)"
   [[ -n "$bytes" ]] || return 0
   awk -v b="$bytes" 'BEGIN{
     if (b < 1024) { printf "%d B", b }
