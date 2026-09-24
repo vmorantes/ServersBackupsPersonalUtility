@@ -476,37 +476,53 @@ bc_hestia_diag_ruta_repo() {
 # la orden: hay que leer el estado antes, escribir, volver a leerlo y juzgar
 # por la diferencia. Esto es esa secuencia, escrita una vez.
 #
-#   bc_hestia_escribir_y_confirmar <etiqueta> <orden_escritura> <orden_lectura> <juez>
+#   bc_hestia_escribir_y_confirmar <etiqueta> <orden_escritura> <orden_lectura> \
+#                                  <ya_estaba> <se_hizo>
 #
-# El JUEZ es una función pura que recibe (antes, después) y devuelve 0 si el
-# criterio se cumple. Cada paso trae el suyo. Con el después vacío, se le está
-# preguntando «¿esto ya estaba hecho?».
+# DOS JUECES, NO UNO. Los dos son funciones puras que trae cada paso:
+#   ya_estaba <antes>            0 si el estado leído ya cumple el criterio.
+#   se_hizo   <antes> <después>  0 si el cambio se ve en el estado leído.
+# Antes era uno solo al que se llamaba dos veces, con el «después» vacío para
+# preguntar «¿ya estaba?». Funcionaba, pero un juez que se olvidara de mirar el
+# segundo argumento habría dicho SIN_CAMBIO siempre y no habría escrito nunca:
+# un fallo que no rompe nada, no da error y deja la herramienta sin hacer su
+# trabajo. Dos funciones son más verbosas e imposibles de confundir. Un paso
+# escribe las dos aunque solo necesite una.
 #
 # Devuelve DATOS, no texto para nadie: una línea por campo, con el mismo
 # separador y el mismo cuidado que el diagnóstico. No pinta, no sabe qué nivel
 # es cada estado ni qué color lleva.
 #
-#   estado    SIN_CAMBIO|HECHO|SIN_CONFIRMAR|FALLO|CIEGO
+#   estado    SIN_CAMBIO|HECHO|SIN_CONFIRMAR|FALLO|CIEGO|ESCRITO_SIN_COMPROBAR
 #   antes     lo que se leyó antes de tocar nada
 #   despues   lo que se leyó después (vacío si no se pudo leer)
 #   codigo    el código con el que salió la orden de escritura (vacío si no se
 #             llegó a ejecutar)
 #   salida    lo que imprimió la orden de escritura
 #
-# LOS CINCO ESTADOS
+# LOS SEIS ESTADOS
 #   SIN_CAMBIO     el antes ya cumplía. NO se escribió nada. No es un éxito
 #                  disfrazado: se dice «no había nada que cambiar».
-#   HECHO          se escribió y la relectura lo confirma.
+#   HECHO          se escribió y la relectura lo confirma. También cuando la
+#                  orden salió con error pero el cambio SÍ se ve: manda el
+#                  estado del servidor, no lo que diga la orden.
 #   SIN_CONFIRMAR  se escribió, la orden dijo que bien, y la relectura NO lo
 #                  confirma. Este estado existe por el ADR 0017 y no puede
 #                  caer en FALLO: la acción que toca es distinta —ir a mirar
 #                  por qué el servidor dice una cosa y enseña otra—, no
 #                  reintentar.
 #   FALLO          la orden falló y la relectura tampoco confirma el cambio.
-#   CIEGO          no se pudo leer el estado. Si es el ANTES, no se escribe
-#                  nada: sin saber qué había no se puede informar ni deshacer.
+#   CIEGO          no se pudo leer el ANTES, así que NO se escribió nada. Sin
+#                  saber qué había no se puede informar ni deshacer. Es
+#                  inocuo: el servidor quedó como estaba.
+#   ESCRITO_SIN_COMPROBAR
+#                  se escribió y no se pudo leer el DESPUÉS. Exige ir al
+#                  servidor. Va aparte de CIEGO porque para quien lo lee son
+#                  dos cosas muy distintas, y distinguirlas mirando si un
+#                  campo viene vacío es justo lo que no se hace aquí.
 bc_hestia_escribir_y_confirmar() {
-  local etiqueta="${1:-}" orden_escritura="${2:-}" orden_lectura="${3:-}" juez="${4:-}"
+  local etiqueta="${1:-}" orden_escritura="${2:-}" orden_lectura="${3:-}"
+  local ya_estaba="${4:-}" se_hizo="${5:-}"
   local antes despues rc=0 salida=""
 
   # La etiqueta viaja con los datos para que quien informe sepa de qué paso
@@ -523,7 +539,7 @@ bc_hestia_escribir_y_confirmar() {
   # 2. ¿Ya estaba? Se pregunta ANTES de escribir. Escribir sobre algo que ya
   #    cumple es tocar un servidor sin motivo, y en esta herramienta tocar de
   #    más es justo lo que hay que evitar.
-  if "$juez" "$antes" ""; then
+  if "$ya_estaba" "$antes"; then
     bc_hestia_escribir_datos SIN_CAMBIO "$antes" "$antes" "" ""
     return 0
   fi
@@ -531,16 +547,17 @@ bc_hestia_escribir_y_confirmar() {
   # 3. Escribir. El código se guarda como DATO, nunca como prueba.
   salida="$(bc_hestia_root "$orden_escritura" 2>&1)" || rc=$?
 
-  # 4. El DESPUÉS. Si no se puede leer, es CIEGO — y queda dicho que sí se
-  #    escribió, que es lo que el usuario necesita para ir a mirar.
+  # 4. El DESPUÉS. Si no se puede leer, NO es lo mismo que no haber podido
+  #    leer el antes: allí no se tocó nada y aquí sí. Se dice con su propio
+  #    estado, porque lo que el usuario tiene que hacer es distinto.
   if ! despues="$(bc_hestia_leer_texto "$orden_lectura")"; then
-    bc_hestia_escribir_datos CIEGO "$antes" "" "$rc" "$salida"
+    bc_hestia_escribir_datos ESCRITO_SIN_COMPROBAR "$antes" "" "$rc" "$salida"
     return 0
   fi
 
   # 5. Juzgar por la diferencia, no por el código.
   local estado
-  if "$juez" "$antes" "$despues"; then
+  if "$se_hizo" "$antes" "$despues"; then
     estado=HECHO
   elif (( rc == 0 )); then
     estado=SIN_CONFIRMAR

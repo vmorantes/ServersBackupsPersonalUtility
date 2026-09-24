@@ -70,7 +70,7 @@ FIN
 # '@vacio' (la lectura ocurre y devuelve nada).
 escribir() {
   local caso="$1" antes="$2" despues="$3" codigo="$4"
-  rm -f "$BANCO_TMP/ordenes-llanas.txt"
+  rm -f "$BANCO_TMP/ordenes-llanas.txt" "$BANCO_TMP/jueces.txt"
   mkdir -p "$BANCO_TMP/guion" "$BANCO_TMP/$caso"
   printf '%s\n%s\n' "$antes" "$despues" > "$BANCO_TMP/lecturas"
   printf '%s' "$codigo" > "$BANCO_TMP/codigo-escritura"
@@ -82,15 +82,21 @@ escribir() {
     BC_HESTIA_REMOTO=1
     BC_SSH_TARGET="root@servidor-sintetico"
     BC_SSH_CTL="$4/ctl"
-    # El juez del paso: el criterio se cumple cuando el texto dice "yes". Con
-    # el después vacío se le pregunta si el ANTES ya cumplía.
-    juez() {
-      local antes="${1:-}" despues="${2:-}"
-      if [[ -z "$despues" ]]; then [[ "$antes" == *yes* ]]
-      else [[ "$despues" == *yes* ]]
-      fi
+    # Los DOS jueces del paso. Cada uno mira lo suyo, y se apuntan en un
+    # archivo para poder afirmar QUE se llamaron, CUÁNDO y CON QUÉ.
+    #
+    # El destino se guarda en una variable ANTES de definirlos: dentro de una
+    # función, $4 son los argumentos de la función, no los del guion.
+    registro_jueces="$4/jueces.txt"
+    ya_estaba() {
+      printf "ya_estaba|%s\n" "${1:-}" >> "$registro_jueces"
+      [[ "${1:-}" == *yes* ]]
     }
-    bc_hestia_escribir_y_confirmar "paso de prueba" "$2" "$3" juez
+    se_hizo() {
+      printf "se_hizo|%s|%s\n" "${1:-}" "${2:-}" >> "$registro_jueces"
+      [[ "${2:-}" == *yes* ]]
+    }
+    bc_hestia_escribir_y_confirmar "paso de prueba" "$2" "$3" ya_estaba se_hizo
   ' _ "$BANCO_RAIZ" "$MARCA_ESCRITURA" "$MARCA_LECTURA" "$BANCO_TMP" 2>/dev/null
 }
 
@@ -178,12 +184,14 @@ test_an_unreadable_before_writes_nothing() {
     "y NO se envió ninguna orden de escritura al servidor"
 }
 
-# Si el que no se puede leer es el DESPUÉS, también es CIEGO, pero queda dicho
-# que sí se escribió: eso es lo que el usuario necesita para ir a mirar.
-test_an_unreadable_after_says_it_did_write() {
+# Si el que no se puede leer es el DESPUÉS, el estado es OTRO. Para quien lo
+# lee son dos cosas muy distintas: con CIEGO el servidor quedó como estaba y no
+# hay nada que hacer; aquí se escribió y hay que ir a mirar.
+test_an_unreadable_after_is_a_state_of_its_own() {
   nueva_prueba t7
   local datos; datos="$(escribir t7 "BACKUPS_INCREMENTAL='no'" "@ilegible" 0)"
-  afirmar_igual "$(campo "$datos" estado)" "CIEGO" "el después no se pudo leer: CIEGO"
+  afirmar_igual "$(campo "$datos" estado)" "ESCRITO_SIN_COMPROBAR" \
+    "el después no se pudo leer y SÍ se escribió: estado propio, no CIEGO"
   afirmar_igual "$(campo "$datos" antes)" "BACKUPS_INCREMENTAL='no'" \
     "pero el antes sigue registrado"
   afirmar_igual "$(campo "$datos" codigo)" "0" "y consta que la orden llegó a ejecutarse"
@@ -199,13 +207,51 @@ test_an_empty_value_is_not_blindness() {
   afirmar_igual "$(campo "$datos" antes)" "" "y el antes queda como lo que era: vacío"
 }
 
+# --- los dos jueces ----------------------------------------------------------
+#
+# Antes era un juez solo al que se llamaba dos veces, con el «después» vacío
+# para preguntar «¿ya estaba?». Uno que se olvidara de mirar el segundo
+# argumento habría dicho SIN_CAMBIO siempre y no habría escrito NUNCA: un fallo
+# que no rompe nada, no da error y deja la herramienta sin hacer su trabajo.
+# Con dos funciones eso ya no se puede escribir. Lo que se comprueba aquí es lo
+# equivalente: que se llaman en momentos distintos y con argumentos distintos.
+
+# Devuelve el registro de llamadas a los jueces.
+llamadas_a_jueces() {
+  [[ -f "$BANCO_TMP/jueces.txt" ]] && cat "$BANCO_TMP/jueces.txt" || true
+}
+
+test_each_judge_is_asked_its_own_question() {
+  nueva_prueba t9
+  escribir t9 "BACKUPS_INCREMENTAL='no'" "BACKUPS_INCREMENTAL='yes'" 0 >/dev/null
+  local registro; registro="$(llamadas_a_jueces)"
+  afirmar_igual "$(sed -n '1p' <<<"$registro")" "ya_estaba|BACKUPS_INCREMENTAL='no'" \
+    "primero se pregunta si ya estaba, solo con el antes"
+  afirmar_igual "$(sed -n '2p' <<<"$registro")" \
+    "se_hizo|BACKUPS_INCREMENTAL='no'|BACKUPS_INCREMENTAL='yes'" \
+    "y después si se hizo, con el antes Y el después"
+  afirmar_igual "$(grep -c . <<<"$registro")" "2" "cada juez se llama una vez"
+}
+
+# Cuando ya estaba, al segundo juez no se le pregunta nada: no hay «después»
+# que juzgar porque no se escribió.
+test_the_second_judge_is_not_asked_when_nothing_was_written() {
+  nueva_prueba t10
+  escribir t10 "BACKUPS_INCREMENTAL='yes'" "BACKUPS_INCREMENTAL='yes'" 0 >/dev/null
+  local registro; registro="$(llamadas_a_jueces)"
+  afirmar_igual "$(grep -c '^se_hizo' <<<"$registro" || true)" "0" \
+    "sin escritura no se pregunta si se hizo"
+}
+
 test_what_already_complies_is_not_touched
 test_a_confirmed_write_is_done
 test_a_write_that_reports_success_but_changes_nothing
 test_a_failed_write_that_changed_nothing_is_a_failure
 test_a_failing_command_whose_change_is_visible_is_done
 test_an_unreadable_before_writes_nothing
-test_an_unreadable_after_says_it_did_write
+test_an_unreadable_after_is_a_state_of_its_own
 test_an_empty_value_is_not_blindness
+test_each_judge_is_asked_its_own_question
+test_the_second_judge_is_not_asked_when_nothing_was_written
 
 fin_de_suite
