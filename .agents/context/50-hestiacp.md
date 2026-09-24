@@ -93,9 +93,25 @@ enlace), **SIN VERIFICAR**. Al verificar algo, se actualiza su estado con el enl
 - `v-delete-backup-host-restic` **no desactiva las cuentas**: pone el flag de sistema
   `BACKUP_INCREMENTAL='no'` en `hestia.conf`, que no es el `BACKUPS_INCREMENTAL` por cuenta que
   leen los respaldos. Las cuentas siguen en `yes`. FUENTE.
-- `backup-excludes.conf` se carga con `source` (es bash). Claves usadas: `WEB`, `DNS`, `MAIL`,
-  `DB`, listas separadas por comas; el valor `*` salta la sección entera. No hay clave `USER`, y
-  el campo `UDIR` del `backup.conf` nunca se rellena en 1.10.4. FUENTE.
+- `backup-excludes.conf` vive en `$HESTIA/data/users/<cuenta>/`, es **uno por cuenta**, y se
+  carga con `source` (es bash: **lo que se escriba ahí se ejecuta** en el próximo respaldo). El
+  valor `*` de una clave salta esa sección entera. FUENTE.
+- **Hay DOS implementaciones gemelas del filtrado**, cada una con su propio `source`, y ninguna
+  llama a la otra (verificado el 2026-09-24, zanjando dos verificaciones contradictorias):
+  `v-backup-user` (el clásico) filtra con **seis** claves —`WEB`, `DNS`, `MAIL`, `DB`, `CRON` y
+  `USER`—; `v-backup-user-config` (el que ejecuta el camino incremental, llamado por
+  `v-backup-user-restic`) con **cinco**, sin `USER`. En los dos, el `source` va **antes** de las
+  secciones que filtran. El `UDIR` del `backup.conf` nunca se rellena. FUENTE.
+  *(Corrige la versión anterior de esta ficha, que decía «no hay clave USER».)*
+- **Excluir no significa lo mismo en los dos respaldos.** `v-backup-user-config` solo prepara
+  *configuración* y *volcados* en `/home/<cuenta>/backup/`; el incremental copia después
+  `/home/<cuenta>` entero **sin exclusiones**. Por tanto, en el incremental:
+  **`WEB` no impide que los archivos del sitio se copien** (viven en
+  `/home/<cuenta>/web/<dominio>/public_html`, dentro de lo que copia restic): solo evita que se
+  preparen sus metadatos. **`DB` sí funciona**, porque el volcado no existe en disco hasta que
+  ese script lo genera. `DNS` no tiene el problema: el archivo de zona es el contenido.
+  `MAIL`: **SIN VERIFICAR** dónde viven los buzones. FUENTE (sin números de línea: la
+  verificación se hizo sin shell).
 - El respaldo clásico lo instala el instalador como `10 05 * * * sudo …/v-backup-users` en el
   crontab de `hestiaweb`, que HestiaCP edita **siempre a mano** (`echo >>`, `sed -i`), nunca con
   `crontab -u`, con dueño `hestiaweb:hestiaweb` y permisos `600`. Ningún script de los leídos lo

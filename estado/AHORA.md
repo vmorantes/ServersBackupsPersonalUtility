@@ -1,7 +1,17 @@
 # Ahora
 
 > **Para retomar, empieza aquí y sigue por «Dónde se quedó la fase 2».** El tramo se cerró a
-> petición del PO con la fase 2 en siete pasos y medio de ocho. Nada quedó sin commitear.
+> petición del PO con la fase 2 en siete pasos y medio de ocho.
+>
+> **LO PRIMERO DE LA PRÓXIMA RONDA:** quedan dos archivos de documentación **sin commitear**,
+> `.agents/context/50-hestiacp.md` y este mismo. Llevan lo verificado al cerrar sobre las
+> exclusiones. El mensaje que ordenaba ese commit no llegó a la sesión del coder (la entrega se
+> cortó), no es que se olvidara. Commitearlos tal cual, sin editarlos:
+>
+>     git add .agents/context/50-hestiacp.md estado/AHORA.md
+>     git commit -m "docs: excluir no significa lo mismo en los dos respaldos"
+>
+> El resto del árbol quedó limpio y con `verificar.sh` en verde (23 suites).
 
 - **Actualizado:** 2026-09-24, al cerrar el tramo.
 - **Último mensaje:** #081 (ARQ). El próximo será #082. Sin ronda en vuelo: el coder espera
@@ -78,16 +88,27 @@ desactivado está en el reporte del coder de la ronda de cierre.
 
 **Lo que falta para poder terminarlo** (y no se debe escribir nada sin esto):
 
-1. **Confirmar el efecto real de cada exclusión en cada respaldo.** Deducción del arquitecto,
-   **sin verificar**: como el incremental hace `restic backup /home/<cuenta>` **sin exclusiones**,
-   y las exclusiones solo gobiernan lo que `v-backup-user-config` *prepara* aparte, excluir WEB,
-   MAIL o DNS **no impediría que esos datos se copien** en el incremental —están en el disco—.
-   La excepción es `DB`: una base no está en el sistema de archivos, así que si su volcado no se
-   prepara, no hay nada que copiar. Si esto se confirma, el paso tiene que decir, por sección,
-   qué efecto real tiene excluirla **en cada uno de los dos respaldos**, porque no es el mismo.
-   Pregunta exacta para el verificador: qué hace `v-backup-user-config` con `$WEB` cuando no es
-   `*` —¿copia archivos o solo configuración?— y dónde viven los archivos de un dominio.
-2. Con eso, terminar el paso y quitarle el modo solo lectura.
+1. **El efecto real de cada exclusión, ya VERIFICADO** (llegó justo al cerrar; no se ha escrito
+   nada con ello todavía):
+   - **WEB — confirmado, y es el hallazgo:** `v-backup-user-config` solo copia *configuración*
+     (vhost, SSL, plantillas); **nunca** el contenido del sitio. Y ese contenido vive en
+     `/home/<cuenta>/web/<dominio>/public_html`, o sea **dentro** de lo que copia
+     `restic backup /home/<cuenta>`. Conclusión: **excluir WEB no impide que los archivos del
+     sitio acaben en la instantánea.** Solo evita que se preparen sus metadatos.
+   - **DB — al revés, y por eso la exclusión del PO sí funciona:** el volcado no existe en el
+     disco hasta que ese script lo genera. Si la base está excluida, no se genera, y no hay nada
+     que copiar.
+   - **DNS — sin el problema:** el archivo de zona *es* el contenido.
+   - **MAIL — SIN VERIFICAR.** Solo se confirmó que se copia configuración, no los mensajes; no
+     se miró dónde viven los buzones. **Es lo único que queda abierto.**
+2. Con eso, el paso tiene que decir **por sección qué efecto real tiene excluirla en cada uno de
+   los dos respaldos**, quitarle el modo solo lectura (hay un `bc_err` explícito que lo impide,
+   con su comentario) y volver a poner las dos pruebas que se quitaron, documentadas en la
+   propia suite.
+
+   Nota de método: esa verificación se hizo sin poder ejecutar nada, así que da texto literal
+   contrastado dos veces pero **no números de línea**. Para citarla en `50-hestiacp.md` con
+   ancla hace falta un `grep -n` que alguien con shell haga sobre la fuente pública.
 
 **Verificado en esta sesión y ya en `50-hestiacp.md`:** hay **dos implementaciones gemelas** de
 las exclusiones. `v-backup-user` (clásico) filtra con seis claves —WEB, DNS, MAIL, DB, CRON y
