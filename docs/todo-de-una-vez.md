@@ -127,7 +127,7 @@ servidor con permisos `600`; no pasan por la línea de órdenes, así que no son
 visibles para otros usuarios de la máquina.
 
 Después, **Registrar en HestiaCP** con el repositorio
-(`rclone:mi-almacenamiento:mi-servidor/hestiacp/`) y **Activar su cron**.
+(`rclone:mi-almacenamiento:mi-bucket/hestiacp`) y **Activar su cron**.
 
 !!! warning "HestiaCP no activa ese cron por su cuenta"
     Sin él, Restic queda perfectamente configurado y **no se ejecuta nunca**. El

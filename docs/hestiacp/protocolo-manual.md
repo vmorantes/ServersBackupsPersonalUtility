@@ -94,9 +94,27 @@ rclone config
     funcionará:
 
     ```bash
-    rclone lsd mi-almacenamiento:
-    rclone mkdir mi-almacenamiento:mi-servidor
+    cd /root
+    rclone lsd almacenamiento_local:/IncrementalBackups
     ```
+
+    !!! danger "Con un remoto `local`, NUNCA una ruta sin `/` inicial"
+        Un remoto de tipo `local` (o un `alias` sin raíz fija) resuelve las rutas
+        **relativas al directorio en el que estés**. Una orden como
+        un `rclone mkdir` cuya ruta no empiece por `/`, ejecutado dentro de la
+        carpeta de una web, **crea el directorio dentro de esa web**, servida por
+        internet.
+
+        Ha ocurrido **dos veces** en servidores reales siguiendo ejemplos de esta
+        misma página (2026-09-23 y 2026-09-24). Por eso: `cd /root` primero, y la
+        ruta siempre absoluta.
+
+        Si el directorio no existe, créalo en el sistema de archivos y no por
+        rclone, que es más difícil de equivocar:
+
+        ```bash
+        mkdir -p /IncrementalBackups && chmod 700 /IncrementalBackups
+        ```
 
     La configuración queda en `/root/.config/rclone/rclone.conf`, **con las claves
     en claro**. Acuérdate de este archivo: vuelve a aparecer en el paso 6.
@@ -105,20 +123,43 @@ rclone config
 
 ## 3 · Registrar el host de respaldo
 
+!!! danger "LEE ESTO ANTES DE COPIAR NADA: la ruta se escribe distinto según el remoto"
+    **La ruta correcta depende del tipo de remoto**, y equivocarse aquí es lo que
+    ha roto **dos servidores reales** (2026-09-23 y 2026-09-24), las dos veces
+    copiando ejemplos de esta misma página:
+
+    | Tipo de remoto | Cómo se escribe la ruta | Ejemplo |
+    |---|---|---|
+    | `local`, `alias`, `sftp` | **absoluta**, empezando por `/` | `'rclone:almacen:/IncrementalBackups'` |
+    | Bucket (S3, Mega S4, B2) | empieza por el **nombre del bucket**, sin `/` | `'rclone:mi-almacenamiento:mi-bucket/hestiacp'` |
+
+    Con un remoto `local`, una ruta sin barra inicial se resuelve **desde el
+    directorio en el que estés parado**. Escribirla así estando dentro de un
+    `public_html` crea los respaldos **dentro de la web**, servidos por internet.
+
+    Si no sabes de qué tipo es tu remoto, míralo antes:
+
+    ```bash
+    rclone config show <nombre-del-remoto> | grep -E '^(type|root|remote) ='
+    ```
+
+    Y ejecuta siempre desde `/root`, no desde la carpeta en la que estuvieras.
+
 ```bash
-v-add-backup-host-restic 'rclone:REMOTO:RUTA/' SNAPSHOTS DIARIAS SEMANALES MENSUALES ANUALES
+v-add-backup-host-restic 'rclone:REMOTO:RUTA' SNAPSHOTS DIARIAS SEMANALES MENSUALES ANUALES
 ```
+
+Con un bucket:
 
 ```bash
 v-add-backup-host-restic 'rclone:mi-almacenamiento:mi-bucket/hestiacp' 30 8 5 3 -1
 ```
 
-!!! danger "La ruta, absoluta siempre que el remoto sea `local`"
-    Con un remoto de tipo `local` (o un `alias` sin raíz fija), rclone resuelve
-    una ruta **sin barra inicial desde el directorio en el que estés parado**.
-    Registrar `mi-servidor/hestiacp/` estando dentro de `public_html` crea los
-    respaldos **dentro de la web**, servidos por internet. Ocurrió en un servidor
-    real el 2026-09-23, siguiendo un ejemplo de esta misma página.
+Con un disco local o un NAS montado:
+
+```bash
+v-add-backup-host-restic 'rclone:almacenamiento_local:/IncrementalBackups' 30 8 5 3 -1
+```
 
     | Tipo de remoto | Cómo se escribe la ruta |
     |---|---|
@@ -298,13 +339,13 @@ Guardarlos solo en el propio servidor no sirve de nada.
 
 ```bash
 # ¿Hay instantáneas y de cuándo?
-restic -r rclone:mi-almacenamiento:mi-servidor/hestiacp/ snapshots
+restic -r rclone:mi-almacenamiento:mi-bucket/hestiacp/admin snapshots
 
 # ¿El repositorio está sano?
-restic -r rclone:mi-almacenamiento:mi-servidor/hestiacp/ check
+restic -r rclone:mi-almacenamiento:mi-bucket/hestiacp/admin check
 
 # ¿Cuánto ocupa de verdad tras deduplicar?
-restic -r rclone:mi-almacenamiento:mi-servidor/hestiacp/ stats
+restic -r rclone:mi-almacenamiento:mi-bucket/hestiacp/admin stats
 
 # Lo que ve HestiaCP
 v-list-user-backups admin

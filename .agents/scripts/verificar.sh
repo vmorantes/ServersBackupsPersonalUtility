@@ -93,6 +93,24 @@ python3 .agents/scripts/guardas/probar_guardia.py || fallo "la guarda no se comp
 paso "Menciones a IA en entregables y commits posteriores a la adopción"
 python3 .agents/scripts/menciones_ia.py || fallo "hay menciones a IA"
 
+paso "Rutas relativas en ejemplos de almacenamiento (docs/)"
+# Dos servidores reales rotos por lo mismo (2026-09-23 y 2026-09-24): un ejemplo
+# con una ruta SIN barra inicial, copiado tal cual, y un remoto de rclone de tipo
+# local, que resuelve desde el directorio de trabajo. El repositorio de respaldos
+# acabó dentro de un public_html servido por internet. Que no dependa de que
+# alguien se acuerde de revisarlo.
+# Solo las órdenes que CREAN o ESCRIBEN: listar en el sitio equivocado no rompe
+# nada, crear sí. Una ruta válida empieza por '/' (absoluta) o por '<' (marcador
+# a rellenar por el lector).
+relativas="$(grep -rnE '(rclone (mkdir|copy|sync|move|moveto|copyto)|restic +init) +[^ ]*[a-z0-9]:[A-Za-z0-9_-]' docs/ 2>/dev/null \
+    | grep -vE ':[/<]' || true)"
+if [[ -n "$relativas" ]]; then
+    echo "$relativas"
+    fallo "hay ejemplos con ruta relativa tras 'remoto:' (deben empezar por / o por el bucket)"
+else
+    echo "sin ejemplos con ruta relativa"
+fi
+
 paso "Pruebas del proyecto"
 if [ -f tests/ejecutar.sh ]; then
     bash tests/ejecutar.sh || fallo "tests/ejecutar.sh"

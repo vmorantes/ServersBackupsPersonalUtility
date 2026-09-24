@@ -43,7 +43,7 @@ desapareciera este servidor?**
           - cliente_nuevo
 
 2 · Cuenta completa (archivos, correo, DNS)
-  ✓ Restic configurado: rclone:mi-almacenamiento:mi-servidor/hestiacp/
+  ✓ Restic configurado: rclone:mi-almacenamiento:mi-bucket/hestiacp
   ✓ el repositorio está fuera del servidor
   ✗ el cron de Restic NO está activo: configurado pero nunca se ejecuta
 
