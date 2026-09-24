@@ -511,8 +511,15 @@ bc_hestia_duracion_llana() {
 # comparar».
 
 # La huella de un texto. Vacío si no se puede calcular.
+#
+# Se quitan los espacios y saltos de línea DEL FINAL antes de calcularla, y
+# nada más. Un salto de línea de más es el cambio cosmético más probable, y un
+# falso «LA CONTRASEÑA HA CAMBIADO» es caro justo porque asusta con lo que más
+# asusta. Lo que NO se hace es normalizar de más: cualquier diferencia que no
+# sea espacio en blanco al final ES un cambio, y como tal se informa.
 bc_hestia_huella() {
   local t="${1:-}"
+  t="${t%"${t##*[![:space:]]}"}"
   [[ -n "$t" ]] || return 0
   printf '%s' "$t" | sha256sum 2>/dev/null | cut -c1-16
 }

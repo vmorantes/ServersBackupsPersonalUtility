@@ -141,6 +141,39 @@ informe_de() {
 }
 
 # --- primer rescate ----------------------------------------------------------
+# --- la huella: qué cuenta como cambio y qué no ------------------------------
+#
+# Un falso «LA CONTRASEÑA HA CAMBIADO» es caro porque asusta con lo que más
+# asusta. Pero normalizar de más es peor: escondería un cambio de verdad.
+
+huella_de() {
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/hestia.sh"
+    printf "[%s]" "$(bc_hestia_huella "$2")"
+  ' _ "$BANCO_RAIZ" "$1" 2>&1
+}
+
+test_trailing_whitespace_is_not_a_change() {
+  nueva_prueba t8
+  local base; base="$(huella_de "$CLAVE_UNO")"
+  afirmar_igual "$(huella_de "$CLAVE_UNO
+")" "$base" "un salto de línea al final no es un cambio"
+  afirmar_igual "$(huella_de "$CLAVE_UNO   ")" "$base" "ni unos espacios al final"
+}
+
+test_anything_else_is_a_change() {
+  nueva_prueba t9
+  local base; base="$(huella_de "$CLAVE_UNO")"
+  local espacio_delante; espacio_delante="$(huella_de " $CLAVE_UNO")"
+  local otra;            otra="$(huella_de "$CLAVE_UNO_NUEVA")"
+  afirmar_igual "$([[ "$espacio_delante" == "$base" ]] && echo igual || echo distinta)" \
+    "distinta" "un espacio DELANTE sí es un cambio: no se normaliza de más"
+  afirmar_igual "$([[ "$otra" == "$base" ]] && echo igual || echo distinta)" \
+    "distinta" "y otra clave, por supuesto"
+}
+
 test_a_first_rescue_has_nothing_to_compare_with() {
   nueva_prueba t1
   preparar t1
@@ -272,6 +305,8 @@ test_a_dry_run_writes_nothing() {
     "ni se archiva ningún informe"
 }
 
+test_trailing_whitespace_is_not_a_change
+test_anything_else_is_a_change
 test_a_first_rescue_has_nothing_to_compare_with
 test_a_second_rescue_with_the_same_keys_says_so
 test_a_changed_key_is_a_named_serious_warning
