@@ -1,0 +1,164 @@
+/* docs/estilos/pestanas.css — pestañas de pymdownx.tabbed (alternate_style),
+   sin JavaScript y sin depender de ningún tema: son casillas de radio + CSS.
+   Colores sobrios, coherentes con el tema readthedocs (grises y su verde).
+   Nada de modo oscuro. */
+
+/* -----------------------------------------------------------------------
+   1. Los radios reales existen (uno por pestaña) para que el teclado y los
+   lectores de pantalla puedan navegar y activar cada pestaña: son la ÚNICA
+   fuente de verdad de "cuál está activa". `display:none` o
+   `visibility:hidden` los sacarían del árbol de accesibilidad y del orden
+   de tabulación, y las pestañas dejarían de poder usarse sin ratón. Se
+   sacan de la vista con posición absoluta y opacidad cero, que conserva el
+   elemento (y su foco) pero no ocupa espacio ni se ve.
+   ----------------------------------------------------------------------- */
+.tabbed-set {
+  position: relative;
+  margin: 1em 0;
+}
+
+.tabbed-set > input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* -----------------------------------------------------------------------
+   2. Etiquetas en fila, con aspecto de pestaña.
+   ----------------------------------------------------------------------- */
+.tabbed-set > .tabbed-labels {
+  display: flex;
+  flex-wrap: nowrap;
+  border-bottom: 2px solid #ccc;
+  /* Punto 5: si no caben, se desplazan en horizontal en vez de romper la
+     maqueta en pantallas estrechas. */
+  overflow-x: auto;
+}
+
+.tabbed-set > .tabbed-labels > label {
+  flex: 0 0 auto;
+  padding: 0.5em 1em;
+  margin-bottom: -2px;
+  border-bottom: 2px solid transparent;
+  color: #555;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.tabbed-set > .tabbed-labels > label:hover {
+  color: #2980b9;
+}
+
+/* -----------------------------------------------------------------------
+   3. Mostrar solo el bloque de la pestaña marcada. Los input son hermanos
+   directos de .tabbed-content dentro de .tabbed-set (el mismo orden que
+   las etiquetas y los bloques), así que el enésimo input marcado activa el
+   enésimo .tabbed-block Y la enésima label, por posición — sin JavaScript.
+   Se escriben las reglas hasta SEIS pestañas: hoy el máximo del proyecto
+   son cuatro (guía de diagnóstico), con margen para crecer un poco.
+   ----------------------------------------------------------------------- */
+.tabbed-set > .tabbed-content > .tabbed-block {
+  display: none;
+}
+
+.tabbed-set > input:nth-child(1):checked ~ .tabbed-labels > label:nth-child(1),
+.tabbed-set > input:nth-child(2):checked ~ .tabbed-labels > label:nth-child(2),
+.tabbed-set > input:nth-child(3):checked ~ .tabbed-labels > label:nth-child(3),
+.tabbed-set > input:nth-child(4):checked ~ .tabbed-labels > label:nth-child(4),
+.tabbed-set > input:nth-child(5):checked ~ .tabbed-labels > label:nth-child(5),
+.tabbed-set > input:nth-child(6):checked ~ .tabbed-labels > label:nth-child(6) {
+  border-bottom-color: #2980b9;
+  color: #1a1a1a;
+  font-weight: bold;
+}
+
+.tabbed-set > input:nth-child(1):checked ~ .tabbed-content > .tabbed-block:nth-child(1),
+.tabbed-set > input:nth-child(2):checked ~ .tabbed-content > .tabbed-block:nth-child(2),
+.tabbed-set > input:nth-child(3):checked ~ .tabbed-content > .tabbed-block:nth-child(3),
+.tabbed-set > input:nth-child(4):checked ~ .tabbed-content > .tabbed-block:nth-child(4),
+.tabbed-set > input:nth-child(5):checked ~ .tabbed-content > .tabbed-block:nth-child(5),
+.tabbed-set > input:nth-child(6):checked ~ .tabbed-content > .tabbed-block:nth-child(6) {
+  display: block;
+}
+
+.tabbed-set > .tabbed-content > .tabbed-block {
+  padding: 0.8em 0.2em 0.2em;
+  border-top: 1px solid #eee;
+}
+
+/* -----------------------------------------------------------------------
+   4. Foco de teclado visible en la etiqueta correspondiente al radio
+   enfocado (el radio en sí está oculto a la vista, pero sigue siendo el
+   elemento que recibe el foco real).
+   ----------------------------------------------------------------------- */
+.tabbed-set > input:nth-child(1):focus-visible ~ .tabbed-labels > label:nth-child(1),
+.tabbed-set > input:nth-child(2):focus-visible ~ .tabbed-labels > label:nth-child(2),
+.tabbed-set > input:nth-child(3):focus-visible ~ .tabbed-labels > label:nth-child(3),
+.tabbed-set > input:nth-child(4):focus-visible ~ .tabbed-labels > label:nth-child(4),
+.tabbed-set > input:nth-child(5):focus-visible ~ .tabbed-labels > label:nth-child(5),
+.tabbed-set > input:nth-child(6):focus-visible ~ .tabbed-labels > label:nth-child(6) {
+  outline: 2px solid #2980b9;
+  outline-offset: 2px;
+}
+
+/* -----------------------------------------------------------------------
+   6. Al imprimir, una pestaña oculta es información perdida: esta
+   documentación se imprime y se lee en un servidor sin pantalla. Se
+   muestran TODOS los bloques. El texto de cada etiqueta NO se puede repetir
+   junto a su bloque con CSS puro (comprobado en el HTML real que genera
+   pymdownx.tabbed: el <label> con el texto vive en .tabbed-labels y el
+   .tabbed-block correspondiente en .tabbed-content, contenedores distintos
+   — CSS no puede leer el texto de un elemento y copiarlo en otro). La
+   solución honesta: las etiquetas se dejan visibles arriba, en el mismo
+   orden que los bloques, y cada bloque se numera con un contador CSS
+   ("Opción 1", "Opción 2"...) que coincide con esa misma posición — así el
+   lector relaciona cada bloque con su etiqueta sin que el CSS invente un
+   texto que no tiene forma de conocer. Se quita además el aspecto de
+   pestaña clicable, que no significa nada en papel.
+   ----------------------------------------------------------------------- */
+@media print {
+  .tabbed-set > .tabbed-labels {
+    display: block;
+    border-bottom: none;
+    overflow: visible;
+  }
+
+  .tabbed-set > .tabbed-labels > label {
+    display: inline;
+    margin-bottom: 0;
+    border-bottom: none;
+    cursor: default;
+    font-weight: bold;
+  }
+
+  .tabbed-set > .tabbed-labels > label::after {
+    content: " · ";
+  }
+
+  .tabbed-set > .tabbed-labels > label:last-child::after {
+    content: "";
+  }
+
+  .tabbed-set > .tabbed-content {
+    counter-reset: bc-pestana;
+  }
+
+  .tabbed-set > .tabbed-content > .tabbed-block {
+    display: block !important;
+    border-top: 1px solid #ccc;
+    padding: 0;
+    margin-top: 1em;
+    break-inside: avoid;
+  }
+
+  .tabbed-set > .tabbed-content > .tabbed-block::before {
+    counter-increment: bc-pestana;
+    content: "Opción " counter(bc-pestana) " (ver las etiquetas de arriba, en este mismo orden):";
+    display: block;
+    font-weight: bold;
+    margin: 0.3em 0;
+  }
+}

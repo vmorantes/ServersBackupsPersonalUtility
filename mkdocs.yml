@@ -23,6 +23,7 @@ theme:
 # Lo que el tema no trae y añadimos nosotros, sin plugins ni dependencias.
 extra_css:
   - estilos/pygments.css
+  - estilos/pestanas.css
   - estilos/extra.css
 
 extra_javascript:
@@ -46,6 +47,12 @@ markdown_extensions:
       line_spans: __span
   - pymdownx.inlinehilite
   - pymdownx.snippets
+  # Las pestañas las genera pymdown-extensions, no el tema: lo único que hacía
+  # falta de Material era su CSS, y ese lo escribimos nosotros
+  # (docs/estilos/pestanas.css). `alternate_style` produce un marcado que
+  # funciona solo con CSS, sin JavaScript.
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.tasklist:
       custom_checkbox: true
   - pymdownx.keys

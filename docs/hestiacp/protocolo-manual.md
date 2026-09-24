@@ -55,51 +55,51 @@ rclone config
 
     No se hacen las dos: cada una crea un remoto distinto.
 
-### Opción A · S3 / Mega S4
+=== "Opción A · S3 / Mega S4"
 
-```
-n                          nuevo remoto
-name> mi-almacenamiento
-Storage> s3                Amazon S3 Compliant Storage Providers
-provider> Other            Mega S4 es compatible, no es un proveedor listado
-env_auth> false
-access_key_id> …           del panel de Mega, sección S4
-secret_access_key> …
-region>                    vacío salvo que Mega indique otra
-endpoint> …                OBLIGATORIO
-location_constraint>       vacío
-acl> private
-Edit advanced config? n
-Keep this remote? y
-q
-```
+    ```
+    n                          nuevo remoto
+    name> mi-almacenamiento
+    Storage> s3                Amazon S3 Compliant Storage Providers
+    provider> Other            Mega S4 es compatible, no es un proveedor listado
+    env_auth> false
+    access_key_id> …           del panel de Mega, sección S4
+    secret_access_key> …
+    region>                    vacío salvo que Mega indique otra
+    endpoint> …                OBLIGATORIO
+    location_constraint>       vacío
+    acl> private
+    Edit advanced config? n
+    Keep this remote? y
+    q
+    ```
 
-!!! danger "Sin `endpoint`, rclone habla con Amazon"
-    Es el error que hace que «no funcione y no se sepa por qué». Mega S4 es
-    compatible con S3 pero **no es AWS**: sin endpoint, rclone dirige las
-    peticiones a Amazon, donde tus credenciales no valen nada.
+    !!! danger "Sin `endpoint`, rclone habla con Amazon"
+        Es el error que hace que «no funcione y no se sepa por qué». Mega S4 es
+        compatible con S3 pero **no es AWS**: sin endpoint, rclone dirige las
+        peticiones a Amazon, donde tus credenciales no valen nada.
 
-### Opción B · Disco local o NAS montado
+=== "Opción B · Disco local o NAS montado"
 
-```
-n
-name> almacenamiento_local
-Storage> local
-Edit advanced config? n
-Keep this remote? y
-q
-```
+    ```
+    n
+    name> almacenamiento_local
+    Storage> local
+    Edit advanced config? n
+    Keep this remote? y
+    q
+    ```
 
-**Comprobar antes de seguir.** Si esto falla, nada de lo que viene después
-funcionará:
+    **Comprobar antes de seguir.** Si esto falla, nada de lo que viene después
+    funcionará:
 
-```bash
-rclone lsd mi-almacenamiento:
-rclone mkdir mi-almacenamiento:mi-servidor
-```
+    ```bash
+    rclone lsd mi-almacenamiento:
+    rclone mkdir mi-almacenamiento:mi-servidor
+    ```
 
-La configuración queda en `/root/.config/rclone/rclone.conf`, **con las claves
-en claro**. Acuérdate de este archivo: vuelve a aparecer en el paso 6.
+    La configuración queda en `/root/.config/rclone/rclone.conf`, **con las claves
+    en claro**. Acuérdate de este archivo: vuelve a aparecer en el paso 6.
 
 ---
 

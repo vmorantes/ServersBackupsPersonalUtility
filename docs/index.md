@@ -16,38 +16,38 @@ y migración de bases de datos MySQL/MariaDB en servidores HestiaCP.
 
 Si solo te llevas tres cosas de esta documentación, que sean estas.
 
-### ¿Estoy protegido?
+=== "¿Estoy protegido?"
 
-```bash
-backupctl shield
-```
+    ```bash
+    backupctl shield
+    ```
 
-¿Qué perderías si mañana desapareciera el servidor? Cruza las tres capas:
-bases de datos, cuenta completa vía Restic, y las claves sin las cuales lo
-demás es papel mojado. Incluso te nombra las bases de datos que existen y
-**nadie está respaldando**.
+    ¿Qué perderías si mañana desapareciera el servidor? Cruza las tres capas:
+    bases de datos, cuenta completa vía Restic, y las claves sin las cuales lo
+    demás es papel mojado. Incluso te nombra las bases de datos que existen y
+    **nadie está respaldando**.
 
-Para el estado del respaldo de bases de datos a secas, `backupctl status`.
+    Para el estado del respaldo de bases de datos a secas, `backupctl status`.
 
-### Algo va mal
+=== "Algo va mal"
 
-```bash
-backupctl doctor
-```
+    ```bash
+    backupctl doctor
+    ```
 
-Revisa órdenes del sistema, configuración, permisos, disco, MySQL,
-privilegios, capacidades de `mysqldump`, respaldos y cron. Dice qué está
-mal **y qué hacer**.
+    Revisa órdenes del sistema, configuración, permisos, disco, MySQL,
+    privilegios, capacidades de `mysqldump`, respaldos y cron. Dice qué está
+    mal **y qué hacer**.
 
-### No recuerdo la orden
+=== "No recuerdo la orden"
 
-```bash
-backupctl
-```
+    ```bash
+    backupctl
+    ```
 
-Sin argumentos abre el menú interactivo. O mira la
-**[Chuleta](referencia/chuleta.md)**: todo en una página, con lo que no
-toca nada arriba del todo.
+    Sin argumentos abre el menú interactivo. O mira la
+    **[Chuleta](referencia/chuleta.md)**: todo en una página, con lo que no
+    toca nada arriba del todo.
 
 ## Las tres fachadas
 

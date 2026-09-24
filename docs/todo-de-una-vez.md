@@ -146,27 +146,27 @@ Y el botón **¿Dónde están mis claves?** te responde con rutas concretas.
 
 La pregunta importa, y tiene dos respuestas según el caso:
 
-### Caso A · Mismo destino S3
+=== "Caso A · Mismo destino S3"
 
-Si el servidor nuevo va a guardar en el **mismo** Mega S4 que ya usas, no
-hay que teclear nada. Botón **Reusar las claves guardadas**: instala allí el
-`rclone.conf` que ya rescataste antes.
+    Si el servidor nuevo va a guardar en el **mismo** Mega S4 que ya usas, no
+    hay que teclear nada. Botón **Reusar las claves guardadas**: instala allí el
+    `rclone.conf` que ya rescataste antes.
 
-```
-Origen: MiVPS/output/HestiaCP/rclone_20260905.conf  (2 días)
-Remotos que contiene:
-        mi-almacenamiento
-```
+    ```
+    Origen: MiVPS/output/HestiaCP/rclone_20260905.conf  (2 días)
+    Remotos que contiene:
+            mi-almacenamiento
+    ```
 
-### Caso B · Destino nuevo
+=== "Caso B · Destino nuevo"
 
-Si va a otro sitio, las claves salen del **panel de tu proveedor**
-(Mega → sección S4) y se introducen una vez en el formulario.
+    Si va a otro sitio, las claves salen del **panel de tu proveedor**
+    (Mega → sección S4) y se introducen una vez en el formulario.
 
-!!! info "backupctl no inventa credenciales"
-    Solo guarda las que rescata del servidor y te las devuelve cuando montas
-    otro. Si nunca has hecho **Traer las claves del servidor**, no hay nada que
-    reusar.
+    !!! info "backupctl no inventa credenciales"
+        Solo guarda las que rescata del servidor y te las devuelve cuando montas
+        otro. Si nunca has hecho **Traer las claves del servidor**, no hay nada que
+        reusar.
 
 ---
 

@@ -143,56 +143,56 @@ backupctl list                        # ¿hay un zip reciente?
 
 ## Verificación fallida
 
-### Zip corrupto
+=== "Zip corrupto"
 
-```
-[ERROR] el zip está corrupto o incompleto. No se puede seguir.
-```
+    ```
+    [ERROR] el zip está corrupto o incompleto. No se puede seguir.
+    ```
 
-Ese respaldo no sirve. Comprueba el anterior:
+    Ese respaldo no sirve. Comprueba el anterior:
 
-```bash
-backupctl list
-backupctl verify all_databases_ANTERIOR.zip
-```
+    ```bash
+    backupctl list
+    backupctl verify all_databases_ANTERIOR.zip
+    ```
 
-Si varios seguidos están corruptos, sospecha del disco: `dmesg | grep -i error`.
+    Si varios seguidos están corruptos, sospecha del disco: `dmesg | grep -i error`.
 
-### Sumas que no coinciden
+=== "Sumas que no coinciden"
 
-```
-[ERROR] hay archivos cuya suma no coincide con el manifiesto:
-        ./blog/data.sql.gz: La suma no coincide
-```
+    ```
+    [ERROR] hay archivos cuya suma no coincide con el manifiesto:
+            ./blog/data.sql.gz: La suma no coincide
+    ```
 
-El archivo cambió después de generarse el respaldo. O el zip se reempaquetó,
-o hay corrupción en disco. El contenido de ese `.gz` no es de fiar.
+    El archivo cambió después de generarse el respaldo. O el zip se reempaquetó,
+    o hay corrupción en disco. El contenido de ese `.gz` no es de fiar.
 
-### Base de datos INCOMPLETA
+=== "Base de datos INCOMPLETA"
 
-```
-[ERROR] tienda: falta data.sql.gz
-```
+    ```
+    [ERROR] tienda: falta data.sql.gz
+    ```
 
-El volcado se interrumpió. Mira el log de aquella ejecución y vuelve a
-respaldar esa base:
+    El volcado se interrumpió. Mira el log de aquella ejecución y vuelve a
+    respaldar esa base:
 
-```bash
-backupctl backup --only tienda
-```
+    ```bash
+    backupctl backup --only tienda
+    ```
 
-### Sin datos
+=== "Sin datos"
 
-```
-[AVISO] 3 bases de datos con estructura pero sin ningún INSERT
-```
+    ```
+    [AVISO] 3 bases de datos con estructura pero sin ningún INSERT
+    ```
 
-Puede ser legítimo (bases realmente vacías) o un volcado fallido.
-Compruébalo:
+    Puede ser legítimo (bases realmente vacías) o un volcado fallido.
+    Compruébalo:
 
-```bash
-mysql -e "SELECT COUNT(*) FROM tienda.pedidos;"
-```
+    ```bash
+    mysql -e "SELECT COUNT(*) FROM tienda.pedidos;"
+    ```
 
 ---
 

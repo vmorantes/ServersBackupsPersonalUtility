@@ -68,31 +68,31 @@ Devuelve código `1` si hay fallos, así que sirve en una comprobación automát
 
 Tres formas de hacer exactamente lo mismo. **Elige una**, no las encadenes.
 
-### Opción 1 · Todo de una vez
+=== "Opción 1 · Todo de una vez"
 
-```bash
-backupctl hestia setup
-```
+    ```bash
+    backupctl hestia setup
+    ```
 
-Encadena los cuatro pasos preguntando lo necesario.
+    Encadena los cuatro pasos preguntando lo necesario.
 
-### Opción 2 · Desde la interfaz web
+=== "Opción 2 · Desde la interfaz web"
 
-```bash
-backupctl web --open
-```
+    ```bash
+    backupctl web --open
+    ```
 
-Pestaña **Blindaje**: los cuatro pasos con sus formularios, y el informe
-arriba del todo.
+    Pestaña **Blindaje**: los cuatro pasos con sus formularios, y el informe
+    arriba del todo.
 
-### Opción 3 · Paso a paso
+=== "Opción 3 · Paso a paso"
 
-```bash
-backupctl hestia rclone     # 1 · dónde se guarda
-backupctl hestia restic     # 2 · host de respaldo y retención
-backupctl hestia cron       # 3 · que se ejecute solo
-backupctl hestia keys       # 4 · rescatar las claves
-```
+    ```bash
+    backupctl hestia rclone     # 1 · dónde se guarda
+    backupctl hestia restic     # 2 · host de respaldo y retención
+    backupctl hestia cron       # 3 · que se ejecute solo
+    backupctl hestia keys       # 4 · rescatar las claves
+    ```
 
 ---
 
