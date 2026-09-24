@@ -541,7 +541,7 @@ case "$BC_CMD" in
     # hexadecimal de Restic (8-64 caracteres). Sin esto, un valor con
     # comillas llega SIN escapar hasta una orden remota como root
     # (lib/adoptar.sh, v-restore-user-full-restic y el heredoc de --como):
-    # la web ya lo valida, la CLI era el vector abierto (C7, ronda #028/#030).
+    # la web ya lo valida; la CLI era el vector abierto.
     if [[ -n "${BC_OPT_SNAPSHOT:-}" && "$BC_OPT_SNAPSHOT" != "latest" \
           && ! "$BC_OPT_SNAPSHOT" =~ ^[0-9a-f]{8,64}$ ]]; then
       bc_die "--snapshot debe ser 'latest' o un hash hexadecimal de 8 a 64 caracteres: '$BC_OPT_SNAPSHOT'"

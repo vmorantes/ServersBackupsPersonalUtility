@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# tests/probar_patrones.sh — patrones de código prohibidos (ronda #028/#030, C5)
+# tests/probar_patrones.sh — patrones de código prohibidos
 # =============================================================================
 # `$(orden | grep -c . || echo 0)` duplica el "0": grep -c YA imprime "0" en
 # su propia salida cuando no hay coincidencias (y sale con 1), así que el
@@ -79,7 +79,7 @@ test_doctor_with_zero_databases_does_not_crash() {
   echo "  $([[ $rc == 0 || $rc == 1 ]] && echo ok || echo FALLO): doctor termina en un código esperado (0 o 1)" >&2
 }
 
-# C7 (ronda #028/#030): --snapshot en la CLI llegaba SIN validar hasta una
+# --snapshot en la CLI llegaba SIN validar hasta una
 # orden remota como root (v-restore-user-full-restic, entre comillas
 # simples): una comilla en el valor rompe el entrecomillado. Mismo criterio
 # que _v_snapshot en web/server.py: 'latest' o un hash hexadecimal de 8-64.

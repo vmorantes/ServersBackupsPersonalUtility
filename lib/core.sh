@@ -67,9 +67,8 @@ declare -gA BC_CLEANUP_CMDS=()
 # Código de salida de la ÚLTIMA orden que evaluó bc_cleanup_eval. No lo mira
 # bc_cleanup_eval por su cuenta (sigue devolviendo siempre 0, ver ahí): lo
 # dejan aquí bc_cleanup_run y bc_cleanup_pending para distinguir una limpieza
-# que TERMINÓ en error de una que se interrumpió a mitad (ronda #028/#030,
-# C3) — antes de esto no había forma de saber si "ya se ejecutó" también
-# quería decir "y salió bien".
+# que TERMINÓ en error de una que se interrumpió a mitad — sin esto no hay
+# forma de saber si "ya se ejecutó" también quería decir "y salió bien".
 BC_CLEANUP_ULTIMO_RC=0
 
 # Apunta (o sustituye) una limpieza pendiente bajo <clave>. Si la clave ya

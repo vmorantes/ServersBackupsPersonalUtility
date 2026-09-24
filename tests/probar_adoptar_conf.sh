@@ -61,10 +61,10 @@ GUION
   } > "$tmp/guion/ssh.sh"
 }
 
-# Simula la respuesta del centinela SI/NO/basura de bc_ad_leer_conf_destino
-# (C2, ronda #028/#030): cualquier invocación cuyos argumentos contengan
-# "test -e" imprime $respuesta tal cual (así se puede simular también una
-# respuesta inesperada); un "cat" posterior imprime $contenido_cat si se dio.
+# Simula la respuesta del centinela SI/NO/basura de bc_ad_leer_conf_destino:
+# cualquier invocación cuyos argumentos contengan "test -e" imprime
+# $respuesta tal cual (así se puede simular también una respuesta
+# inesperada); un "cat" posterior imprime $contenido_cat si se dio.
 # Todo lo demás se registra y sale 0, como el resto de guiones de esta suite.
 escribir_guion_ssh_centinela() {
   local tmp="$1" respuesta="$2" contenido_cat="${3:-}"
@@ -104,8 +104,8 @@ test_loading_adoptar_does_not_execute_anything() {
   afirmar_igual "$([[ -e "$marcador" ]] && echo si || echo no)" "no" "cargar core+ssh+adoptar no ejecuta nada"
 }
 
-# CRÍTICO DE SEGURIDAD (T2, hallazgo de la ronda de #022): antes de este
-# arreglo, bc_ad_restaurar_conf escribía con bc_ssh_sudo, cuya comprobación
+# CRÍTICO DE SEGURIDAD (T2, 30-trampas.md): antes de este arreglo,
+# bc_ad_restaurar_conf escribía con bc_ssh_sudo, cuya comprobación
 # interna de "id -u" no cierra su entrada estándar — se comía el restic.conf
 # original y el destino se quedaba con el archivo VACÍO, mientras la orden
 # informaba de éxito. Con bc_ssh_sudo_stdin, la comprobación SÍ va con
@@ -176,16 +176,15 @@ test_restaurar_conf_deletes_when_it_did_not_exist() {
   afirmar_igual "$hay_escritura" "0" "ningún 'cat >' se envió (no había nada que devolver)"
 }
 
-# T2 en su raíz (ronda de #028/#030, C1): bc_ssh_sudo (no solo
-# bc_ssh_sudo_stdin) tiene un llamador real con contenido por heredoc
-# (lib/adoptar.sh:1451, bc_adoptar_registrar) — un `< /dev/null` puesto ANTES
-# de un heredoc no tiene ningún efecto (bash aplica la ÚLTIMA redirección
-# sobre el mismo descriptor), así que ese heredoc SIEMPRE fue el contenido
-# real que debía llegar a la orden final. Antes de C1, la comprobación
-# interna de "id -u" (sin cerrar su propia entrada) se lo comía entero. Esta
-# prueba reproduce ese caso exacto: bc_ssh_sudo "bash -s 'cuenta'" con un
-# heredoc de varias líneas, camino ROOT (bc_ssh "$@" hereda el mismo stdin
-# que recibió bc_ssh_sudo).
+# T2 en su raíz (30-trampas.md): bc_ssh_sudo (no solo bc_ssh_sudo_stdin)
+# tiene un llamador real con contenido por heredoc (lib/adoptar.sh:1451,
+# bc_adoptar_registrar) — un `< /dev/null` puesto ANTES de un heredoc no
+# tiene ningún efecto (bash aplica la ÚLTIMA redirección sobre el mismo
+# descriptor), así que ese heredoc SIEMPRE fue el contenido real que debía
+# llegar a la orden final. Sin cerrar su propia entrada, la comprobación
+# interna de "id -u" se lo comía entero. Esta prueba reproduce ese caso
+# exacto: bc_ssh_sudo "bash -s 'cuenta'" con un heredoc de varias líneas,
+# camino ROOT (bc_ssh "$@" hereda el mismo stdin que recibió bc_ssh_sudo).
 test_bc_ssh_sudo_delivers_heredoc_intact_when_root() {
   nueva_prueba t4
   escribir_guion_ssh_modo "$BANCO_TMP" 1
@@ -224,8 +223,8 @@ REMOTO
 
 # Mismo caso, pero el destino NO es root y tiene sudo sin contraseña: pasa
 # por bc_ssh_can_sudo_nopass (elif) y por `bc_ssh "sudo -n $*"`, sin volver a
-# redirigir su entrada — hereda la del llamador. Es el camino que A1 (#023)
-# señalaba abierto y que C1 cierra en el helper compartido.
+# redirigir su entrada — hereda la del llamador. Es el mismo T2 por otra
+# puerta, cerrado en el helper compartido.
 test_bc_ssh_sudo_delivers_heredoc_intact_when_nonroot_with_sudo() {
   nueva_prueba t5
   escribir_guion_ssh_modo "$BANCO_TMP" 0
@@ -258,8 +257,8 @@ REMOTO
   afirmar_intacto "$recibido" "$esperado" "el heredoc llega ÍNTEGRO a la invocación final (camino no-root con sudo)"
 }
 
-# C2 (ronda #028/#030): bc_ad_leer_conf_destino con centinela SI, con
-# contenido real que debe quedar en BC_AD_CONF_ORIGINAL.
+# bc_ad_leer_conf_destino con centinela SI, con contenido real que debe
+# quedar en BC_AD_CONF_ORIGINAL.
 test_leer_conf_destino_si_existe_lee_el_contenido() {
   nueva_prueba t6
   escribir_guion_ssh_centinela "$BANCO_TMP" "SI" "REPO='s3:viejo/restic'
@@ -298,8 +297,8 @@ test_leer_conf_destino_no_existe() {
   afirmar_contiene "$BANCO_TMP/t7/salida.log" "^ORIGINAL=\[\]$" "BC_AD_CONF_ORIGINAL queda vacío"
 }
 
-# ALTA de #023/#028 (A3): una respuesta que no es ni "SI" ni "NO" (fallo de
-# red, sudo pidiendo algo, cualquier corte) NO se trata como "no existe":
+# Una respuesta que no es ni "SI" ni "NO" (fallo de red, sudo pidiendo algo,
+# cualquier corte) NO se trata como "no existe":
 # bc_die ANTES de leer ni de tocar nada. Ni un solo "cat" debe haberse
 # enviado.
 test_leer_conf_destino_respuesta_basura_aborta() {
@@ -351,12 +350,11 @@ test_restaurar_conf_no_manda_rm_si_nunca_se_escribio() {
   afirmar_igual "$hay_rm" "0" "ningún 'rm' se envió: adoptar nunca llegó a escribir el temporal"
 }
 
-# S2 (ronda #032): bc_ad_informar_bases_faltan es una función PURA (sin
-# ssh): con "N M" bien formado, calcula y avisa con los números; con
-# CUALQUIER otra cosa (texto suelto, vacío, o un intento de inyectar una
-# sustitución de órdenes dentro de una expansión aritmética, el hallazgo de
-# una revisión anterior sobre esta misma función), un aviso genérico SIN
-# tocar $(( )) sobre el texto crudo. La prueba del intento de inyección
+# bc_ad_informar_bases_faltan es una función PURA (sin ssh): con "N M" bien
+# formado, calcula y avisa con los números; con CUALQUIER otra cosa (texto
+# suelto, vacío, o un intento de inyectar una sustitución de órdenes dentro
+# de una expansión aritmética), un aviso genérico SIN tocar $(( )) sobre el
+# texto crudo. La prueba del intento de inyección
 # comprueba que el marcador NUNCA se crea: si $(( )) llegara a evaluar el
 # texto tal cual, sí se crearía.
 test_informar_bases_faltan_con_numeros_bien_formados() {
@@ -419,8 +417,8 @@ test_informar_bases_faltan_con_intento_de_inyeccion() {
   afirmar_igual "$([[ -e "$BANCO_TMP/t13/MARCA-INYECCION" ]] && echo si || echo no)" "no" "el marcador NO se creó: \$(( )) nunca tocó el texto crudo"
 }
 
-# S3 (ronda #032): la clave que borra el directorio de trabajo remoto
-# (adoptar_ws, lib/adoptar.sh) llevaba un "|| true" incrustado en la propia
+# La clave que borra el directorio de trabajo remoto (adoptar_ws,
+# lib/adoptar.sh) llevaba un "|| true" incrustado en la propia
 # orden registrada: eso hacía que bc_cleanup_eval SIEMPRE viera código 0,
 # aunque el "rm -rf" remoto fallara de verdad — sin reintento y sin aviso,
 # con la clave Restic, la contraseña y el rclone.conf rescatado quedando en

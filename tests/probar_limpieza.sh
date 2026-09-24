@@ -142,8 +142,8 @@ test_cleanup_eval_preserves_the_callers_errexit() {
 
 # Reproduce el `trap … EXIT` real de bin/backupctl (52) y su trampa INT/TERM
 # (53): una señal TERM también tiene que dejar las limpiezas pendientes
-# hechas, no solo bc_die (ronda de #022: T20 hablaba de "muere con exit o por
-# señal", y hasta ahora solo se probaba lo primero).
+# hechas, no solo bc_die — T20 (30-trampas.md) habla de "muere con exit o por
+# señal", y esto prueba el segundo camino, no solo el primero.
 test_pending_cleanups_run_on_sigterm() {
   nueva_prueba t7
   local traza="$BANCO_TMP/t7/traza.txt"
@@ -164,8 +164,8 @@ test_pending_cleanups_run_on_sigterm() {
   afirmar_igual "$contenido" "B,A," "las dos limpiezas corrieron (orden inverso) pese a la señal"
 }
 
-# bc_cleanup_run ahora ejecuta la limpieza ANTES de quitar la clave del
-# registro (ronda de #022): si el proceso muere A MITAD de esa ejecución —
+# bc_cleanup_run ejecuta la limpieza ANTES de quitar la clave del registro:
+# si el proceso muere A MITAD de esa ejecución —
 # aquí, simulado con un "exit 3" dentro de la propia orden—, la clave SIGUE
 # registrada y bc_cleanup_pending, desde el trap EXIT, la reintenta. La orden
 # usa un marcador en disco para distinguir "primera vez" (corta) de "reintento"
@@ -188,8 +188,8 @@ test_cleanup_run_retries_if_interrupted() {
   afirmar_igual "$(cat "$traza" 2>/dev/null || true)" "OK" "el reintento completó la limpieza sin volver a cortar"
 }
 
-# C3 (ronda #028/#030): distinto de t8 (que simula que el PROCESO muere a
-# mitad de la limpieza) — aquí la orden TERMINA, pero en error ("false" al
+# Distinto de t8 (que simula que el PROCESO muere a mitad de la limpieza) —
+# aquí la orden TERMINA, pero en error ("false" al
 # final). bc_cleanup_run no debe darla por hecha: la clave sigue registrada y
 # bc_cleanup_pending, al salir, la reintenta una vez más — así que la orden
 # tiene que verse ejecutada DOS veces, y bc_cleanup_pending debe avisar por

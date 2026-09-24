@@ -35,8 +35,7 @@ BC_AD_CONF_ORIGINAL=""
 # ¿Tenía el destino su propio restic.conf antes de que adoptar lo pisara?
 # Distinto de "BC_AD_CONF_ORIGINAL vacío": un archivo vacío en el origen
 # también daría BC_AD_CONF_ORIGINAL="", y confundirlo con "no existía"
-# llevaría a BORRAR un restic.conf que sí había en vez de devolverlo (ronda
-# de #022, hallazgo del security-auditor sobre #021).
+# llevaría a BORRAR un restic.conf que sí había en vez de devolverlo.
 BC_AD_CONF_EXISTIA=0
 # ¿Falló la escritura o el borrado al devolver restic.conf? Lo consulta
 # bc_adoptar_run después de bc_cleanup_run adoptar_conf para no terminar con
@@ -45,8 +44,7 @@ BC_AD_CONF_FALLO=0
 # ¿Llegó adoptar a ESCRIBIR el restic.conf temporal? Si el destino no tenía
 # uno propio (EXISTIA=0) pero la escritura del temporal nunca llegó a
 # intentarse (por ejemplo, bc_die entre leer y escribir), no hay nada que
-# borrar: solo se borra lo que esta misma ejecución puso (ronda #028/#030,
-# C2).
+# borrar: solo se borra lo que esta misma ejecución puso.
 BC_AD_CONF_ESCRITO=0
 BC_AD_DESTINO=""
 
@@ -93,16 +91,16 @@ bc_ad_restaurar_conf() {
 # Pregunta al destino si /usr/local/hestia/conf/restic.conf existe de verdad,
 # y si existe lo lee. Deja el resultado en BC_AD_CONF_EXISTIA/BC_AD_CONF_ORIGINAL
 # (las mismas variables que consulta bc_ad_restaurar_conf). Extraída para
-# poder probarla sola, sin el resto de bc_adoptar_run (ronda #028/#030, C2).
+# poder probarla sola, sin el resto de bc_adoptar_run.
 #
 # Con centinela, NO con el código de salida de "test -e": ese código sale
 # distinto de 0 tanto si el archivo no existe como si la conexión falló, sudo
 # pidió contraseña sin poder preguntarla, o cualquier otro corte — y tratar
 # todo eso como "no existe" llevaría a que bc_ad_restaurar_conf BORRE un
-# restic.conf real del destino que solo no se pudo comprobar (hallazgo ALTA
-# de la ronda de #023). "SI"/"NO" que el propio remoto imprime no deja lugar
-# a esa ambigüedad: cualquier otra respuesta (vacía, basura, un mensaje de
-# error) se trata como "no se pudo preguntar" y aborta ANTES de tocar nada.
+# restic.conf real del destino que solo no se pudo comprobar. "SI"/"NO" que
+# el propio remoto imprime no deja lugar a esa ambigüedad: cualquier otra
+# respuesta (vacía, basura, un mensaje de error) se trata como "no se pudo
+# preguntar" y aborta ANTES de tocar nada.
 bc_ad_leer_conf_destino() {
   local remoto="/usr/local/hestia/conf/restic.conf" respuesta
   respuesta="$(bc_ssh_sudo "if test -e '$remoto'; then echo SI; else echo NO; fi" < /dev/null 2>/dev/null)"
@@ -482,10 +480,10 @@ bc_adoptar_run() {
   echo
   if (( fallos )); then
     bc_err "Terminado con $fallos fallo(s) de ${#lista[@]}."
-    # C3 (ronda #028/#030): si el ÚNICO problema añadido es el restic.conf
-    # del destino (conf_fallo), los usuarios que sí se restauraron bien
-    # siguen necesitando estos avisos — antes se perdían en cuanto
-    # fallos>0, aunque todos los usuarios hubieran quedado vivos.
+    # Si el ÚNICO problema añadido es el restic.conf del destino (conf_fallo),
+    # los usuarios que sí se restauraron bien siguen necesitando estos
+    # avisos — perderlos en cuanto fallos>0 sería malo aunque todos los
+    # usuarios hubieran quedado vivos.
     if (( conf_fallo )); then
       bc_warn "Su contraseña de panel es, de momento, su clave Restic: cámbiala."
       bc_log  "Comprueba en el panel: dominios, correo y bases de datos."
@@ -966,7 +964,7 @@ bc_adoptar_como() {
   # bc_ssh_close se deja en el RETURN, DESPUÉS, para que la conexión siga
   # abierta mientras se borra el espacio de trabajo.
   #
-  # SIN "|| true" (S3, ronda #032): $ws lleva la clave Restic del origen, la
+  # SIN "|| true": $ws lleva la clave Restic del origen, la
   # contraseña de panel nueva y el rclone.conf rescatado, y el script remoto
   # nunca los borra por su cuenta — esta es la ÚNICA limpieza que los quita.
   # Un "|| true" aquí hacía que bc_cleanup_eval SIEMPRE viera código 0,
@@ -1039,7 +1037,7 @@ $H/bin/v-add-user "$NUEVO" "$PASS" "$CONTACTO" || { echo "FALLO: v-add-user"; ex
 # A partir de aquí la cuenta EXISTE en el destino, tenga o no todo lo demás:
 # la parte local usa esta marca para decidir si tiene sentido enseñar la
 # contraseña del panel, incluso cuando algo posterior (bases de datos, sobre
-# todo) queda a medias (C6, ronda #028/#030).
+# todo) queda a medias.
 touch "$WS/CUENTA_CREADA"
 
 echo "[3/7] Preparando dominios..."
@@ -1329,10 +1327,10 @@ REMOTO
   fi
 
   # En cuanto se sabe que la cuenta EXISTE de verdad, se muestra la
-  # contraseña YA — antes de leer nada más del destino (S2, ronda #032): es
-  # la única copia que existe, y una lectura posterior que falle o tarde no
-  # debe poder costarla. Antes se leía LISTO y BASES_FALTAN primero y la
-  # contraseña quedaba condicionada a terminar de leer todo eso.
+  # contraseña YA — antes de leer nada más del destino: es la única copia
+  # que existe, y una lectura posterior que falle o tarde no debe poder
+  # costarla. Leer LISTO y BASES_FALTAN primero condicionaría la contraseña
+  # a terminar de leer todo eso.
   local cuenta_creada=0
   bc_ssh_sudo "test -f '$ws/CUENTA_CREADA'" < /dev/null 2>/dev/null && cuenta_creada=1
   if (( cuenta_creada )); then
@@ -1352,7 +1350,7 @@ REMOTO
     # `if var=$(...); then` en vez de `orden && var=$(...)`: bajo
     # set -Eeuo pipefail, un fallo del lado derecho de un `&&` como ÚLTIMO
     # mandato de la lista SÍ dispara errexit; como condición de un `if`,
-    # nunca (S2, ronda #032 — hallazgo de una revisión anterior).
+    # nunca.
     if (( ! listo )) && bases_faltan="$(bc_ssh_sudo "cat '$ws/BASES_FALTAN'" < /dev/null)"; then
       bc_ad_informar_bases_faltan "$nuevo" "$bases_faltan"
     else
@@ -1368,8 +1366,8 @@ REMOTO
 }
 
 # Análisis PURO (sin ssh, sin efectos): decide qué decir sobre el contenido
-# de BASES_FALTAN sin operar nunca sobre texto que no se haya validado antes
-# (S2, ronda #032). Si el texto no es EXACTAMENTE "N M" con N y M enteros, ni
+# de BASES_FALTAN sin operar nunca sobre texto que no se haya validado antes.
+# Si el texto no es EXACTAMENTE "N M" con N y M enteros, ni
 # $(( )) ni [[ -eq ]] lo tocan: un dato del destino que llegara corrupto, con
 # ruido de shell, o deliberadamente hostil, no puede disparar más que un
 # aviso genérico — nunca una expansión aritmética sobre texto ajeno.
