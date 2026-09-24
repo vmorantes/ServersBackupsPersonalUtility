@@ -1,7 +1,7 @@
 # Tramo 2026-09-23 — Incidente de incrementales en producción y sus arreglos
 
 - **Inicio:** 2026-09-23 ~21:45 (tras resolver el incidente con el PO)
-- **Fin:** 2026-09-24 ~00:30 — **Duración:** unas 3 h
+- **Fin:** 2026-09-23 ~00:30 — **Duración:** unas 3 h
 - **Mensajes:** #035–
 - **Mandato del PO:** «Renombrados, trabajen en los arreglos encontrados.»
 

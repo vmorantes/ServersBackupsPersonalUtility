@@ -1,80 +1,64 @@
 # Ahora
 
-- **Actualizado:** 2026-09-24, madrugada.
-- **Último mensaje:** #047 (ARQ). El próximo será #048. Ronda en vuelo: estilos propios de la
-  documentación.
-- **Ramas:** solo quedan `master` (estable, sin la 2.1) y `release/2.1`, que ya tiene la fase 1
-  y lo del incidente (`562e02e`). El PO pidió unificar; `master` espera su prueba en servidor
-  (ADR 0007 y 0013). Borradas: `fix/limpieza-al-salir`, `fix/incrementales-rutas`,
-  `backupctl-2.0`, `version-inicial`.
-- **Tramo:** `estado/tramos/2026-09-23-2145-incidente-incrementales.md`, cerrado.
-
-## Cambio de tema de la documentación (decisión del PO, 2026-09-24)
-
-El PO deja Material por el tema `readthedocs` incorporado: le parece más ameno y así el sitio
-deja de depender de `mkdocs-material`, que queda sin parches de seguridad el **2027-05-05**.
-Dijo qué quiere cubrir con CSS y JavaScript propios: «lo importante no tonterías como modo
-oscuro sino los recuadros copiables y los tabs en secciones».
-
-Hecho por el arquitecto (sin commitear al abrir la ronda): las 21 pestañas de Material
-convertidas en secciones de nivel 3 en 8 páginas, retirada `pymdownx.tabbed`, quitada la
-sintaxis que solo entiende Material (tarjetas, iconos y botones en `index.md`,
-`paso-a-paso/index.md` y `referencia/chuleta.md`), tema cambiado en `mkdocs.yml` con
-`highlightjs: false`, y `verificar.sh` comprueba también el JavaScript de `docs/estilos/`.
-
-Verificado antes de decidir (informe completo en el scratchpad de la sesión): MkDocs 2.0 **no
-existe** como versión estable (solo pre-lanzamientos) y Material se fija en `mkdocs<2`, así que
-el aviso que ve el PO al construir no describe ningún riesgo para este repositorio; se silencia
-con `NO_MKDOCS_2_WARNING=1`. Lo que sí tiene fecha es el fin de los parches de Material.
-Ningún tema vivo de MkDocs tiene la estética de `readthedocs`: los que se le parecen llevan
-muertos entre 2018 y 2023.
-
-El PO construyó el sitio y lo revisó el arquitecto leyendo el HTML de `site/` (construirlo sigue
-sin estar permitido aquí; leerlo, sí). Resultado: sin restos de Material, `extra.css`,
-`pygments.css` y `copiar.js` enlazados, avisos y tablas bien renderizados, y `.rst-content`
-envuelve el contenido, así que el selector de tablas del CSS **sí** aplica (la duda que dejó el
-coder en #048 queda cerrada).
-
-Hallazgo del PO, corregido: al convertir las pestañas se perdió **la decisión**. Dos apartados
-seguidos parecen dos pasos, no dos alternativas. Se añadió el marco explícito donde hay que
-elegir: `protocolo-manual.md` (Opción A/B con un aviso), `empezar/instalacion.md` (Opción A/B),
-`todo-de-una-vez.md` (Caso A/B) y `hestiacp/respaldos-incrementales.md` (Opción 1/2/3). En las
-demás conversiones no hacía falta: eran casos de consulta, no alternativas.
+- **Actualizado:** 2026-09-23, noche.
+- **Último mensaje:** #061 (ARQ). El próximo será #062. Ronda en vuelo: correcciones del
+  diagnóstico (H6–H12 del reporte #060).
+- **Tramo abierto:** `estado/tramos/2026-09-23-2300-fases-1-y-2.md`. Mandato del PO: «Dale fase
+  1 y 2».
+- **Ramas:** solo `master` (estable, sin la 2.1) y `release/2.1`, con todo el trabajo. El PO
+  pidió unificar. `master` espera su prueba en un servidor (ADR 0007 y 0013).
+- **Aviso de fechas:** el arquitecto estuvo fechando documentos como 2026-09-24 durante la
+  madrugada; el reloj dice **2026-09-23**. Corregidos `estado/`; quedan por corregir la fecha
+  del ADR 0017 y la de la sección nueva de `.agents/context/50-hestiacp.md` (no se tocan con una
+  ronda en vuelo).
 
 ## Espera al PO
 
-1. **Su servidor de producción quedó funcionando**: repositorio en `/IncrementalBackups/stc-admin`,
-   instantánea `200953a7` comprobada con `restic snapshots`, cron a la 01:00 en el crontab de
-   `hestiaweb`. Nada urgente pendiente ahí.
-2. **Mañana:** comprobar que el cron respaldó (una instantánea con fecha del 24, y un directorio
-   por cada cuenta del panel) y rehacer el `.tgz` de las claves, porque cada cuenta nueva trae la
-   suya. Sin esas contraseñas ningún repositorio se abre.
-3. **Decidido con él, sin ejecutar:** puede quitar el respaldo clásico (`v-backup-users` de las
-   05:10 en el crontab de `hestiaweb`) y borrar `/backup/*.tar`. **No** debe vaciar
-   `BACKUP_SYSTEM`: apagaría también los incrementales.
-4. Fuera del alcance de los respaldos, visto en su servidor: `public_html` entero en `777`, y
-   `secure-keys/` y `dumps/` dentro de la raíz web. Sin mirar todavía.
-5. `git push` cuando quiera (`master` y `release/2.1`). `rm ~/.local/bin/backupctl` sigue
-   pendiente.
-6. **AVISO (T21):** antes de un `adoptar --to` real, copiar el `restic.conf` del destino y
+1. **Su servidor de producción funciona**: repositorio en `/IncrementalBackups/stc-admin`,
+   instantánea `200953a7` comprobada, cron a la 01:00 en el crontab de `hestiaweb`.
+2. **Mañana:** comprobar que el cron respaldó —**con `restic snapshots`, no con el panel**, ver
+   el aviso de abajo— y rehacer el `.tgz` de las claves, que cada cuenta nueva trae la suya.
+3. **AVISO GRAVE, verificado hoy en la fuente de HestiaCP 1.10.4:** `v-backup-user-restic` usa
+   una constante de error que no existe (`E_BACKUP`), así que **un respaldo que falla termina
+   registrando éxito**. Ni el código de salida ni ningún log valen como prueba. Solo vale una
+   instantánea con fecha.
+4. **Decidido con él, sin ejecutar:** puede quitar el respaldo clásico (`v-backup-users`, 05:10)
+   y borrar `/backup/*.tar`. **No** debe vaciar `BACKUP_SYSTEM`: apagaría también los
+   incrementales.
+5. Fuera del alcance de los respaldos, visto en su servidor: `public_html` en `777`, y
+   `secure-keys/` y `dumps/` dentro de la raíz web.
+6. `git push` cuando quiera. `rm ~/.local/bin/backupctl` sigue pendiente.
+7. **AVISO (T21):** antes de un `adoptar --to` real, copiar el `restic.conf` del destino y
    compararlo al terminar.
-7. Los dos `/rename`, que el arquitecto le da al abrir y al cerrar cada sesión.
+8. Los dos `/rename`, que el arquitecto le da al abrir y al cerrar cada sesión.
 
-## Siguiente (mandato del PO: versión 2.1, ADR 0013)
+## Dónde va la versión 2.1 (ADR 0013)
 
-- **Fase 1**, en `fix/limpieza-al-salir`: quedan S4–S8 de la instrucción #032 y la revisión final.
-  Al fusionarla en `release/2.1` habrá conflicto en los archivos de documentación del incidente
-  (están duplicados por los cherry-pick `f16f18c` y `b07d51e`): se resuelve **quedándose con la
-  versión de `release/2.1`**, que es la posterior.
-- **Fase 2** (ADR 0016): crecida con lo aprendido hoy; la lista está en el roadmap. Lo más
-  urgente de ahí: diagnosticar «hay contraseña pero no hay repositorio», comprobar dónde está el
-  cron, mostrar las bases excluidas, y avisar del área de preparación que nadie limpia.
-- Fases 3 (ADR 0015) y 4 sin empezar.
+- **Fase 1 — terminada** (#053–#056). La CLI valida lo que validaba la web; cerrada la clase
+  entera de valores sin escapar que llegaban a órdenes con privilegios.
+- **Fase 2 — en curso.** Pieza 1: el diagnóstico de `hestia status`, que pasa de describir la
+  configuración a decir si funciona. El juicio vive en funciones puras probadas sin servidor.
+  Falta: las acciones que escriben, con su informe (ADR 0014), y el resto de pasos del ADR 0017.
+- **Fases 3 y 4** sin empezar. La 3 (interfaz) necesita una sesión de diseño con el PO.
+
+## Pendiente del arquitecto, anotado para no perderlo
+
+- **La guarda bloquea `git commit` por el TEXTO del mensaje** (H13 de #060): nombrar una
+  herramienta prohibida en prosa, dentro de `-m`, se toma por una orden. El coder tuvo que
+  empobrecer dos mensajes de commit. Hay que mirar la posición de orden, no la aparición del
+  texto, con su prueba en `probar_guardia.py`.
+- **El formato de las instantáneas no lo decide HestiaCP** (H8 de #060): la orden que las lista
+  no formatea nada, solo deja pasar la salida de la herramienta de respaldo instalada. Las
+  claves del json dependen de SU versión, no de la de HestiaCP. El parseo nuevo se apoya solo en
+  `time` por eso. La ficha de `.agents/context/50-hestiacp.md` habla de ese formato como si
+  fuera de HestiaCP: hay que corregirla.
+- **Sin verificar contra un servidor real** (H9 de #060): que la columna de la última
+  instantánea de `hestia users` siga saliendo igual tras pedir json. Probado solo con datos
+  sintéticos en el banco.
 
 ## Para una sesión nueva
 
-- Lee el tramo del 23, el del 16, ADR 0013–0016 y `.agents/context/30-trampas.md` T2, T20–T26.
-- Ramas: `master` (estable), `release/2.1` (versión en curso, con lo del incidente),
-  `fix/limpieza-al-salir` (fase 1, sin fusionar).
-- Lo verificado hoy en la fuente de HestiaCP 1.10.4 está en `.agents/context/50-hestiacp.md`: no
+- Lee el tramo abierto, el del incidente (`2026-09-23-2145`), y los ADR 0013, 0014, 0015 y
+  **0017** (el 0016 está reemplazado).
+- `.agents/context/30-trampas.md` T2, T20–T26, y `50-hestiacp.md` entero: lo verificado ahí no
   se vuelve a verificar.
