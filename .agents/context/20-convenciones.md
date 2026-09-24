@@ -1,5 +1,25 @@
 # Convenciones
 
+## «Vacío» y «no lo sé» no se escriben igual
+
+En bash, una lectura que falla y un dato que no aplica devuelven las dos cosas una cadena vacía.
+Confundirlos hizo que la herramienta **afirmara lo que nunca comprobó**, tres veces en la misma
+sesión (2026-09-23):
+
+- una cuenta cuya configuración no se pudo leer salía como «no entra en los respaldos»;
+- un repositorio que no se pudo sondear salía como «no existe», y con él la recomendación de
+  apartar la contraseña, que es la forma de perder el acceso a copias reales;
+- un tipo de remoto que no se pudo leer salía como «la ruta registrada es segura», justo el
+  aviso que habría evitado el incidente de producción de ese mismo día.
+
+Regla: **un dato que no se pudo obtener se representa con un valor propio** (en este código,
+`?`), distinto del vacío, y nunca produce un veredicto favorable. Lo que se cuenta y se enseña
+al usuario no son dos números (bien/mal) sino tres: lo que está mal, lo que avisa, y **lo que no
+se pudo mirar**. Una orden cuyo diagnóstico quedó ciego no puede salir con éxito.
+
+Vale para todo el proyecto, no solo para HestiaCP: cualquier función que devuelva un dato leído
+de fuera tiene que poder decir «no pude».
+
 Cómo se escribe aquí. Lo que ya explica `docs/desarrollo/arquitectura.md` («Convenios»,
 «Añadir una orden nueva») se cita, no se copia: si divergen, gana el código y se corrigen los
 dos.
