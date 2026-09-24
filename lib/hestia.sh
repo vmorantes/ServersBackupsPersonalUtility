@@ -556,6 +556,57 @@ bc_hestia_rescate_anterior() {
     | sort -rn | cut -d' ' -f2- | grep -vxF "${excluir:-/dev/null}" | sed -n '1p'
 }
 
+# -----------------------------------------------------------------------------
+# Qué remotos hay, sin mirar sus credenciales
+# -----------------------------------------------------------------------------
+# Puras. El archivo de acceso al almacenamiento lleva claves EN CLARO, así que
+# de él no se lee el contenido: se lee solo la lista de secciones y su tipo.
+# Con eso basta para todo lo que hay que decidir —si el remoto pedido está, si
+# es del tipo pedido, si los que había siguen— y así las credenciales no salen
+# del servidor ni por error.
+#
+# Lo que se le pide al servidor es la lista de líneas de sección y de tipo; lo
+# que llega aquí tiene esta forma:
+#     [almacen]
+#     type = s3
+#     [disco]
+#     type = local
+
+# Una línea por remoto: "nombre<TAB>tipo". El tipo queda vacío si no lo dice.
+bc_hestia_remotos_de() {
+  awk '
+    /^\[/ {
+      if (n != "") print n "\t" t
+      n = $0; gsub(/^\[|\]$/, "", n); t = ""; next
+    }
+    /^[[:space:]]*type[[:space:]]*=/ {
+      t = $0; sub(/^[^=]*=[[:space:]]*/, "", t); gsub(/[[:space:]]+$/, "", t)
+    }
+    END { if (n != "") print n "\t" t }
+  ' <<<"${1:-}"
+}
+
+# Solo los nombres.
+bc_hestia_nombres_de() { cut -f1 <<<"$(bc_hestia_remotos_de "${1:-}")" | sed '/^$/d'; }
+
+# El tipo de un remoto concreto, o vacío si no está.
+bc_hestia_tipo_de() {
+  local linea
+  linea="$(bc_hestia_remotos_de "${1:-}" | grep -m1 -P "^${2:-}\t" || true)"
+  printf '%s' "${linea#*$'\t'}"
+}
+
+# Los nombres que estaban antes y ya NO están. Uno por línea.
+# Un remoto perdido es un almacenamiento al que ya no se llega, y eso no se
+# descubre hasta el día que hace falta.
+bc_hestia_remotos_perdidos() {
+  local antes="${1:-}" despues="${2:-}" n
+  while IFS= read -r n; do
+    [[ -n "$n" ]] || continue
+    grep -qxF "$n" <<<"$(bc_hestia_nombres_de "$despues")" || printf '%s\n' "$n"
+  done <<<"$(bc_hestia_nombres_de "$antes")"
+}
+
 # Segundos -> lenguaje llano. Pura, auxiliar de la de arriba.
 bc_hestia_edad_llana() {
   local s="${1:-0}"
@@ -2066,38 +2117,186 @@ $( [[ -n "$region" ]] && echo "region = $region" )acl = private
 
   bc_log "Se configurará el remoto '$nombre' (tipo $tipo) en $BC_HESTIA_RCLONE_CONF"
   [[ "$tipo" == "s3" ]] && bc_log "Endpoint: $endpoint"
+
+  # --- Lo que hay ahora ------------------------------------------------------
+  # Del archivo NO se lee el contenido: lleva claves en claro. Se le pide al
+  # servidor solo la lista de secciones y sus tipos, que es todo lo que hace
+  # falta para decidir. Así las credenciales no salen de ahí ni por error.
+  local lectura; lectura="grep -E '^\[|^[[:space:]]*type[[:space:]]*=' $(printf '%q' "$BC_HESTIA_RCLONE_CONF")"
+  local antes
+  if ! antes="$(bc_hestia_leer_texto "$lectura")"; then
+    bc_err "no se pudo leer $BC_HESTIA_RCLONE_CONF: NO se ha escrito nada."
+    bc_log  "Sin saber qué remotos hay, escribir podría dejar fuera alguno."
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+  local nombres_antes; nombres_antes="$(bc_hestia_nombres_de "$antes")"
+  if [[ -n "$nombres_antes" ]]; then
+    bc_log "Remotos que ya hay:"
+    bc_hestia_remotos_de "$antes" | sed 's/^/        /'
+  else
+    bc_log "No hay ningún remoto configurado todavía."
+  fi
+
+  # --- ¿Se va a pisar uno que ya existe? ------------------------------------
+  # Sustituir un remoto borra sus credenciales actuales, que pueden ser la
+  # única forma de llegar a copias que ya existen. A partir de aquí solo
+  # estarán en la copia fechada.
+  local tipo_actual; tipo_actual="$(bc_hestia_tipo_de "$antes" "$nombre")"
+  if grep -qxF "$nombre" <<<"$nombres_antes"; then
+    echo
+    bc_err "El remoto '$nombre' YA EXISTE (tipo ${tipo_actual:-desconocido}) y se va a SUSTITUIR."
+    bc_log  "Sus credenciales actuales dejarán de estar en el servidor: a partir de"
+    bc_log  "ahora solo estarán en la copia fechada que se deja aquí al lado. Si hay"
+    bc_log  "copias hechas a través de ese remoto, compruébalo antes de seguir."
+    if [[ "${BC_ASSUME_YES:-0}" == "1" ]]; then
+      bc_err "NO se escribe nada. Con --yes esta orden no pisa un remoto que ya existe."
+      bc_log  "Bórralo a propósito o usa otro nombre."
+      BC_DELIBERATE_EXIT=1
+      return 1
+    fi
+    bc_confirm "¿Sustituir el remoto '$nombre'?" n \
+      || { bc_log "Cancelado."; return 0; }
+  fi
+
   if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
-    bc_ok "Simulación (--dry-run): no se ha escrito nada."
+    echo
+    bc_step "Simulación (--dry-run): esto es lo que PASARÍA, no lo que ha pasado."
+    if [[ -n "$tipo_actual" ]]; then
+      bc_log "El remoto '$nombre' pasaría de tipo '$tipo_actual' a '$tipo'."
+    else
+      bc_log "Se añadiría el remoto '$nombre' (tipo $tipo)."
+    fi
+    bc_log "Los demás remotos se conservarían, y se dejaría antes una copia fechada."
+    bc_ok "No se ha escrito nada, y no se ha guardado ningún informe."
     return 0
   fi
   bc_confirm "¿Escribirlo en el servidor?" y || { bc_log "Cancelado."; return 0; }
 
-  # Copia de seguridad y sustitución de la sección si ya existía. El archivo se
-  # reconstruye con awk en el servidor; las credenciales llegan por stdin.
+  bc_informe_abrir "Configurar el acceso al almacenamiento" "${DEPLOY_HOST:-este servidor}"
+  # Del archivo solo entran NOMBRES y TIPOS. Ninguna credencial, en ningún caso.
+  bc_informe_dato "Remotos antes" "$(bc_hestia_remotos_de "$antes" | tr '\t' ' ' | tr '\n' ' ')" ""
+  bc_informe_dato "Remoto pedido" "" "$nombre (tipo $tipo)"
+
+  # --- La copia a la que volver ---------------------------------------------
+  local copia=""
+  if ! copia="$(bc_hestia_copia_fechada "$BC_HESTIA_RCLONE_CONF")"; then
+    bc_err "no se pudo copiar $BC_HESTIA_RCLONE_CONF. NO se ha escrito nada."
+    bc_log  "Nadie más gestiona ese archivo: si se estropea, no hay quien lo"
+    bc_log  "reconstruya salvo un rescate. Sin copia no se toca."
+    bc_informe_paso "Copia de seguridad" FALLO "no se pudo copiar el archivo"
+    bc_informe_cerrar "FALLO" >/dev/null
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+  if [[ -n "$copia" ]]; then
+    bc_ok "Copia de la configuración anterior: $copia"
+    bc_informe_copia "$BC_HESTIA_RCLONE_CONF" "$copia"
+    bc_informe_deshacer "cp -p $copia $BC_HESTIA_RCLONE_CONF && chmod 600 $BC_HESTIA_RCLONE_CONF"
+  else
+    bc_log "No había configuración previa que copiar."
+    bc_informe_deshacer "rm -f $BC_HESTIA_RCLONE_CONF   # no había configuración previa"
+  fi
+
+  # --- Escribir -------------------------------------------------------------
+  # Esta escritura NO pasa por bc_hestia_escribir_y_confirmar: las credenciales
+  # viajan por la ENTRADA ESTÁNDAR, y esa primitiva no la lleva. Pasarlas como
+  # argumento las haría visibles en `ps` para cualquier otro usuario del
+  # servidor. Así que la secuencia —leer, escribir, releer, juzgar— se hace
+  # aquí a mano, con los mismos estados.
+  local conf_esc; conf_esc="$(printf '%q' "$BC_HESTIA_RCLONE_CONF")"
+  local rc=0
   printf '%s' "$seccion" | bc_hestia_root_stdin "
     umask 077
-    mkdir -p \"\$(dirname '$BC_HESTIA_RCLONE_CONF')\"
-    touch '$BC_HESTIA_RCLONE_CONF'
-    cp -a '$BC_HESTIA_RCLONE_CONF' '$BC_HESTIA_RCLONE_CONF.anterior' 2>/dev/null || true
+    mkdir -p \"\$(dirname $conf_esc)\"
+    touch $conf_esc
     nueva=\$(cat)
     awk -v n='[$nombre]' '
       \$0 == n { saltar=1; next }
       /^\[/    { saltar=0 }
       !saltar  { print }
-    ' '$BC_HESTIA_RCLONE_CONF.anterior' > '$BC_HESTIA_RCLONE_CONF.tmp' 2>/dev/null || true
-    printf '%s\n' \"\$nueva\" >> '$BC_HESTIA_RCLONE_CONF.tmp'
-    mv '$BC_HESTIA_RCLONE_CONF.tmp' '$BC_HESTIA_RCLONE_CONF'
-    chmod 600 '$BC_HESTIA_RCLONE_CONF'
-  " || bc_die "no se pudo escribir la configuración de rclone."
+    ' $conf_esc > $conf_esc.tmp 2>/dev/null || true
+    printf '%s\n' \"\$nueva\" >> $conf_esc.tmp
+    mv $conf_esc.tmp $conf_esc
+    chmod 600 $conf_esc
+  " >/dev/null 2>&1 || rc=$?
+  bc_informe_dato "Código de la orden (dato, no prueba)" "" "$rc"
 
-  bc_ok "Remoto '$nombre' escrito. La versión anterior queda como rclone.conf.anterior"
-
-  bc_log "Comprobando que el remoto responde..."
-  if bc_hestia_root "rclone lsd '$nombre:' 2>&1 | head -5"; then
-    bc_ok "El remoto responde."
-  else
-    bc_warn "no se pudo listar el remoto. Revisa las credenciales y el endpoint."
+  # --- Releer y juzgar ------------------------------------------------------
+  local despues
+  if ! despues="$(bc_hestia_leer_texto "$lectura")"; then
+    bc_err "SE ESCRIBIÓ y no se pudo volver a leer $BC_HESTIA_RCLONE_CONF."
+    bc_log  "No se sabe cómo quedó. La copia anterior está en: ${copia:-<no había>}"
+    bc_informe_paso "Escribir el remoto" ESCRITO_SIN_COMPROBAR "se escribió y no se pudo leer"
+    bc_informe_cerrar "ESCRITO_SIN_COMPROBAR" >/dev/null
+    BC_DELIBERATE_EXIT=1
+    return 1
   fi
+  bc_informe_dato "Remotos después" "" "$(bc_hestia_remotos_de "$despues" | tr '\t' ' ' | tr '\n' ' ')"
+
+  # T23: el archivo podía quedar VACÍO mientras la orden decía «escrito». Eso
+  # no es «no se pudo leer»: es que se acaba de dejar al servidor sin forma de
+  # llegar a su almacenamiento, y tiene que sonar como lo que es.
+  if [[ -z "$(bc_hestia_nombres_de "$despues")" ]]; then
+    bc_err "EL ARCHIVO HA QUEDADO VACÍO. Este servidor ya no sabe llegar a ningún"
+    bc_err "almacenamiento, y los respaldos de esta noche NO se harán."
+    bc_log  "Recupéralo AHORA desde la copia:"
+    bc_log  "    cp -p ${copia:-<no había copia>} $BC_HESTIA_RCLONE_CONF"
+    bc_informe_paso "Escribir el remoto" FALLO "el archivo quedó vacío"
+    bc_informe_cerrar "FALLO" >/dev/null
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+
+  local perdidos; perdidos="$(bc_hestia_remotos_perdidos "$antes" "$despues")"
+  if [[ -n "$perdidos" ]]; then
+    bc_err "HAN DESAPARECIDO REMOTOS QUE ESTABAN: $(tr '\n' ' ' <<<"$perdidos")"
+    bc_log  "Un remoto perdido es un almacenamiento al que ya no se llega, y eso no"
+    bc_log  "se descubre hasta el día que hace falta. Recupéralo desde: ${copia:-<no había copia>}"
+    bc_informe_paso "Escribir el remoto" FALLO "desaparecieron remotos: $(tr '\n' ' ' <<<"$perdidos")"
+    bc_informe_cerrar "FALLO" >/dev/null
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+
+  local tipo_final; tipo_final="$(bc_hestia_tipo_de "$despues" "$nombre")"
+  if [[ "$tipo_final" != "$tipo" ]]; then
+    bc_err "El remoto '$nombre' no quedó como se pidió: se pidió tipo '$tipo' y hay"
+    bc_err "'${tipo_final:-ninguno}'."
+    bc_log  "La copia anterior está en: ${copia:-<no había>}"
+    bc_informe_paso "Escribir el remoto" SIN_CONFIRMAR "se pidió '$tipo' y quedó '${tipo_final:-ninguno}'"
+    bc_informe_cerrar "SIN_CONFIRMAR" >/dev/null
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+
+  bc_ok "Remoto '$nombre' escrito, y comprobado leyendo la configuración de vuelta."
+  bc_informe_paso "Escribir el remoto" HECHO "'$nombre' (tipo $tipo), y los demás siguen"
+
+  # --- ¿Responde? -----------------------------------------------------------
+  # Un remoto escrito que no responde es una configuración inútil, y es mejor
+  # saberlo ahora que la noche del primer respaldo.
+  bc_log "Comprobando que el remoto responde..."
+  local vivo; vivo="$(bc_hestia_sondear "rclone lsd $(printf '%q' "$nombre:") >/dev/null 2>&1")"
+  case "$vivo" in
+    1) bc_ok "El remoto responde."
+       bc_informe_paso "El remoto responde" HECHO "responde"
+       bc_informe_cerrar "HECHO" >/dev/null
+       return 0 ;;
+    0) bc_err "El remoto quedó escrito, pero NO responde."
+       bc_log  "La configuración está bien puesta y aun así no se llega al"
+       bc_log  "almacenamiento: revisa las credenciales, el endpoint y que el"
+       bc_log  "bucket exista en tu proveedor. Sin esto, los respaldos fallarán."
+       bc_informe_paso "El remoto responde" FALLO "quedó escrito pero no responde"
+       bc_informe_cerrar "FALLO" >/dev/null
+       BC_DELIBERATE_EXIT=1
+       return 1 ;;
+    *) bc_err "El remoto quedó escrito, pero NO se pudo comprobar si responde."
+       bc_informe_paso "El remoto responde" CIEGO "no se pudo comprobar"
+       bc_informe_cerrar "CIEGO" >/dev/null
+       BC_DELIBERATE_EXIT=1
+       return 1 ;;
+  esac
 }
 
 # Texto de la fila "Anuales" (T26): v-backup-user-restic solo añade
