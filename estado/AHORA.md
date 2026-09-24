@@ -1,64 +1,154 @@
 # Ahora
 
-- **Actualizado:** 2026-09-23, noche.
-- **Último mensaje:** #061 (ARQ). El próximo será #062. Ronda en vuelo: correcciones del
-  diagnóstico (H6–H12 del reporte #060).
+> **Para retomar, empieza aquí y sigue por «Dónde se quedó la fase 2».** El tramo se cerró a
+> petición del PO con la fase 2 en siete pasos y medio de ocho. Nada quedó sin commitear.
+
+- **Actualizado:** 2026-09-24, al cerrar el tramo.
+- **Último mensaje:** #081 (ARQ). El próximo será #082. Sin ronda en vuelo: el coder espera
+  instrucción.
 - **Tramo abierto:** `estado/tramos/2026-09-23-2300-fases-1-y-2.md`. Mandato del PO: «Dale fase
   1 y 2».
-- **Ramas:** solo `master` (estable, sin la 2.1) y `release/2.1`, con todo el trabajo. El PO
-  pidió unificar. `master` espera su prueba en un servidor (ADR 0007 y 0013).
-- **Aviso de fechas:** el arquitecto estuvo fechando documentos como 2026-09-24 durante la
-  madrugada; el reloj dice **2026-09-23**. Corregidos `estado/`; quedan por corregir la fecha
-  del ADR 0017 y la de la sección nueva de `.agents/context/50-hestiacp.md` (no se tocan con una
-  ronda en vuelo).
+- **Ramas:** `master` (estable, sin la 2.1) y `release/2.1`, con todo el trabajo. Sin subir.
+- **Aviso de continuidad:** las sesiones se cortaron otra vez (tercera). El coder commiteó la
+  ronda #079 y su reporte (#080) no llegó; se recuperó pidiéndoselo de nuevo. Nada perdido.
 
 ## Espera al PO
 
-1. **Su servidor de producción funciona**: repositorio en `/IncrementalBackups/stc-admin`,
-   instantánea `200953a7` comprobada, cron a la 01:00 en el crontab de `hestiaweb`.
-2. **Mañana:** comprobar que el cron respaldó —**con `restic snapshots`, no con el panel**, ver
-   el aviso de abajo— y rehacer el `.tgz` de las claves, que cada cuenta nueva trae la suya.
-3. **AVISO GRAVE, verificado hoy en la fuente de HestiaCP 1.10.4:** `v-backup-user-restic` usa
-   una constante de error que no existe (`E_BACKUP`), así que **un respaldo que falla termina
-   registrando éxito**. Ni el código de salida ni ningún log valen como prueba. Solo vale una
-   instantánea con fecha.
-4. **Decidido con él, sin ejecutar:** puede quitar el respaldo clásico (`v-backup-users`, 05:10)
-   y borrar `/backup/*.tar`. **No** debe vaciar `BACKUP_SYSTEM`: apagaría también los
-   incrementales.
-5. Fuera del alcance de los respaldos, visto en su servidor: `public_html` en `777`, y
-   `secure-keys/` y `dumps/` dentro de la raíz web.
-6. `git push` cuando quiera. `rm ~/.local/bin/backupctl` sigue pendiente.
-7. **AVISO (T21):** antes de un `adoptar --to` real, copiar el `restic.conf` del destino y
-   compararlo al terminar.
-8. Los dos `/rename`, que el arquitecto le da al abrir y al cerrar cada sesión.
+### 1. Su producción, comprobada esta mañana: FUNCIONA
 
-## Dónde va la versión 2.1 (ADR 0013)
+El cron de la 01:00 hizo su copia (instantánea `52e642b7`, 2026-09-24). Comprobado con
+`restic snapshots`, no con el panel. Pendiente suyo, menor:
 
-- **Fase 1 — terminada** (#053–#056). La CLI valida lo que validaba la web; cerrada la clase
-  entera de valores sin escapar que llegaban a órdenes con privilegios.
-- **Fase 2 — en curso.** Pieza 1: el diagnóstico de `hestia status`, que pasa de describir la
-  configuración a decir si funciona. El juicio vive en funciones puras probadas sin servidor.
-  Falta: las acciones que escriben, con su informe (ADR 0014), y el resto de pasos del ADR 0017.
+- `tar tzf /root/claves-restic-<fecha>.tgz` y `ls -la /IncrementalBackups/`: si el número de
+  contraseñas guardadas no coincide con el de repositorios, la cuenta `administrator` no está
+  marcada para respaldo incremental. Que lo decida él, no el olvido.
+- **Bajarse el `.tgz` fuera del servidor.** Mientras viva solo dentro de lo que protege, no
+  protege nada.
+
+### 2. Tres guías de prueba listas, para el servidor de PRUEBAS
+
+Son de la fase 2 y **nada de esto se ha ejecutado nunca contra un HestiaCP real**. Las tres
+empiezan por un ensayo que no toca nada. Están enteras en los reportes #076, #078 y #080; lo
+esencial:
+
+| Paso | Orden | Lo que hay que comprobar por fuera |
+| --- | --- | --- |
+| Registrar el repositorio | `hestia restic --repo '<repo>'` | el panel muestra lo pedido; el `.bak` tiene lo anterior; el informe coincide con el panel |
+| Programar el respaldo | `hestia cron` | `crontab -u hestiaweb -l` muestra la línea con ruta absoluta; el crontab queda `600 hestiaweb:hestiaweb` |
+| Marcar las cuentas | `hestia cuentas` | `grep BACKUPS_INCREMENTAL .../users/*/user.conf`; y que **la cuenta siga igual en todo lo demás** (shell, cuotas, dominios) |
+
+**Orden recomendado**: ensayo primero, siempre. Y en el de las cuentas, empezar por **una sola**
+(`--usuarios <cuenta>`) antes de lanzarlo sobre todas: lo que sabemos de esa orden de HestiaCP
+viene de leer su código, no de ejecutarlo.
+
+La prueba de verdad de los tres tarda un día: al día siguiente, `hestia status` tiene que
+enseñar una instantánea reciente.
+
+### 3. Lo de siempre
+
+- `git push` cuando quiera. `rm ~/.local/bin/backupctl` sigue pendiente.
+- **Resuelto, NO es un fallo:** la base `stc-admin_stc_website_db` está excluida **a propósito**
+  (datos sensibles; su aplicación genera volcados ofuscados, que HestiaCP no sabría producir).
+  No volver a señalarlo como agujero.
+- Esos volcados viven en `public_html/dumps/`, dentro de un dominio público y con permisos
+  `777`. Él dice que los protege un `.htaccess`; **pendiente de comprobar desde fuera**, porque
+  ese archivo solo lo lee Apache: si el dominio lo sirve nginx, no protege nada.
+  `curl -sI https://<dominio>/dumps/<archivo>` y
+  `grep -E '^WEB_SYSTEM|^WEB_BACKEND|^PROXY_SYSTEM' /usr/local/hestia/conf/hestia.conf`.
+  Son el único respaldo de esa base: si se pierden, se pierde.
+- Sin mirar todavía: `public_html` entero en `777`, y `secure-keys/` dentro de la raíz web.
+- **AVISO (T21):** antes de un `adoptar --to` real, copiar el `restic.conf` del destino.
+- Los dos `/rename`, al abrir y al cerrar cada sesión (lo pidió expresamente el 2026-09-24).
+  **Decisión del PO del 2026-09-24: el renombrado es OBLIGATORIO para trabajar.** No se emite la
+  primera instrucción hasta que los dos nombres estén puestos y comprobados en la lista de
+  sesiones. Sigue siendo obligatoria además la identificación (pedir al candidato un dato
+  verificable del repositorio): el nombre no la sustituye. **Pendiente del arquitecto:** llevarlo
+  a `.agents/rules/30-protocolo-coder.md` en cuanto termine la ronda en vuelo.
+
+## Dónde se quedó la fase 2 (lo primero que hay que leer al retomar)
+
+**Hecho y probado: el diagnóstico y siete de los ocho pasos** — registrar el repositorio,
+programar el respaldo, marcar las cuentas, la primera copia comprobada, rescatar las claves,
+desactivar, y el almacenamiento. Cada uno con ensayo, copia fechada, comprobación leyendo del
+servidor e informe de qué se hizo y cómo deshacerlo. 22 suites en el banco.
+
+**A medias: el paso 8, las exclusiones.** Está en **solo lectura** a propósito: muestra qué no
+se respalda, traducido, y no ofrece escribir. El detalle exacto de qué quedó escrito y qué
+desactivado está en el reporte del coder de la ronda de cierre.
+
+**Lo que falta para poder terminarlo** (y no se debe escribir nada sin esto):
+
+1. **Confirmar el efecto real de cada exclusión en cada respaldo.** Deducción del arquitecto,
+   **sin verificar**: como el incremental hace `restic backup /home/<cuenta>` **sin exclusiones**,
+   y las exclusiones solo gobiernan lo que `v-backup-user-config` *prepara* aparte, excluir WEB,
+   MAIL o DNS **no impediría que esos datos se copien** en el incremental —están en el disco—.
+   La excepción es `DB`: una base no está en el sistema de archivos, así que si su volcado no se
+   prepara, no hay nada que copiar. Si esto se confirma, el paso tiene que decir, por sección,
+   qué efecto real tiene excluirla **en cada uno de los dos respaldos**, porque no es el mismo.
+   Pregunta exacta para el verificador: qué hace `v-backup-user-config` con `$WEB` cuando no es
+   `*` —¿copia archivos o solo configuración?— y dónde viven los archivos de un dominio.
+2. Con eso, terminar el paso y quitarle el modo solo lectura.
+
+**Verificado en esta sesión y ya en `50-hestiacp.md`:** hay **dos implementaciones gemelas** de
+las exclusiones. `v-backup-user` (clásico) filtra con seis claves —WEB, DNS, MAIL, DB, CRON y
+**USER**— y `v-backup-user-config` (el que usa el incremental) con cinco, sin USER. Cada una
+tiene su propio `source`, que va **antes** de las secciones que filtran. `v-backup-user-restic`
+llama al segundo y nunca al primero. Dos verificaciones se contradijeron por mirar cada una un
+archivo: la lección está abajo.
+
+**Después de cerrar el paso 8 queda, para dar la fase 2 por terminada:** la revisión de
+seguridad y de código de todo lo de estos dos días (obligatoria: se ha tocado mucho código que
+corre como root), arreglar lo que salga, y la documentación de usuario de las órdenes nuevas,
+que escribe el arquitecto.
+
+## Dónde va la versión 2.1 (ADR 0013, 0017)
+
+- **Fase 1 — terminada.**
+- **Fase 2 — tres de ocho pasos**: diagnóstico (la base), registrar el repositorio, programar el
+  respaldo, marcar las cuentas. **Faltan**: almacenamiento (`hestia rclone`), exclusiones,
+  primera copia comprobada, claves (`hestia keys`), desactivar. Y llevarlo todo a la web y a la
+  TUI.
 - **Fases 3 y 4** sin empezar. La 3 (interfaz) necesita una sesión de diseño con el PO.
 
-## Pendiente del arquitecto, anotado para no perderlo
+Estimación dada al PO: 6–9 rondas para cerrar la fase 2.
 
-- **La guarda bloquea `git commit` por el TEXTO del mensaje** (H13 de #060): nombrar una
-  herramienta prohibida en prosa, dentro de `-m`, se toma por una orden. El coder tuvo que
-  empobrecer dos mensajes de commit. Hay que mirar la posición de orden, no la aparición del
-  texto, con su prueba en `probar_guardia.py`.
-- **El formato de las instantáneas no lo decide HestiaCP** (H8 de #060): la orden que las lista
-  no formatea nada, solo deja pasar la salida de la herramienta de respaldo instalada. Las
-  claves del json dependen de SU versión, no de la de HestiaCP. El parseo nuevo se apoya solo en
-  `time` por eso. La ficha de `.agents/context/50-hestiacp.md` habla de ese formato como si
-  fuera de HestiaCP: hay que corregirla.
-- **Sin verificar contra un servidor real** (H9 de #060): que la columna de la última
-  instantánea de `hestia users` siga saliendo igual tras pedir json. Probado solo con datos
-  sintéticos en el banco.
+## AVISO VIGENTE: la web puede contradecir a la línea de órdenes
+
+Encontrado en la ronda #092. La web **no siempre pasa por `backupctl`**: lee el servidor por su
+cuenta en al menos tres sitios (configuración de Restic, lista de cuentas, y qué cuentas tienen
+clave) y decide con eso. Son **dos implementaciones** de la misma pregunta.
+
+Todo lo construido en la fase 2 —distinguir «no» de «no se pudo leer», exigir el huso de las
+fechas, no fiarse del código de salida de HestiaCP— vive **solo en la línea de órdenes**. La web
+puede enseñar un estado distinto del mismo servidor sin que nadie sepa cuál creer.
+
+**Decisión del PO (2026-09-24): se aborda en la fase 3**, con el rediseño de la interfaz, no
+antes. Motivo: no añadir superficie a una web que ya le pesa, y decidir allí qué tareas hace de
+verdad. Consecuencia mientras tanto, y hay que decírselo cuando pruebe: **para diagnosticar, la
+línea de órdenes; si las dos discrepan, manda `hestia status`.**
+
+Segundo hallazgo de la misma ronda: la web llama a todo con `-y`, así que las dos negativas
+nuevas (desactivar sin claves rescatadas, y pisar un remoto existente) se dispararán ahí con
+mensajes escritos para una terminal. Protegen igual; se verán mal. También para la fase 3.
+
+## Pendiente de decidir o de cerrar
+
+- **Zona horaria (#081)**: en el servidor del PO, la misma instantánea se imprimió con cinco
+  horas de diferencia entre dos sesiones. `bc_hestia_diag_instantanea` compara esa fecha con
+  «ahora»: si las dos puntas no están en la misma referencia, un respaldo que se saltó una noche
+  puede parecer reciente. **Falso OK.** El coder está mirando si ya está bien resuelto.
+- **H36**: `hestia cuentas` no aparece en la TUI, y ninguno de los pasos nuevos está en la web.
+  La interfaz es el centro (`20-convenciones.md`): hay que cerrarlo antes de dar la 2.1.
+- **H34** (decidido, se queda): cada cuenta se lee dos veces, una para la foto que se enseña y
+  otra justo antes de escribir. Entre las dos hay una persona decidiendo; escribir sobre la
+  lectura vieja sería escribir a ciegas.
+- **Sin verificar contra un servidor real**: que `v-change-user-config-value` con la clave
+  presente no toque nada más que esa clave. Lo que sabemos viene de leer su código.
 
 ## Para una sesión nueva
 
-- Lee el tramo abierto, el del incidente (`2026-09-23-2145`), y los ADR 0013, 0014, 0015 y
-  **0017** (el 0016 está reemplazado).
-- `.agents/context/30-trampas.md` T2, T20–T26, y `50-hestiacp.md` entero: lo verificado ahí no
-  se vuelve a verificar.
+- Lee este archivo, el tramo abierto, y los ADR 0013, 0014, 0015 y **0017** (el 0016 está
+  reemplazado).
+- `.agents/context/20-convenciones.md` («vacío no es lo mismo que no lo sé»),
+  `30-trampas.md` T2 y T20–T26, `40-entorno.md` (el banco y sus salvaguardas) y `50-hestiacp.md`
+  entero: lo verificado ahí no se vuelve a verificar.

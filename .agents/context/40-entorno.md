@@ -93,6 +93,28 @@ buena. Si al romper a propósito el código que vigila la prueba sigue verde, la
 no es el código el que hay que mirar. Y cuando el mensaje es lo que lleva la información,
 aféctalo también: afirma sobre el texto, no solo sobre el nivel.
 
+### Una prueba que descarta `stderr` no comprueba los avisos
+
+Los mensajes que más importan —una negativa, un aviso con nombres, el motivo de un rechazo— los
+escribe `bc_err` y `bc_warn`, y salen por **stderr**. Una suite que captura solo la salida
+estándar puede tener media docena de afirmaciones sobre esos mensajes que **no comprueban
+nada**: pasan porque no encuentran el texto ni cuando está ni cuando falta. Pasó en la ronda
+#090, con cinco afirmaciones.
+
+Se vio porque fallaron al escribir el código **bien**. Si las pruebas se hubieran escrito hasta
+«que pasen», habrían quedado cinco afirmaciones inútiles y nadie se habría enterado. Es otra
+cara de «pruebas que no pueden fallar»: captura las dos salidas, o afirma explícitamente sobre
+la que toca.
+
+### Una suite que usa `HESTIA_DIR` se niega a correr en una máquina con HestiaCP
+
+`bc_hestia_conectar` trabaja **en local** si encuentra `/usr/local/hestia` en la máquina donde
+corre, en vez de irse por el `ssh` del perfil. En una suite eso significa que las pruebas
+dejarían de hablar con el `ssh` falso y **tocarían el HestiaCP de quien las ejecuta**. Por eso
+`tests/probar_hestia_cron.sh` aborta si ese directorio existe, y cualquier suite futura que use
+un `HESTIA_DIR` sintético necesita la misma salvaguarda (misma familia que las del ADR 0010 en
+`tests/lib.sh`). Encontrado en la ronda #078.
+
 ### Lo que el banco simula del servidor
 
 Las suites que usan el `ssh` falso dependen de un detalle: `bc_ssh_sudo` pregunta primero

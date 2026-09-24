@@ -91,6 +91,26 @@ sin HestiaCP, y que me diga qué hizo; potenciarla; dejar una versión estable»
 - [ ] **`adoptar --snapshot` sin validar** en la CLI (la web sí valida): se interpola entre
       comillas simples y se ejecuta como root en el destino (`adoptar.sh:419,925`). Seguridad.
 
+## Fechas que cruzan de una máquina a otra (inventario del 2026-09-24)
+
+Al arreglar el huso de las instantáneas se revisó toda interpretación de fechas de `lib/`,
+`bin/`, `web/` y `tools/`. La retención, los archivos y la web parten de un instante absoluto
+(`date +%s`, `stat -c %Y`) y están bien. Quedan tres, **ninguno decide nada hoy**:
+
+- [ ] **`lib/verify.sh:92,95` — el que importa.** Lee el «generado:» del manifiesto y lo
+      imprime tal cual. Ese texto lo escribió **otra máquina** (un respaldo se verifica donde
+      se quiera), así que quien lo lee está viendo la hora de pared del servidor de origen sin
+      que nada se lo diga. Mismo defecto que el de la columna de instantáneas, ya corregido.
+- [ ] **`lib/backup.sh:225`** — el manifiesto escribe la zona con `%Z` (el *nombre*: `CEST`),
+      que es ambiguo entre países y no siempre se puede convertir. `%z` (el desplazamiento)
+      nunca lo es. Da igual mientras nadie lo interprete; el día que se compare, hace falta.
+- [ ] **`lib/backup.sh:256`** — el nombre del respaldo lleva una marca de tiempo local sin
+      zona. Solo ordena y nombra, pero dos servidores en husos distintos producen nombres que
+      no se pueden ordenar entre sí, y `migrate` mueve respaldos entre máquinas.
+
+Tocar los dos de `backup.sh` cambia el formato del respaldo, que es un contrato
+(`docs/referencia/formato.md`): no se hace a mitad de la fase 2.
+
 ## El repositorio
 
 - [ ] **Datos reales del PO en el código** (T7): dominio de un cliente, usuario y bases en
