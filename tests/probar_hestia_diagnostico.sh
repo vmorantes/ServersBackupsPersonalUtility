@@ -491,12 +491,17 @@ contar_veredicto() {
     BC_NO_COLOR=1
     f=0; a=0; c=0
     if [[ "$3" == "con" ]]; then
+      # Se calla todo: lo que se mira son los contadores.
       bc_hestia_pintar_veredicto "x" "$2" f a c >/dev/null 2>&1
     else
-      bc_hestia_pintar_veredicto "x" "$2" f a >/dev/null 2>&1
+      # La llamada corta debe morir diciéndolo, y bc_die escribe por stderr:
+      # aquí solo se calla la salida normal.
+      bc_hestia_pintar_veredicto "x" "$2" f a >/dev/null
     fi
     echo "$f $a $c"
   ' _ "$BANCO_RAIZ" "$1" "${2:-con}" 2>&1
+  # La salida lleva stdout y stderr juntos a propósito: una llamada mal hecha
+  # muere por bc_die, que escribe por stderr, y eso es lo que hay que ver.
 }
 
 test_blind_verdicts_are_counted_apart_from_warnings() {
@@ -509,13 +514,154 @@ test_blind_verdicts_are_counted_apart_from_warnings() {
     "un fallo sigue sumando a fallos"
 }
 
-# Quien llama sin contador de ciegos es porque los cuenta él, por dato y no por
-# veredicto. Si el pintor los contara además como avisos, la misma ceguera
-# saldría dos veces en el resumen.
-test_a_caller_without_a_blind_counter_is_not_double_counted() {
+# Una llamada a la que le falta el contador de ciegos NO cuenta mal en
+# silencio: se muere y lo dice. Quien no quiera contar ahí pasa una variable
+# llamada `sin_contar`, que se ve al leer la llamada.
+test_a_short_call_fails_loudly_instead_of_miscounting() {
   nueva_prueba t49
-  afirmar_igual "$(contar_veredicto "$(printf 'CIEGO\tno se pudo leer')" sin)" "0 0 0" \
-    "sin contador de ciegos, el pintor no lo suma a los avisos"
+  local salida
+  salida="$(contar_veredicto "$(printf 'CIEGO\tno se pudo leer')" sin)"
+  case "$salida" in
+    *"5 argumentos"*) afirmar_igual "si" "si" "una llamada corta dice qué le falta" ;;
+    *) afirmar_igual "no ('$salida')" "si" "una llamada corta dice qué le falta" ;;
+  esac
+  case "$salida" in
+    *"0 0 0"*|*"0 1 0"*) afirmar_igual "siguió contando" "se detuvo" \
+      "una llamada corta no sigue como si nada" ;;
+    *) afirmar_igual "se detuvo" "se detuvo" "una llamada corta no sigue como si nada" ;;
+  esac
+}
+
+# --- el informe entero, sin servidor -----------------------------------------
+#
+# Esto es lo que demuestra que partir bc_hestia_diagnosticar sirvió de algo:
+# bc_hestia_pintar_diagnostico recibe los datos ya leídos y no toca nada
+# remoto, así que el informe COMPLETO —veredictos, contadores, resumen y
+# código de salida— se puede probar aquí, con datos inventados y sin ssh.
+
+# Ejecuta el pintado con un conjunto de datos sintético. Devuelve la salida
+# completa y, en la última línea, "CODIGO:N".
+pintar_diagnostico() {
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/hestia.sh"
+    BC_NO_COLOR=1
+    bc_hestia_pintar_diagnostico "$2"
+    echo "CODIGO:$?"
+  ' _ "$BANCO_RAIZ" "$2" 2>&1
+}
+
+# Construye una línea de datos con los campos separados por tabuladores.
+reg() { local IFS=$'\t'; printf '%s\n' "$*"; }
+
+# Un servidor sano: repositorio en s3 con ruta absoluta, cron bien puesto y una
+# cuenta con copia de esta madrugada.
+test_a_healthy_server_reports_zero_of_everything() {
+  nueva_prueba t51
+  local ahora; ahora="$(date -d "2026-09-24 12:00:00" +%s)"
+  local datos
+  datos="$(
+    reg repo "rclone:almacen:/IncrementalBackups" "s3"
+    reg cron "30 5 * * * sudo /usr/local/hestia/bin/v-backup-users-restic" \
+        "/var/spool/cron/crontabs/hestiaweb"
+    reg cada_h 24 leido
+    reg ahora "$ahora"
+    reg cuentas si
+    reg cuenta cliente07 1 1 1 "2026-09-24 03:00:00"
+  )"
+  local salida; salida="$(pintar_diagnostico "" "$datos")"
+  echo "$salida" > "$BANCO_TMP/t51/salida.log"
+  afirmar_contiene "$BANCO_TMP/t51/salida.log" "0 fallo\(s\) · 0 aviso\(s\) · 0 dato\(s\)" \
+    "servidor sano: los tres contadores a cero"
+  afirmar_contiene "$BANCO_TMP/t51/salida.log" "CODIGO:0" "y código de salida 0"
+  afirmar_no_contiene "$BANCO_TMP/t51/salida.log" "INCOMPLETO" \
+    "sin ceguera no se habla de diagnóstico incompleto"
+}
+
+# La mezcla: un fallo, un aviso y ceguera en la misma pasada. Los tres números
+# tienen que salir por separado.
+test_a_mixed_report_counts_the_three_things_apart() {
+  nueva_prueba t52
+  local ahora; ahora="$(date -d "2026-09-24 12:00:00" +%s)"
+  local datos
+  datos="$(
+    reg repo "rclone:almacen:/IncrementalBackups" "alias"
+    reg cron "30 5 * * * sudo /usr/local/hestia/bin/v-backup-users-restic" \
+        "/var/spool/cron/crontabs/hestiaweb"
+    reg cada_h 24 leido
+    reg ahora "$ahora"
+    reg cuentas si
+    reg cuenta uno 1 0 1 "2026-09-24 03:00:00"
+    reg cuenta dos "?" "?" 1 "2026-09-24 03:00:00"
+    reg cuenta tres 1 1 1 "__ILEGIBLE__"
+  )"
+  local salida; salida="$(pintar_diagnostico "" "$datos")"
+  echo "$salida" > "$BANCO_TMP/t52/salida.log"
+  afirmar_contiene "$BANCO_TMP/t52/salida.log" "1 fallo\(s\) · 1 aviso\(s\) · 3 dato\(s\)" \
+    "un fallo (cuenta 'uno'), un aviso (remoto envolvente) y tres datos ciegos"
+  afirmar_contiene "$BANCO_TMP/t52/salida.log" "CODIGO:1" "código de salida 1"
+  afirmar_contiene "$BANCO_TMP/t52/salida.log" "INCOMPLETO" "y dice que está incompleto"
+}
+
+# Sin fallos, pero con algo sin leer: el caso que antes salía con 0.
+test_blindness_alone_is_enough_to_exit_with_one() {
+  nueva_prueba t53
+  local ahora; ahora="$(date -d "2026-09-24 12:00:00" +%s)"
+  local datos
+  datos="$(
+    reg repo "rclone:almacen:/IncrementalBackups" "s3"
+    reg cron "30 5 * * * sudo /usr/local/hestia/bin/v-backup-users-restic" \
+        "/var/spool/cron/crontabs/hestiaweb"
+    reg cada_h 24 leido
+    reg ahora "$ahora"
+    reg cuentas si
+    reg cuenta uno 1 "?" 1 "2026-09-24 03:00:00"
+  )"
+  local salida; salida="$(pintar_diagnostico "" "$datos")"
+  echo "$salida" > "$BANCO_TMP/t53/salida.log"
+  afirmar_contiene "$BANCO_TMP/t53/salida.log" "0 fallo\(s\) · 0 aviso\(s\) · 1 dato\(s\)" \
+    "sin fallos ni avisos, con un dato sin leer"
+  afirmar_contiene "$BANCO_TMP/t53/salida.log" "CODIGO:1" "aun así, código de salida 1"
+}
+
+# Si no se pudo leer la lista de cuentas, el informe se corta ahí, lo dice, y
+# no sale con 0.
+test_an_unreadable_account_list_stops_the_report() {
+  nueva_prueba t54
+  local datos
+  datos="$(
+    reg repo "rclone:almacen:/IncrementalBackups" "s3"
+    reg cron "30 5 * * * sudo /usr/local/hestia/bin/v-backup-users-restic" \
+        "/var/spool/cron/crontabs/hestiaweb"
+    reg cada_h 24 leido
+    reg ahora 0
+    reg cuentas no
+  )"
+  local salida; salida="$(pintar_diagnostico "" "$datos")"
+  echo "$salida" > "$BANCO_TMP/t54/salida.log"
+  afirmar_contiene "$BANCO_TMP/t54/salida.log" "[Nn]o se pudo leer la lista de cuentas" \
+    "se dice que no se pudieron leer las cuentas"
+  afirmar_contiene "$BANCO_TMP/t54/salida.log" "1 dato\(s\)" "y cuenta como ceguera"
+  afirmar_contiene "$BANCO_TMP/t54/salida.log" "CODIGO:1" "y el código de salida es 1"
+}
+
+# La periodicidad asumida se DICE. Sin esa línea, un usuario tomaría por leído
+# un 24 que nadie leyó.
+test_an_assumed_period_is_said_out_loud() {
+  nueva_prueba t55
+  local datos
+  datos="$(
+    reg repo "/IncrementalBackups" ""
+    reg cron "" ""
+    reg cada_h 24 asumido
+    reg ahora 0
+    reg cuentas si
+  )"
+  local salida; salida="$(pintar_diagnostico "" "$datos")"
+  echo "$salida" > "$BANCO_TMP/t55/salida.log"
+  afirmar_contiene "$BANCO_TMP/t55/salida.log" "se asume una vez al día" \
+    "la periodicidad asumida se dice"
 }
 
 # --- ruta del repositorio ----------------------------------------------------
@@ -596,13 +742,18 @@ test_snapshot_count_does_not_depend_on_lines
 test_empty_array_means_none
 test_non_json_output_is_not_read_as_no_backups
 test_blind_verdicts_are_counted_apart_from_warnings
-test_a_caller_without_a_blind_counter_is_not_double_counted
+test_a_short_call_fails_loudly_instead_of_miscounting
 test_exit_code_is_zero_when_everything_was_read_and_fine
 test_warnings_alone_do_not_change_the_exit_code
 test_a_failure_changes_the_exit_code
 test_a_blind_reading_changes_the_exit_code
 test_summary_counts_blind_readings_apart
 test_summary_says_nothing_about_blindness_when_there_is_none
+test_a_healthy_server_reports_zero_of_everything
+test_a_mixed_report_counts_the_three_things_apart
+test_blindness_alone_is_enough_to_exit_with_one
+test_an_unreadable_account_list_stops_the_report
+test_an_assumed_period_is_said_out_loud
 test_repo_path_missing_is_a_failure
 test_repo_path_relative_with_local_remote_is_a_failure
 test_repo_path_inside_a_website_is_a_failure

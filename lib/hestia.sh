@@ -417,6 +417,24 @@ bc_hestia_juzgar_repo() {
   fi
 }
 
+# Traduce lo que devolvió la consulta del tipo del remoto al valor que entiende
+# bc_hestia_validar_repo. Pura: los dos sitios que consultan el tipo pasan por
+# aquí, y así la regla se prueba en el banco en vez de vivir por duplicado.
+# $1 lo que salió de la consulta (vacío si no salió nada)
+# $2 1 si es un ensayo —no se consultó nada—, 0 si se consultó de verdad
+#
+# Vacío y '?' NO son lo mismo. '?' quiere decir «lo intenté y no pude», y con
+# una ruta absoluta hace que se avise en vez de aprobar. En un ensayo no se
+# intentó nada: avisar ahí sería avisar de algo que nadie miró, ruido en una
+# simulación que a propósito no toca el servidor.
+bc_hestia_tipo_leido() {
+  local salida="${1:-}" ensayo="${2:-0}"
+  if [[ -n "$salida" ]]; then printf '%s\n' "$salida"
+  elif [[ "$ensayo" == "1" ]]; then printf '\n'
+  else printf '%s\n' '?'
+  fi
+}
+
 # ¿La ruta que hay registrada HOY en el servidor es una ruta sensata?
 # $1 repositorio registrado   $2 tipo del remoto: el tipo, '?' si no se pudo
 #    leer, o vacío si no hay tipo que mirar
@@ -552,11 +570,28 @@ bc_hestia_status() {
 # completo cuando no lo fue (40-salvaguardas.md §5). De la contraseña de una
 # cuenta solo se dice si está o no: nunca su contenido.
 bc_hestia_diagnosticar() {
-  local conf="${1:-}" donde="${2:-}" usuarios="${3:-}"
-  local fallos=0 avisos=0 ciegos=0
+  local datos
+  datos="$(bc_hestia_leer_diagnostico "${1:-}" "${2:-}" "${3:-}")"
+  bc_hestia_pintar_diagnostico "$datos"
+}
 
-  echo
-  bc_step "¿Los respaldos funcionan de verdad?"
+# -----------------------------------------------------------------------------
+# La parte que LEE
+# -----------------------------------------------------------------------------
+# Habla con el servidor y no imprime NADA para el usuario: devuelve los datos
+# en crudo, una línea por cosa, con los campos separados por tabuladores.
+#
+#   repo      <repositorio registrado>  <tipo del remoto: el tipo, '?' o vacío>
+#   cron      <línea del cron>          <archivo donde vive>
+#   cada_h    <cada cuántas horas>      <leido|asumido>
+#   ahora     <epoch>
+#   cuentas   <si|no>                   ('no' = no se pudo leer la lista)
+#   cuenta    <nombre> <clave> <repo> <marcada> <fecha de la última copia>
+#
+# Los tabuladores dentro de un valor se convierten en espacios antes de
+# emitirlo: una línea de cron con un tabulador partiría el registro en dos.
+bc_hestia_leer_diagnostico() {
+  local conf="${1:-}" donde="${2:-}" usuarios="${3:-}"
 
   # --- La ruta registrada ----------------------------------------------------
   local repo tipo_remoto="" rem
@@ -566,12 +601,11 @@ bc_hestia_diagnosticar() {
     tipo_remoto="$( { bc_hestia_root "rclone config show $(printf '%q' "$rem") 2>/dev/null \
         | awk '/^type[[:space:]]*=/{sub(/^type[[:space:]]*=[[:space:]]*/,\"\"); print; exit}'" \
         || true; } | tr -d '\r' )"
-    # Es un remoto de rclone: aquí SÍ hay un tipo que mirar. Si no salió nada,
-    # no es «no aplica», es «no lo pude leer», y eso se dice con '?'.
-    [[ -n "$tipo_remoto" ]] || tipo_remoto='?'
+    # Es un remoto de rclone: aquí SÍ hay un tipo que mirar, y se consultó de
+    # verdad (el 0). Si no salió nada, no es «no aplica», es «no lo pude leer».
+    tipo_remoto="$(bc_hestia_tipo_leido "$tipo_remoto" 0)"
   fi
-  bc_hestia_pintar_veredicto "Ruta del repositorio" "$(bc_hestia_diag_ruta_repo "$repo" "$tipo_remoto")" \
-    fallos avisos
+  bc_hestia_registro repo "$repo" "$tipo_remoto"
 
   # --- El cron ---------------------------------------------------------------
   # bc_hestia_cron_donde devuelve "archivo:contenido" (grep -H). Se coge la
@@ -585,39 +619,36 @@ bc_hestia_diagnosticar() {
       linea_cron="${linea_cron#*:}"
     fi
   fi
-  bc_hestia_pintar_veredicto "Programación" "$(bc_hestia_diag_cron "$linea_cron" "$archivo_cron")" \
-    fallos avisos
+  bc_hestia_registro cron "$linea_cron" "$archivo_cron"
 
   # Cada cuántas horas corre, para poder juzgar si una instantánea es vieja.
   # Sin una línea legible se asume a diario, que es lo que instala esta misma
-  # herramienta; se dice, para que nadie lo tome por un dato leído.
-  local cada_h=24
+  # herramienta; se marca como 'asumido' para que quien pinte lo diga y nadie
+  # lo tome por un dato leído.
+  local cada_h=24 origen_cada_h=asumido
   if [[ -n "$linea_cron" ]]; then
+    origen_cada_h=leido
     local c_min c_hora c_resto
     read -r c_min c_hora c_resto <<<"$linea_cron"
     if [[ "$c_hora" == "*" ]]; then cada_h=1
     elif [[ "$c_hora" =~ ^\*/([0-9]+)$ ]]; then cada_h="${BASH_REMATCH[1]}"
     elif [[ "$c_hora" == *,* ]]; then cada_h=$(( 24 / $(tr ',' '\n' <<<"$c_hora" | grep -c .) ))
     fi
-  else
-    bc_log "No hay línea de cron legible: para juzgar la antigüedad se asume una vez al día."
   fi
   (( cada_h < 1 )) && cada_h=1
+  bc_hestia_registro cada_h "$cada_h" "$origen_cada_h"
+  bc_hestia_registro ahora "$(date +%s)"
 
   # --- Cuenta por cuenta -----------------------------------------------------
   if [[ -z "$usuarios" ]]; then
-    bc_warn "No se pudo leer la lista de cuentas del panel: el diagnóstico por cuenta se omite."
-    ciegos=$(( ciegos + 1 ))
-    bc_hestia_resumen_diag "$fallos" "$avisos" "$ciegos"
-    return 1
+    bc_hestia_registro cuentas no
+    return 0
   fi
+  bc_hestia_registro cuentas si
 
-  local ahora; ahora="$(date +%s)"
   local u clave repo_existe marcada fecha
   while IFS= read -r u; do
     [[ -n "$u" ]] || continue
-    echo
-    bc_log "Cuenta '$u':"
 
     # Las tres lecturas devuelven un CENTINELA (SI/NO), no un código de salida.
     # Motivo: `test -f` y `grep -q` salen con 1 tanto si la respuesta es «no»
@@ -643,20 +674,95 @@ bc_hestia_diagnosticar() {
     else
       repo_existe="$(bc_hestia_sondear_repo "$repo" "$u")"
     fi
-    bc_hestia_pintar_veredicto "  estado" "$(bc_hestia_diag_cuenta "$clave" "$repo_existe" "$marcada")" \
-      fallos avisos
 
-    # Cada dato que no se pudo leer se cuenta aparte. El '-' no cuenta: no es
-    # ceguera, es que no hay ningún repositorio registrado y eso ya se dijo.
-    local dato
+    # La última instantánea, SIEMPRE con json explícito: con un formato que no
+    # reconoce, la orden de HestiaCP devuelve vacío y código 0, que se leería
+    # como «no tiene copias» (ADR 0017).
+    fecha="$(bc_hestia_ultima_instantanea "$u")"
+
+    bc_hestia_registro cuenta "$u" "$clave" "$repo_existe" "$marcada" "$fecha"
+  done <<<"$usuarios"
+  return 0
+}
+
+# Emite un registro del conjunto de datos. Los tabuladores de dentro de un
+# valor se vuelven espacios: son el separador, y uno perdido ahí dentro
+# desplazaría todos los campos siguientes.
+bc_hestia_registro() {
+  local campo salida=""
+  for campo in "$@"; do
+    salida+="${campo//$'\t'/ }"$'\t'
+  done
+  printf '%s\n' "${salida%$'\t'}"
+}
+
+# -----------------------------------------------------------------------------
+# La parte que PINTA y CUENTA
+# -----------------------------------------------------------------------------
+# Recibe lo que devolvió bc_hestia_leer_diagnostico y no toca NADA remoto: por
+# eso el banco puede probarla entera, con datos sintéticos, sin ssh. Devuelve
+# el código de salida del diagnóstico.
+bc_hestia_pintar_diagnostico() {
+  local datos="${1:-}"
+  local fallos=0 avisos=0 ciegos=0 sin_contar=0
+
+  echo
+  bc_step "¿Los respaldos funcionan de verdad?"
+
+  # Los datos se recorren dos veces: primero lo global, después las cuentas. Es
+  # más barato que arrastrar variables por un solo bucle, y deja el orden del
+  # informe fijo aunque el de los datos cambie.
+  local repo="" tipo_remoto="" linea_cron="" archivo_cron=""
+  local cada_h=24 origen_cada_h=asumido ahora=0 hay_cuentas=si
+  local -a c
+  while IFS=$'\t' read -r -a c; do
+    case "${c[0]:-}" in
+      repo)    repo="${c[1]:-}";       tipo_remoto="${c[2]:-}" ;;
+      cron)    linea_cron="${c[1]:-}"; archivo_cron="${c[2]:-}" ;;
+      cada_h)  cada_h="${c[1]:-24}";   origen_cada_h="${c[2]:-asumido}" ;;
+      ahora)   ahora="${c[1]:-0}" ;;
+      cuentas) hay_cuentas="${c[1]:-si}" ;;
+    esac
+  done <<<"$datos"
+
+  bc_hestia_pintar_veredicto "Ruta del repositorio" \
+    "$(bc_hestia_diag_ruta_repo "$repo" "$tipo_remoto")" fallos avisos ciegos
+  bc_hestia_pintar_veredicto "Programación" \
+    "$(bc_hestia_diag_cron "$linea_cron" "$archivo_cron")" fallos avisos ciegos
+
+  [[ "$origen_cada_h" == "asumido" ]] \
+    && bc_log "No hay línea de cron legible: para juzgar la antigüedad se asume una vez al día."
+
+  if [[ "$hay_cuentas" != "si" ]]; then
+    bc_warn "No se pudo leer la lista de cuentas del panel: el diagnóstico por cuenta se omite."
+    ciegos=$(( ciegos + 1 ))
+    bc_hestia_resumen_diag "$fallos" "$avisos" "$ciegos"
+    bc_hestia_codigo_diag "$fallos" "$ciegos"
+    return
+  fi
+
+  local u clave repo_existe marcada fecha dato
+  while IFS=$'\t' read -r -a c; do
+    [[ "${c[0]:-}" == "cuenta" ]] || continue
+    u="${c[1]:-}"; clave="${c[2]:-?}"; repo_existe="${c[3]:-?}"
+    marcada="${c[4]:-?}"; fecha="${c[5]:-}"
+    [[ -n "$u" ]] || continue
+
+    echo
+    bc_log "Cuenta '$u':"
+
+    # El veredicto de la cuenta se pinta con `sin_contar`: si sale CIEGO, lo
+    # que cuenta es cuántos DATOS quedaron sin leer (hasta tres), no cuántas
+    # cuentas. Eso lo hace el bucle de abajo.
+    bc_hestia_pintar_veredicto "  estado" \
+      "$(bc_hestia_diag_cuenta "$clave" "$repo_existe" "$marcada")" fallos avisos sin_contar
+
+    # El '-' no cuenta: no es ceguera, es que no hay ningún repositorio
+    # registrado, y eso ya lo dijo la línea de arriba una sola vez.
     for dato in "$clave" "$repo_existe" "$marcada"; do
       [[ "$dato" == "?" ]] && ciegos=$(( ciegos + 1 ))
     done
 
-    # La última instantánea, SIEMPRE con json explícito: con un formato que no
-    # reconoce, v-list-user-backups-restic devuelve vacío y código 0, que se
-    # leería como «no tiene copias» (ADR 0017).
-    fecha="$(bc_hestia_ultima_instantanea "$u")"
     if [[ "$fecha" == "__ILEGIBLE__" ]]; then
       bc_warn "  última copia: no se pudo leer la lista de instantáneas."
       ciegos=$(( ciegos + 1 ))
@@ -664,7 +770,7 @@ bc_hestia_diagnosticar() {
       bc_hestia_pintar_veredicto "  última copia" \
         "$(bc_hestia_diag_instantanea "$fecha" "$ahora" "$cada_h")" fallos avisos ciegos
     fi
-  done <<<"$usuarios"
+  done <<<"$datos"
 
   bc_hestia_resumen_diag "$fallos" "$avisos" "$ciegos"
   bc_hestia_codigo_diag "$fallos" "$ciegos"
@@ -726,7 +832,16 @@ bc_hestia_ultima_instantanea() {
 # Pinta un veredicto "NIVEL<TAB>mensaje" y suma al contador que corresponda.
 # $3 y $4 son NOMBRES de variable (se actualizan por referencia).
 bc_hestia_pintar_veredicto() {
-  local etiqueta="$1" veredicto="$2" n_fallos="$3" n_avisos="$4" n_ciegos="${5:-}"
+  # Cinco argumentos, los cinco OBLIGATORIOS. El de los ciegos lo era «si te
+  # apetece» y eso perdía información en silencio: un veredicto CIEGO pintado
+  # por un llamador que se dejó el quinto argumento no lo contaba NADIE, y el
+  # resumen decía «0 datos sin leer» de un diagnóstico ciego. Quien no quiera
+  # contarlos aquí —porque los cuenta él, con más detalle— lo dice pasando una
+  # variable llamada `sin_contar`, que se ve al leer la llamada.
+  if (( $# < 5 )); then
+    bc_die "bc_hestia_pintar_veredicto necesita 5 argumentos (etiqueta, veredicto, y los contadores de fallos, avisos y ciegos); recibió $#."
+  fi
+  local etiqueta="$1" veredicto="$2" n_fallos="$3" n_avisos="$4" n_ciegos="$5"
   local nivel mensaje
   nivel="${veredicto%%$'\t'*}"
   mensaje="${veredicto#*$'\t'}"
@@ -738,12 +853,11 @@ bc_hestia_pintar_veredicto() {
     # ceguera es algo que no se pudo saber, y sumarlas deja al usuario creyendo
     # que el diagnóstico fue completo.
     #
-    # Sin contador de ciegos, NO se cuenta en ningún sitio: quien llama así es
-    # porque los cuenta él con más detalle (el veredicto de una cuenta puede
-    # tapar hasta tres datos ilegibles, y el contador cuenta por dato, no por
-    # veredicto). Contarlo aquí además sería contarlo dos veces.
-    CIEGO) bc_warn "$etiqueta: $mensaje"
-           [[ -n "$n_ciegos" ]] && printf -v "$n_ciegos" '%s' "$(( ${!n_ciegos} + 1 ))" ;;
+    # El contador `sin_contar` existe y se incrementa; simplemente no lo mira
+    # nadie. Quien lo pasa es porque cuenta él con más detalle: el veredicto de
+    # una cuenta puede tapar hasta tres datos ilegibles, y el resumen cuenta por
+    # dato, no por veredicto. Sumarlo aquí además sería contarlo dos veces.
+    CIEGO) bc_warn "$etiqueta: $mensaje"; printf -v "$n_ciegos" '%s' "$(( ${!n_ciegos} + 1 ))" ;;
     *)     bc_ok   "$etiqueta: $mensaje" ;;
   esac
 }
@@ -1085,6 +1199,10 @@ bc_hestia_restic() {
   if [[ "$repo" == rclone:* ]]; then
     rem_nombre="${repo#rclone:}"; rem_nombre="${rem_nombre%%:*}"
     if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
+      # En ensayo el tipo se queda VACÍO, no en '?'. No es lo mismo: '?' quiere
+      # decir «lo intenté y no pude», y avisaría de algo que aquí ni se
+      # intentó. Eso sería ruido en una simulación que a propósito no toca el
+      # servidor.
       bc_log "Simulación (--dry-run): no se comprueba el tipo del remoto en el servidor."
     else
       # El filtrado corre EN EL SERVIDOR (awk), no en local: "rclone config
@@ -1100,6 +1218,10 @@ bc_hestia_restic() {
           | awk '/^type[[:space:]]*=/{sub(/^type[[:space:]]*=[[:space:]]*/,\"\"); print; exit}'" \
           || true; } | tr -d '\r' )"
     fi
+    # Con una ruta absoluta y el tipo sin leer, el registro sigue adelante,
+    # pero avisando de que nadie ha comprobado a dónde apunta ese remoto. En
+    # ensayo no avisa: ahí no se intentó leerlo.
+    tipo_remoto="$(bc_hestia_tipo_leido "$tipo_remoto" "${BC_OPT_DRY:-0}")"
   fi
   bc_hestia_validar_repo "$repo" "$tipo_remoto" || { BC_DELIBERATE_EXIT=1; return 1; }
 
