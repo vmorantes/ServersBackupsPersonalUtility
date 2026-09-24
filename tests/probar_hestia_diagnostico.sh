@@ -552,8 +552,11 @@ pintar_diagnostico() {
   ' _ "$BANCO_RAIZ" "$2" 2>&1
 }
 
-# Construye una línea de datos con los campos separados por tabuladores.
-reg() { local IFS=$'\t'; printf '%s\n' "$*"; }
+# Construye una línea de datos igual que bc_hestia_registro: campos separados
+# por el carácter de unidad (0x1F), no por un tabulador. El motivo está en
+# lib/hestia.sh — con tabuladores, bash colapsa los campos vacíos al leer y
+# desplaza todos los siguientes.
+reg() { local IFS=$'\x1f'; printf '%s\n' "$*"; }
 
 # Un servidor sano: repositorio en s3 con ruta absoluta, cron bien puesto y una
 # cuenta con copia de esta madrugada.

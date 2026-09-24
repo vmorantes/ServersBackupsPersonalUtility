@@ -588,8 +588,12 @@ bc_hestia_diagnosticar() {
 #   cuentas   <si|no>                   ('no' = no se pudo leer la lista)
 #   cuenta    <nombre> <clave> <repo> <marcada> <fecha de la última copia>
 #
-# Los tabuladores dentro de un valor se convierten en espacios antes de
-# emitirlo: una línea de cron con un tabulador partiría el registro en dos.
+# El separador es el carácter de unidad (0x1F), no un tabulador. El tabulador
+# es un espacio en blanco para IFS y bash COLAPSA las series de separadores en
+# blanco al leer: un campo vacío en medio desaparecería y todos los de detrás
+# se correrían un sitio. Con una cuenta sin fecha de última copia, eso movería
+# los datos de una columna a otra. Lo que venga dentro de un valor se limpia
+# antes de emitirlo.
 bc_hestia_leer_diagnostico() {
   local conf="${1:-}" donde="${2:-}" usuarios="${3:-}"
 
@@ -688,12 +692,14 @@ bc_hestia_leer_diagnostico() {
 # Emite un registro del conjunto de datos. Los tabuladores de dentro de un
 # valor se vuelven espacios: son el separador, y uno perdido ahí dentro
 # desplazaría todos los campos siguientes.
+BC_HESTIA_SEP=$'\x1f'
+
 bc_hestia_registro() {
   local campo salida=""
   for campo in "$@"; do
-    salida+="${campo//$'\t'/ }"$'\t'
+    salida+="${campo//$BC_HESTIA_SEP/ }$BC_HESTIA_SEP"
   done
-  printf '%s\n' "${salida%$'\t'}"
+  printf '%s\n' "${salida%$BC_HESTIA_SEP}"
 }
 
 # -----------------------------------------------------------------------------
@@ -715,7 +721,7 @@ bc_hestia_pintar_diagnostico() {
   local repo="" tipo_remoto="" linea_cron="" archivo_cron=""
   local cada_h=24 origen_cada_h=asumido ahora=0 hay_cuentas=si
   local -a c
-  while IFS=$'\t' read -r -a c; do
+  while IFS="$BC_HESTIA_SEP" read -r -a c; do
     case "${c[0]:-}" in
       repo)    repo="${c[1]:-}";       tipo_remoto="${c[2]:-}" ;;
       cron)    linea_cron="${c[1]:-}"; archivo_cron="${c[2]:-}" ;;
@@ -742,7 +748,7 @@ bc_hestia_pintar_diagnostico() {
   fi
 
   local u clave repo_existe marcada fecha dato
-  while IFS=$'\t' read -r -a c; do
+  while IFS="$BC_HESTIA_SEP" read -r -a c; do
     [[ "${c[0]:-}" == "cuenta" ]] || continue
     u="${c[1]:-}"; clave="${c[2]:-?}"; repo_existe="${c[3]:-?}"
     marcada="${c[4]:-?}"; fecha="${c[5]:-}"
