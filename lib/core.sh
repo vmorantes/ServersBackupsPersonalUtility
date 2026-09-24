@@ -249,6 +249,30 @@ bc_valido_cuantas() {
   [[ "${1:-}" =~ ^[1-9][0-9]{0,2}$ ]]
 }
 
+# Un usuario de Unix, no una cuenta del panel: más estricto que
+# bc_valido_usuario (sin mayúsculas, sin punto inicial) porque este valor
+# acaba en un `chown` que el servidor ejecuta como root. Es el mismo criterio
+# que useradd aplica por defecto.
+bc_valido_usuario_sistema() {
+  [[ "${1:-}" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]
+}
+
+# Una ruta absoluta del servidor. El ".." se rechaza en vez de normalizarse:
+# desde aquí no se puede resolver a qué apunta de verdad en la otra máquina, y
+# una normalización a medias es peor que un rechazo (mismo criterio que
+# bc_hestia_validar_repo).
+bc_valido_ruta_absoluta() {
+  local v="${1:-}"
+  [[ "$v" =~ ^/[A-Za-z0-9._/-]{0,200}$ ]] || return 1
+  # "/x/../y", "/..", "/../x" y "/x/.." llevan un tramo "..": se mira tramo a
+  # tramo, no como subcadena, para no rechazar un nombre legítimo como "a..b".
+  local tramo
+  while IFS= read -r tramo; do
+    [[ "$tramo" == ".." ]] && return 1
+  done < <(tr '/' '\n' <<<"$v")
+  return 0
+}
+
 # Confirmación. En modo desatendido (--yes o sin terminal) devuelve el valor por
 # defecto sin bloquearse, que es lo que permite usar los mismos módulos desde
 # cron y desde la TUI.

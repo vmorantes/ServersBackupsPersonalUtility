@@ -98,6 +98,33 @@ test_cuantas_rejects_zero_padding_and_out_of_range() {
     "0" "1000" "01" "-1" "1a"
 }
 
+# USER_NAME acaba en un `chown` que el servidor ejecuta como root, así que su
+# validador es más estricto que el de una cuenta del panel: es un usuario de
+# Unix (sin mayúsculas, sin punto inicial).
+test_system_user_accepts_valid_unix_names() {
+  nueva_prueba t10
+  comprobar_tabla bc_valido_usuario_sistema pasa "usuario de sistema: nombres normales y uno con '_' inicial se aceptan" \
+    "backupctl" "admin" "_svc"
+}
+
+test_system_user_rejects_uppercase_and_metacharacters() {
+  nueva_prueba t11
+  comprobar_tabla bc_valido_usuario_sistema falla "usuario de sistema: mayúsculas, ';', espacios, guion inicial, vacío y 33 caracteres se rechazan" \
+    "Admin" "x;id" "x y" "-x" "" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}
+
+test_absolute_path_accepts_normal_paths() {
+  nueva_prueba t12
+  comprobar_tabla bc_valido_ruta_absoluta pasa "ruta absoluta: rutas normales se aceptan" \
+    "/home/admin/scripts" "/opt/x"
+}
+
+test_absolute_path_rejects_relative_dotdot_and_metacharacters() {
+  nueva_prueba t13
+  comprobar_tabla bc_valido_ruta_absoluta falla "ruta absoluta: relativa, '..', espacios, ';' y vacío se rechazan" \
+    "relativa/x" "/home/../etc" "/home/a b" "/home/x;id" ""
+}
+
 # Punto de entrada real: `backupctl adoptar-registrar --usuario-hestia "x;id"`
 # tiene que morir en la validación, ANTES de cargar el perfil y sin invocar
 # ssh. Se usa backupctl_prueba (perfil sintético dentro del banco, PATH con
@@ -125,6 +152,10 @@ test_usuarios_accepts_valid_lists
 test_usuarios_rejects_empty_items_and_metacharacters
 test_cuantas_accepts_one_to_three_digits
 test_cuantas_rejects_zero_padding_and_out_of_range
+test_system_user_accepts_valid_unix_names
+test_system_user_rejects_uppercase_and_metacharacters
+test_absolute_path_accepts_normal_paths
+test_absolute_path_rejects_relative_dotdot_and_metacharacters
 test_cli_rejects_invalid_hestia_user_before_connecting
 
 fin_de_suite

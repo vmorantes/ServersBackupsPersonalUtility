@@ -218,6 +218,15 @@ bc_config_check() {
     [[ "${!n}" =~ ^[0-9]+$ ]] || { bc_err "$n debe ser un número entero (vale '${!n}')"; fatal=1; }
   done
 
+  # USER_NAME y DEPLOY_PATH acaban dentro de órdenes que el SERVIDOR ejecuta
+  # como root (el `chown -R` de deploy, la ruta de remote). El env.sh se edita
+  # a mano, así que un valor con un ';' o un espacio tiene que morir aquí, no
+  # tres pasos más adelante y del otro lado de la conexión.
+  bc_valido_usuario_sistema "$USER_NAME" \
+    || { bc_err "USER_NAME no es un usuario de sistema válido (vale '$USER_NAME'): se esperan minúsculas, dígitos, '_' y '-', empezando por letra minúscula o '_' (hasta 32)"; fatal=1; }
+  bc_valido_ruta_absoluta "$DEPLOY_PATH" \
+    || { bc_err "DEPLOY_PATH debe ser una ruta absoluta sin '..' ni espacios (vale '$DEPLOY_PATH')"; fatal=1; }
+
   if (( BACKUP_KEEP_MIN < 1 )); then
     bc_warn "BACKUP_KEEP_MIN=0: la retención podría dejarte sin ningún respaldo."
   fi

@@ -34,7 +34,24 @@ test_config_check_requires_mysql_user() {
   afirmar_codigo 1 "$?" "config --check exige MYSQL_USER"
 }
 
+# USER_NAME sale del env.sh, que se edita a mano, y acaba dentro de un
+# `chown -R` que el servidor ejecuta como root (lib/deploy.sh). Un valor con
+# un ';' tiene que morir en `config --check`, aquí, y no del otro lado de la
+# conexión.
+test_config_check_rejects_user_name_with_metacharacters() {
+  nueva_prueba t3
+  local perfil="$BANCO_TMP/t3/perfil"
+  crear_perfil "$perfil"
+  sed -i 's/^export USER_NAME=.*/export USER_NAME="x; id"/' "$perfil/env.sh"
+
+  backupctl_prueba "$perfil" config --check >"$BANCO_TMP/t3/salida.log" 2>&1
+  afirmar_codigo 1 "$?" "config --check rechaza un USER_NAME con ';'"
+  afirmar_contiene "$BANCO_TMP/t3/salida.log" "USER_NAME" \
+    "el mensaje nombra la variable del perfil que está mal"
+}
+
 test_config_check_accepts_the_synthetic_profile
 test_config_check_requires_mysql_user
+test_config_check_rejects_user_name_with_metacharacters
 
 fin_de_suite
