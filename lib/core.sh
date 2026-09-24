@@ -249,12 +249,14 @@ bc_valido_cuantas() {
   [[ "${1:-}" =~ ^[1-9][0-9]{0,2}$ ]]
 }
 
-# Un usuario de Unix, no una cuenta del panel: más estricto que
-# bc_valido_usuario (sin mayúsculas, sin punto inicial) porque este valor
-# acaba en un `chown` que el servidor ejecuta como root. Es el mismo criterio
-# que useradd aplica por defecto.
+# Un usuario de Unix, no una cuenta del panel. Lo que cierra la inyección es
+# prohibir ';', espacios, comillas y el guion inicial — eso se queda. Las
+# MAYÚSCULAS sí se aceptan aunque `useradd` no las cree por defecto: una
+# mayúscula no es peligrosa, y romper un perfil que hoy funciona (un USER_NAME
+# que viene de `id -un` en una máquina con el usuario capitalizado) es peor que
+# aceptar un nombre que useradd no habría creado.
 bc_valido_usuario_sistema() {
-  [[ "${1:-}" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]
+  [[ "${1:-}" =~ ^[A-Za-z_][A-Za-z0-9._-]{0,31}$ ]]
 }
 
 # Una ruta absoluta del servidor. El ".." se rechaza en vez de normalizarse:

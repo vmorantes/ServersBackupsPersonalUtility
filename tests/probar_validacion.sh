@@ -98,19 +98,21 @@ test_cuantas_rejects_zero_padding_and_out_of_range() {
     "0" "1000" "01" "-1" "1a"
 }
 
-# USER_NAME acaba en un `chown` que el servidor ejecuta como root, así que su
-# validador es más estricto que el de una cuenta del panel: es un usuario de
-# Unix (sin mayúsculas, sin punto inicial).
+# USER_NAME acaba en un `chown` que el servidor ejecuta como root. Lo que se
+# prohíbe es lo que puede inyectar (';', espacios, comillas, guion inicial);
+# una mayúscula se acepta, porque hay máquinas cuyo `id -un` la tiene y
+# romperles un perfil que funciona es peor que aceptar un nombre que
+# `useradd` no habría creado por defecto.
 test_system_user_accepts_valid_unix_names() {
   nueva_prueba t10
-  comprobar_tabla bc_valido_usuario_sistema pasa "usuario de sistema: nombres normales y uno con '_' inicial se aceptan" \
-    "backupctl" "admin" "_svc"
+  comprobar_tabla bc_valido_usuario_sistema pasa "usuario de sistema: nombres normales, '_' inicial y mayúsculas se aceptan" \
+    "backupctl" "admin" "_svc" "Admin"
 }
 
-test_system_user_rejects_uppercase_and_metacharacters() {
+test_system_user_rejects_metacharacters() {
   nueva_prueba t11
-  comprobar_tabla bc_valido_usuario_sistema falla "usuario de sistema: mayúsculas, ';', espacios, guion inicial, vacío y 33 caracteres se rechazan" \
-    "Admin" "x;id" "x y" "-x" "" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  comprobar_tabla bc_valido_usuario_sistema falla "usuario de sistema: ';', espacios, guion inicial, vacío y 33 caracteres se rechazan" \
+    "x;id" "x y" "-x" "" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 }
 
 test_absolute_path_accepts_normal_paths() {
@@ -153,7 +155,7 @@ test_usuarios_rejects_empty_items_and_metacharacters
 test_cuantas_accepts_one_to_three_digits
 test_cuantas_rejects_zero_padding_and_out_of_range
 test_system_user_accepts_valid_unix_names
-test_system_user_rejects_uppercase_and_metacharacters
+test_system_user_rejects_metacharacters
 test_absolute_path_accepts_normal_paths
 test_absolute_path_rejects_relative_dotdot_and_metacharacters
 test_cli_rejects_invalid_hestia_user_before_connecting
