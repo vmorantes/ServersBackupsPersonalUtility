@@ -1,12 +1,36 @@
 # Ahora
 
-- **Actualizado:** 2026-09-23, cierre del día.
-- **Último mensaje:** #042 (COD). El próximo será #043. Ninguna ronda en vuelo.
+- **Actualizado:** 2026-09-24, madrugada.
+- **Último mensaje:** #047 (ARQ). El próximo será #048. Ronda en vuelo: estilos propios de la
+  documentación.
+- **Ramas:** solo quedan `master` (estable, sin la 2.1) y `release/2.1`, que ya tiene la fase 1
+  y lo del incidente (`562e02e`). El PO pidió unificar; `master` espera su prueba en servidor
+  (ADR 0007 y 0013). Borradas: `fix/limpieza-al-salir`, `fix/incrementales-rutas`,
+  `backupctl-2.0`, `version-inicial`.
 - **Tramo:** `estado/tramos/2026-09-23-2145-incidente-incrementales.md`, cerrado.
-- **Rama del árbol:** `release/2.1`, con la fase del incidente ya fusionada (`b811405`).
-- **Sin commitear:** este archivo, el cierre del tramo, la sección nueva de
-  `docs/hestiacp/protocolo-manual.md` («Quedarse solo con los incrementales») y lo añadido a
-  `.agents/context/50-hestiacp.md`. Los commitea la ronda #043.
+
+## Cambio de tema de la documentación (decisión del PO, 2026-09-24)
+
+El PO deja Material por el tema `readthedocs` incorporado: le parece más ameno y así el sitio
+deja de depender de `mkdocs-material`, que queda sin parches de seguridad el **2027-05-05**.
+Dijo qué quiere cubrir con CSS y JavaScript propios: «lo importante no tonterías como modo
+oscuro sino los recuadros copiables y los tabs en secciones».
+
+Hecho por el arquitecto (sin commitear al abrir la ronda): las 21 pestañas de Material
+convertidas en secciones de nivel 3 en 8 páginas, retirada `pymdownx.tabbed`, quitada la
+sintaxis que solo entiende Material (tarjetas, iconos y botones en `index.md`,
+`paso-a-paso/index.md` y `referencia/chuleta.md`), tema cambiado en `mkdocs.yml` con
+`highlightjs: false`, y `verificar.sh` comprueba también el JavaScript de `docs/estilos/`.
+
+Verificado antes de decidir (informe completo en el scratchpad de la sesión): MkDocs 2.0 **no
+existe** como versión estable (solo pre-lanzamientos) y Material se fija en `mkdocs<2`, así que
+el aviso que ve el PO al construir no describe ningún riesgo para este repositorio; se silencia
+con `NO_MKDOCS_2_WARNING=1`. Lo que sí tiene fecha es el fin de los parches de Material.
+Ningún tema vivo de MkDocs tiene la estética de `readthedocs`: los que se le parecen llevan
+muertos entre 2018 y 2023.
+
+**Nadie ha construido el sitio todavía**: ni `mkdocs build` ni `mkdocs serve` están permitidos
+aquí. Lo comprueba el PO.
 
 ## Espera al PO
 
