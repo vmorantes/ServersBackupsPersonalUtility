@@ -84,7 +84,7 @@ bc_remote_run() {
   local rc=0
   if bc_remote_needs_root "$@"; then
     bc_log "Esta orden necesita root en el servidor; se ejecutará con sudo."
-    bc_ssh_sudo "'$path/bin/backupctl' $quoted" || rc=$?
+    bc_ssh_sudo "$(printf '%q' "$path/bin/backupctl") $quoted" || rc=$?
   elif bc_is_tty; then
     # Con terminal se asigna uno para que se vea el progreso en vivo y para que
     # las confirmaciones del otro lado funcionen.

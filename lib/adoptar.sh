@@ -462,7 +462,11 @@ bc_adoptar_run() {
     fi
     echo
     bc_log "── $u  (instantánea: $snap)"
-    if bc_ssh_sudo "/usr/local/hestia/bin/v-restore-user-full-restic '$u' '$snap' '$k'"; then
+    # Los tres con printf %q, no entre comillas simples: la clave Restic ($k)
+    # sale del rescate y una comilla dentro rompería el entrecomillado. Sigue
+    # viajando en la línea de órdenes del destino (visible con `ps`): eso es
+    # otro arreglo, no este.
+    if bc_ssh_sudo "/usr/local/hestia/bin/v-restore-user-full-restic $(printf '%q' "$u") $(printf '%q' "$snap") $(printf '%q' "$k")"; then
       bc_ok "'$u' resucitado."
     else
       bc_err "'$u' FALLÓ. Los demás siguen."
@@ -892,7 +896,7 @@ bc_adoptar_como() {
   bc_ssh_sudo "test -x /usr/local/hestia/bin/v-add-user" >/dev/null 2>&1 \
     || bc_die "en $destino no hay HestiaCP."
 
-  if bc_ssh_sudo "test -d /usr/local/hestia/data/users/$nuevo" >/dev/null 2>&1; then
+  if bc_ssh_sudo "test -d $(printf '%q' "/usr/local/hestia/data/users/$nuevo")" >/dev/null 2>&1; then
     bc_err "'$nuevo' YA EXISTE en $destino. No se toca nada."
     bc_log "Elige otro nombre con --como."
     BC_DELIBERATE_EXIT=1; return 1

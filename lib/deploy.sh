@@ -160,7 +160,7 @@ bc_deploy_run() {
     bc_warn "no se pudieron crear como '$remote_user'; se intenta con permisos de root..."
     bc_ssh_sudo "mkdir -p '$path'/{logs,output}" \
       || bc_die "no se pudieron crear los directorios en $path."
-    bc_ssh_sudo "chown -R $USER_NAME:$USER_NAME '$path'" 2>/dev/null || true
+    bc_ssh_sudo "chown -R $(printf '%q' "$USER_NAME:$USER_NAME") $(printf '%q' "$path")" 2>/dev/null || true
   fi
 
   # --- Copia -----------------------------------------------------------------
@@ -185,7 +185,7 @@ bc_deploy_run() {
   # cuando ese otro no tiene shell—, hay que devolverle sus archivos.
   if [[ "$remote_user" != "$USER_NAME" ]]; then
     bc_log "La instalación es de '$USER_NAME' pero has conectado como '$remote_user'."
-    if bc_ssh_sudo "chown -R $USER_NAME:$USER_NAME '$path'"; then
+    if bc_ssh_sudo "chown -R $(printf '%q' "$USER_NAME:$USER_NAME") $(printf '%q' "$path")"; then
       bc_ok "propietario ajustado a $USER_NAME."
     else
       bc_warn "no se pudo cambiar el propietario. Hazlo en el servidor:"
