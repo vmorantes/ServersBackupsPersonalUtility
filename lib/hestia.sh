@@ -1175,10 +1175,16 @@ bc_hestia_conf_valor() {
 # La retención, en una sola línea comparable. No es para enseñar: es para
 # comparar lo pedido con lo leído sin depender del ORDEN de las líneas.
 bc_hestia_conf_retencion() {
-  local conf="${1:-}" clave salida=""
+  local conf="${1:-}" clave valor salida="" alguno=0
   for clave in SNAPSHOTS KEEP_DAILY KEEP_WEEKLY KEEP_MONTHLY KEEP_YEARLY; do
-    salida+="${salida:+ }$clave=$(bc_hestia_conf_valor "$conf" "$clave")"
+    valor="$(bc_hestia_conf_valor "$conf" "$clave")"
+    [[ -n "$valor" ]] && alguno=1
+    salida+="${salida:+ }$clave=$valor"
   done
+  # Sin ni un solo valor, lo que hay no es «una retención con los campos
+  # vacíos»: es que no hay retención. Devolver la plantilla vacía llenaría el
+  # informe de un «SNAPSHOTS= KEEP_DAILY= …» que parece un dato leído.
+  (( alguno )) || return 0
   printf '%s' "$salida"
 }
 
@@ -1484,17 +1490,18 @@ bc_hestia_restic() {
   BC_HESTIA_PEDIDO_REPO="$repo"
   BC_HESTIA_PEDIDO_RETENCION="$(bc_hestia_retencion_pedida "$snaps" "$d" "$w" "$m" "$y")"
 
-  # El estado de partida. Se lee ANTES de cualquier cosa, incluso en ensayo:
-  # sin saber qué hay no se puede decir qué cambiaría.
-  local conf_antes="" antes_legible=si
-  conf_antes="$(bc_hestia_leer_texto "cat $(printf '%q' "$HESTIA_CONF_RESTIC")")" || antes_legible=no
-
   if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
     # El ensayo produce un PLAN, no un informe: no se archiva nada en
     # <Perfil>/informes/. Un histórico lleno de cosas que no pasaron no sirve
     # para saber qué pasó.
+    #
+    # El estado de partida solo se lee AQUÍ. En el camino real lo lee
+    # bc_hestia_escribir_y_confirmar, que necesita el «antes» y el «después»
+    # de la MISMA lectura: leerlo también aquí sería una consulta de más al
+    # servidor y, peor, dos «antes» distintos si algo cambiara entre medias.
     bc_step "Simulación (--dry-run): esto es lo que PASARÍA, no lo que ha pasado."
-    if [[ "$antes_legible" != "si" ]]; then
+    local conf_antes=""
+    if ! conf_antes="$(bc_hestia_leer_texto "cat $(printf '%q' "$HESTIA_CONF_RESTIC")")"; then
       bc_warn "No se pudo leer $HESTIA_CONF_RESTIC: no se puede decir qué cambiaría."
       BC_DELIBERATE_EXIT=1
       return 1
@@ -1724,8 +1731,8 @@ bc_hestia_informar_restic() {
       # llegar a escribir: validación de argumentos, directorio inexistente o
       # un destino que no responde. Decirlo ahorra media hora de búsqueda.
       if [[ "$antes_txt" == "$despues_txt" ]]; then
-        bc_log "La configuración quedó EXACTAMENTE como estaba: la orden ni llegó a"
-        bc_log "escribir. Mira el destino del repositorio y que responda."
+        bc_log "La configuración quedó EXACTAMENTE como estaba, así que la orden"
+        bc_log "ni llegó a escribir. Mira el destino del repositorio y que responda."
       fi
       bc_log  "Esto NO es un error que se arregle reintentando: el servidor dice una"
       bc_log  "cosa y enseña otra. Mira $HESTIA_CONF_RESTIC en el panel."
