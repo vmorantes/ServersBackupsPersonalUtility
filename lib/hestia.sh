@@ -1285,23 +1285,41 @@ bc_hestia_keys() {
 # OJO con no confundir dos cosas distintas:
 #   v-list-user-backups          los .tar tradicionales
 #   v-list-user-backups-restic   las instantáneas de Restic   <- esto es lo real
+# SIEMPRE con `json` explícito (ADR 0017). Y el parseo se apoya en la clave
+# "time", no en columnas ni en "short_id":
+#   - v-list-user-backups-restic no formatea nada; ejecuta `restic snapshots`
+#     (con --json o sin él) y deja pasar su salida tal cual (fuente 1.10.4,
+#     verificado el 2026-09-23). Es decir, el formato lo decide el `restic`
+#     instalado en cada servidor, no HestiaCP.
+#   - De ese formato, "time" es el único campo que se puede dar por estable en
+#     todas las versiones de restic que este proyecto admite (>= 0.14). Las
+#     columnas del formato de tabla y la clave "short_id" NO están verificadas
+#     para 0.14, y contar por ellas daría cero instantáneas en silencio.
 bc_hestia_restic_ultima() {
   local u="$1"
   local salida
-  salida="$(bc_hestia_read "$HESTIA_DIR/bin/v-list-user-backups-restic $u plain" || true)"
+  salida="$(bc_hestia_read "$HESTIA_DIR/bin/v-list-user-backups-restic $(printf '%q' "$u") json" || true)"
   [[ -n "$salida" ]] || { echo "no disponible"; return 0; }
+  [[ "$salida" == *"{"* || "$salida" == *"["* ]] || { echo "no disponible"; return 0; }
 
-  # Formato: ID  Fecha Hora  Host  Tags  Paths  Size, ordenado de vieja a nueva
+  # La mayor es la más reciente, sin depender del orden en que vengan. Se
+  # recorta a "AAAA-MM-DD HH:MM:SS" para que la columna siga siendo la misma
+  # que se imprimía antes: el resto del ISO (fracción y huso) no cabe.
   local ultima
-  ultima="$(awk 'NF>=3 && $1 ~ /^[0-9a-f]{8}$/ {print $2" "$3}' <<<"$salida" | tail -1)"
-  [[ -n "$ultima" ]] && echo "$ultima" || echo "ninguna"
+  ultima="$(grep -oE '"time"[[:space:]]*:[[:space:]]*"[^"]+"' <<<"$salida" \
+            | sed 's/.*"\([^"]*\)"$/\1/' | sort | tail -1)"
+  [[ -n "$ultima" ]] || { echo "ninguna"; return 0; }
+  ultima="${ultima:0:19}"
+  echo "${ultima/T/ }"
 }
 
-# Cuántas instantáneas tiene un usuario, para contrastarlo con SNAPSHOTS
+# Cuántas instantáneas tiene un usuario, para contrastarlo con SNAPSHOTS.
+# Una clave "time" por instantánea: `restic --json snapshots` serializa el
+# array entero, así que contar LÍNEAS no vale (puede venir todo en una).
 bc_hestia_restic_cuantas() {
   local u="$1" salida
-  salida="$(bc_hestia_read "$HESTIA_DIR/bin/v-list-user-backups-restic $u plain" || true)"
-  awk 'NF>=3 && $1 ~ /^[0-9a-f]{8}$/' <<<"$salida" | grep -c . || true
+  salida="$(bc_hestia_read "$HESTIA_DIR/bin/v-list-user-backups-restic $(printf '%q' "$u") json" || true)"
+  grep -oE '"time"[[:space:]]*:' <<<"$salida" | grep -c . || true
 }
 
 # =============================================================================

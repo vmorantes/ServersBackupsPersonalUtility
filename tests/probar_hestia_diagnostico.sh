@@ -267,6 +267,63 @@ test_probe_accepts_a_pipeline() {
     "una tubería dentro de la sonda: BC_SI"
 }
 
+# --- lectura de instantáneas (json) ------------------------------------------
+#
+# Aquí tampoco se conecta a nada: se monta un HESTIA_DIR sintético con un
+# v-list-user-backups-restic falso que imprime una salida enlatada, y
+# bc_hestia_read lo ejecuta en esta misma máquina (BC_HESTIA_REMOTO=0).
+
+# Monta el HestiaCP falso y devuelve la salida de <función> <usuario>.
+con_hestia_falso() {
+  local salida_enlatada="$1" fn="$2"
+  local raiz="$BANCO_TMP/hestia-falso"
+  rm -rf "$raiz"; mkdir -p "$raiz/bin"
+  printf '%s\n' '#!/usr/bin/env bash' "cat <<'FIN'" "$salida_enlatada" "FIN" \
+    > "$raiz/bin/v-list-user-backups-restic"
+  chmod +x "$raiz/bin/v-list-user-backups-restic"
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/hestia.sh"
+    HESTIA_DIR="$2"
+    BC_HESTIA_REMOTO=0
+    "$3" cliente07
+  ' _ "$BANCO_RAIZ" "$raiz" "$fn" 2>&1
+}
+
+# Un array de restic con dos instantáneas, en UNA sola línea: es como sale de
+# `restic --json snapshots`, que serializa el array entero de golpe.
+BC_JSON_DOS='[{"time":"2026-09-22T03:00:00.123456+02:00","short_id":"a1b2c3d4","paths":["/home/cliente07"]},{"time":"2026-09-24T03:00:00.654321+02:00","short_id":"e5f6a7b8","paths":["/home/cliente07"]}]'
+
+test_last_snapshot_is_the_most_recent_trimmed() {
+  nueva_prueba t31
+  afirmar_igual "$(con_hestia_falso "$BC_JSON_DOS" bc_hestia_restic_ultima)" \
+    "2026-09-24 03:00:00" "la última instantánea es la más reciente, recortada a segundos"
+}
+
+test_snapshot_count_does_not_depend_on_lines() {
+  nueva_prueba t32
+  afirmar_igual "$(con_hestia_falso "$BC_JSON_DOS" bc_hestia_restic_cuantas)" \
+    "2" "dos instantáneas en una sola línea se cuentan como 2"
+}
+
+# Sin copias, restic devuelve un array vacío: son cero, no «no se pudo leer».
+test_empty_array_means_none() {
+  nueva_prueba t33
+  afirmar_igual "$(con_hestia_falso "[]" bc_hestia_restic_ultima)" "ninguna" \
+    "array vacío: ninguna instantánea"
+  afirmar_igual "$(con_hestia_falso "[]" bc_hestia_restic_cuantas)" "0" \
+    "array vacío: cero instantáneas"
+}
+
+# Una salida que no es json (un mensaje de error, una tabla) NO puede leerse
+# como «esta cuenta no tiene copias».
+test_non_json_output_is_not_read_as_no_backups() {
+  nueva_prueba t34
+  afirmar_igual "$(con_hestia_falso "Fatal: unable to open config file" bc_hestia_restic_ultima)" \
+    "no disponible" "salida que no es json: no disponible, no 'ninguna'"
+}
+
 # --- ruta del repositorio ----------------------------------------------------
 
 test_repo_path_missing_is_a_failure() {
@@ -325,6 +382,10 @@ test_unreadable_mark_is_not_treated_as_zero
 test_probe_text_survives_a_sudo_prefix
 test_probe_reports_yes_no_and_error_apart
 test_probe_accepts_a_pipeline
+test_last_snapshot_is_the_most_recent_trimmed
+test_snapshot_count_does_not_depend_on_lines
+test_empty_array_means_none
+test_non_json_output_is_not_read_as_no_backups
 test_repo_path_missing_is_a_failure
 test_repo_path_relative_with_local_remote_is_a_failure
 test_repo_path_inside_a_website_is_a_failure
