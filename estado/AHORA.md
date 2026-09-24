@@ -3,15 +3,17 @@
 > **Para retomar, empieza aquí y sigue por «Dónde se quedó la fase 2».** El tramo se cerró a
 > petición del PO con la fase 2 en siete pasos y medio de ocho.
 >
-> **LO PRIMERO DE LA PRÓXIMA RONDA:** quedan dos archivos de documentación **sin commitear**,
-> `.agents/context/50-hestiacp.md` y este mismo. Llevan lo verificado al cerrar sobre las
-> exclusiones. El mensaje que ordenaba ese commit no llegó a la sesión del coder (la entrega se
-> cortó), no es que se olvidara. Commitearlos tal cual, sin editarlos:
+> **Todo commiteado**, árbol limpio y `verificar.sh` en verde: 23 suites, 668 afirmaciones,
+> guarda 193/193.
 >
->     git add .agents/context/50-hestiacp.md estado/AHORA.md
->     git commit -m "docs: excluir no significa lo mismo en los dos respaldos"
->
-> El resto del árbol quedó limpio y con `verificar.sh` en verde (23 suites).
+> **Un ejemplo de nuestra documentación rompió un SEGUNDO servidor del PO el 2026-09-24**, el
+> mismo día. Causa: el 23 se corrigieron cuatro sitios de `protocolo-manual.md` y **no se hizo
+> el barrido completo**; quedaban ocho ejemplos con rutas relativas en cuatro archivos, y uno
+> era el `rclone mkdir` del paso 2. Corregidos todos, y añadido a `verificar.sh` el paso
+> **«Rutas relativas en ejemplos de almacenamiento»**, que falla si alguien escribe en `docs/`
+> una orden que CREA algo con una ruta que no empiece por `/` ni por `<`. Probado en las dos
+> direcciones. La lección, para quien venga: **una corrección parcial que se anuncia como
+> completa es peor que no corregir**, porque el que la lee se fía.
 
 - **Actualizado:** 2026-09-24, al cerrar el tramo.
 - **Último mensaje:** #081 (ARQ). El próximo será #082. Sin ronda en vuelo: el coder espera
