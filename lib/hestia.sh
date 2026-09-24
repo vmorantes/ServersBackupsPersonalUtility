@@ -1901,67 +1901,270 @@ bc_hestia_cron() {
   bc_warn "HestiaCP NO programa este cron al configurar el respaldo incremental."
   bc_warn "Sin él, Restic queda montado pero el repositorio no se llena nunca."
 
+  local linea="$minuto $hora * * * sudo $HESTIA_DIR/bin/v-backup-users-restic"
+  BC_HESTIA_CRON_LINEA="$linea"
+
   # Se busca en TODAS partes antes de añadir nada. Un segundo cron significaría
-  # dos respaldos simultáneos compitiendo por el mismo repositorio.
+  # dos respaldos simultáneos compitiendo por el mismo repositorio, que es peor
+  # que uno mal puesto.
   local existente
   existente="$(bc_hestia_cron_donde)"
-  if [[ -n "$existente" ]]; then
-    bc_ok "Ya hay un cron de Restic. No se añade otro:"
-    sed 's/^/        /' <<<"$existente"
-    echo
-    bc_log "Para cambiar la hora, edítalo donde está. Añadir un segundo haría"
-    bc_log "que dos respaldos corrieran a la vez sobre el mismo repositorio."
+
+  if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
+    bc_step "Simulación (--dry-run): esto es lo que PASARÍA, no lo que ha pasado."
+    bc_hestia_plan_cron "$existente" "$linea"
+    bc_ok "No se ha tocado nada, y no se ha guardado ningún informe."
     return 0
   fi
 
-  local linea="$minuto $hora * * * sudo $HESTIA_DIR/bin/v-backup-users-restic"
+  bc_informe_abrir "Programar el respaldo incremental" "${DEPLOY_HOST:-este servidor}"
+  bc_informe_dato "Línea pedida" "" "$linea"
+
+  # --- Ya hay una programación en alguna parte -------------------------------
+  # No se añade otra, pero tampoco se da por buena sin mirarla: la del PO
+  # estaba en el crontab de una cuenta, sin ruta absoluta y con la hora 25.
+  if [[ -n "$existente" ]]; then
+    local rc_ex=0
+    bc_hestia_informar_cron_existente "$existente" || rc_ex=$?
+    local ruta_ex; ruta_ex="$(bc_informe_cerrar "$([[ $rc_ex -eq 0 ]] && echo SIN_CAMBIO || echo FALLO)")"
+    [[ -n "$ruta_ex" ]] && bc_log "Informe de lo hecho: $ruta_ex"
+    (( rc_ex != 0 )) && BC_DELIBERATE_EXIT=1
+    return "$rc_ex"
+  fi
+
   bc_log "Se añadirá a $BC_HESTIA_CRONTAB_SIS :"
   bc_log "    $linea"
   bc_log "Los respaldos .tar de HestiaCP corren a las 05:10; esta hora no se solapa."
 
-  if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
-    bc_ok "Simulación (--dry-run): no se ha registrado nada."
+  if ! bc_confirm "¿Programar el respaldo Restic diario?" y; then
+    bc_log "Cancelado."
+    bc_informe_paso "Programar el respaldo" SIN_CAMBIO "cancelado por el usuario"
+    bc_informe_cerrar "CANCELADO" >/dev/null
     return 0
   fi
-  bc_confirm "¿Programar el respaldo Restic diario?" y || { bc_log "Cancelado."; return 0; }
 
-  local salida rc=0
-  salida="$(bc_hestia_root "
-    ct='$BC_HESTIA_CRONTAB_SIS'
-    [ -f \"\$ct\" ] || { echo 'SIN_CRONTAB'; exit 9; }
-    grep -q 'v-backup-users-restic' \"\$ct\" && { echo 'YA_ESTABA'; exit 0; }
-    # Si el archivo no termina en salto de línea, un >> pegaría la orden a la
-    # última existente y rompería las dos.
-    [ -s \"\$ct\" ] && [ -n \"\$(tail -c1 \"\$ct\")\" ] && printf '\n' >> \"\$ct\"
-    printf '%s\n' '$linea' >> \"\$ct\"
-    chmod 600 \"\$ct\"
-    chown hestiaweb:hestiaweb \"\$ct\"
-    echo 'HECHO'
-  " 2>&1)" || rc=$?
-
-  case "$salida" in
-    *SIN_CRONTAB*)
-      bc_die "no existe $BC_HESTIA_CRONTAB_SIS. ¿Es este un servidor con HestiaCP?" ;;
-    *YA_ESTABA*)
-      bc_ok "Ya estaba programado." ; return 0 ;;
-    *HECHO*)
-      : ;;
-    *)
-      bc_err "no se pudo programar el cron (código $rc)."
-      [[ -n "$salida" ]] && sed 's/^/        /' <<<"$salida"
-      return 1 ;;
-  esac
-
-  # Se relee del servidor: la confirmación vale si la escribe el servidor, no yo.
-  local comprobacion
-  comprobacion="$(bc_hestia_cron_donde)"
-  if [[ -n "$comprobacion" ]]; then
-    bc_ok "Respaldo Restic programado y verificado:"
-    sed 's/^/        /' <<<"$comprobacion"
-  else
-    bc_err "se escribió la línea pero no se vuelve a encontrar. Revísalo a mano."
+  # --- La copia a la que volver ----------------------------------------------
+  local copia=""
+  if ! copia="$(bc_hestia_copia_fechada "$BC_HESTIA_CRONTAB_SIS")"; then
+    bc_err "no se pudo dejar una copia de $BC_HESTIA_CRONTAB_SIS. NO se ha programado nada."
+    bc_log  "Sin una copia a la que volver no se toca el crontab de un servidor."
+    bc_informe_paso "Copia de seguridad" FALLO "no se pudo copiar $BC_HESTIA_CRONTAB_SIS"
+    bc_informe_cerrar "FALLO" >/dev/null
+    BC_DELIBERATE_EXIT=1
     return 1
   fi
+  if [[ -n "$copia" ]]; then
+    bc_ok "Copia del crontab anterior: $copia"
+    bc_informe_copia "$BC_HESTIA_CRONTAB_SIS" "$copia"
+    bc_informe_deshacer "cp -p $copia $BC_HESTIA_CRONTAB_SIS && chown hestiaweb:hestiaweb $BC_HESTIA_CRONTAB_SIS && chmod 600 $BC_HESTIA_CRONTAB_SIS"
+  else
+    bc_err "no existe $BC_HESTIA_CRONTAB_SIS. ¿Es este un servidor con HestiaCP?"
+    bc_log  "Ese archivo lo crea el instalador de HestiaCP; no se crea desde aquí."
+    bc_informe_paso "Programar el respaldo" FALLO "no existe $BC_HESTIA_CRONTAB_SIS"
+    bc_informe_cerrar "FALLO" >/dev/null
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+
+  # --- Escribir y comprobar --------------------------------------------------
+  # El `printf '\n'` de delante no sobra: si el archivo no termina en salto de
+  # línea, un >> pegaría la orden a la última existente y rompería las dos.
+  # Y el chmod/chown van DENTRO de la misma orden porque un crontab con otros
+  # permisos o con otro dueño lo ignora cron ENTERO, y eso es indistinguible
+  # de «no hay respaldo» hasta que pasan semanas.
+  local ct; ct="$(printf '%q' "$BC_HESTIA_CRONTAB_SIS")"
+  local orden_escritura="[ -s $ct ] && [ -n \"\$(tail -c1 $ct)\" ] && printf '\n' >> $ct; \
+printf '%s\n' $(printf '%q' "$linea") >> $ct && chmod 600 $ct && chown hestiaweb:hestiaweb $ct"
+  bc_informe_orden "$orden_escritura"
+
+  local datos
+  datos="$(bc_hestia_escribir_y_confirmar "Programar el respaldo incremental" \
+      "$orden_escritura" "cat $ct" bc_hestia_cron_ya_estaba bc_hestia_cron_se_hizo)"
+
+  # Los permisos y el dueño, solo si la línea quedó puesta.
+  local permisos="?"
+  case "$(bc_hestia_dato_de "$datos" estado)" in
+    HECHO|SIN_CAMBIO) permisos="$(bc_hestia_leer_texto "stat -c '%a %U:%G' $ct" || true)" ;;
+  esac
+
+  local rc=0
+  bc_hestia_informar_cron "$datos" "$copia" "$permisos" || rc=$?
+  (( rc != 0 )) && BC_DELIBERATE_EXIT=1
+  return "$rc"
+}
+
+# La línea que se va a programar. Los jueces solo reciben el texto leído, así
+# que lo pedido viaja por aquí, igual que en el registro del host.
+BC_HESTIA_CRON_LINEA=""
+
+# La primera línea de respaldo incremental que haya en un crontab, sin las
+# comentadas. Pura.
+bc_hestia_cron_linea_de() {
+  grep -v '^[[:space:]]*#' <<<"${1:-}" | grep 'v-backup-users\?-restic' | sed -n '1p'
+}
+
+# ¿Este crontab tiene una programación que el diagnóstico dé por buena?
+#
+# No basta con que la línea ESTÉ: tiene que estar bien. Se reutiliza el mismo
+# juez que usa `hestia status` (bc_hestia_diag_cron), que ya sabe de horas
+# imposibles, rutas sin absolutizar y crontabs equivocados. Si la línea
+# escrita no pasara ese examen, esto no es HECHO.
+bc_hestia_cron_cumple() {
+  local texto="${1:-}" cron_linea
+  cron_linea="$(bc_hestia_cron_linea_de "$texto")"
+  [[ -n "$cron_linea" ]] || return 1
+  local veredicto; veredicto="$(bc_hestia_diag_cron "$cron_linea" "$BC_HESTIA_CRONTAB_SIS")"
+  [[ "${veredicto%%$'\t'*}" == "OK" ]]
+}
+
+bc_hestia_cron_ya_estaba() { bc_hestia_cron_cumple "${1:-}"; }
+bc_hestia_cron_se_hizo()   { bc_hestia_cron_cumple "${2:-}"; }
+
+# El plan del ensayo. Pura.
+# $1 lo que ya hay (vacío si nada)   $2 la línea que se pondría
+bc_hestia_plan_cron() {
+  local existente="${1:-}" linea="${2:-}"
+  if [[ -n "$existente" ]]; then
+    bc_log "Ya hay una programación de respaldo incremental:"
+    sed 's/^/        /' <<<"$existente"
+    bc_log "No se añadiría otra: dos respaldos a la vez sobre el mismo"
+    bc_log "repositorio es peor que uno mal puesto."
+    return 0
+  fi
+  bc_log "Ahora mismo NO hay ninguna programación de respaldo incremental."
+  bc_log "Se añadiría a $BC_HESTIA_CRONTAB_SIS :"
+  bc_log "    $linea"
+  bc_log "Se dejaría antes una copia fechada de $BC_HESTIA_CRONTAB_SIS."
+  return 0
+}
+
+# Ya había una programación: se dice dónde está y qué le pasa, y NO se añade
+# otra. Devuelve 0 solo si la que hay está bien puesta.
+bc_hestia_informar_cron_existente() {
+  local existente="${1:-}"
+  bc_log "Ya hay una programación de respaldo incremental. No se añade otra:"
+  sed 's/^/        /' <<<"$existente"
+  bc_informe_dato "Programación encontrada" "$existente" "$existente"
+
+  # La línea viene como "archivo:contenido" (grep -H). El diagnóstico necesita
+  # las dos partes por separado: el archivo es la mitad del veredicto.
+  local primera archivo="" cuerpo
+  primera="$(sed -n '1p' <<<"$existente")"
+  cuerpo="$primera"
+  if [[ "$primera" == /*:* ]]; then
+    archivo="${primera%%:*}"; cuerpo="${primera#*:}"
+  fi
+
+  local veredicto nivel mensaje
+  veredicto="$(bc_hestia_diag_cron "$cuerpo" "$archivo")"
+  nivel="${veredicto%%$'\t'*}"; mensaje="${veredicto#*$'\t'}"
+
+  if [[ "$nivel" == "OK" ]]; then
+    bc_ok "Y está bien puesta: $mensaje"
+    bc_log "Para cambiar la hora, edítala donde está."
+    bc_informe_paso "Programar el respaldo" SIN_CAMBIO "ya había una, y está bien puesta"
+    return 0
+  fi
+
+  bc_err "La programación que hay tiene un problema: $mensaje"
+  bc_log  "NO se ha añadido otra: dos respaldos a la vez sobre el mismo repositorio"
+  bc_log  "es peor que uno mal puesto. Decide tú: arregla la que hay donde está, o"
+  bc_log  "quítala y vuelve a ejecutar esta orden."
+  bc_informe_paso "Programar el respaldo" FALLO \
+    "ya había una programación y tiene un problema: $mensaje"
+  return 1
+}
+
+# Traduce los datos de la escritura del cron. Devuelve 0 solo si quedó bien.
+# $1 datos   $2 copia fechada   $3 permisos leídos ('?' si no se miraron)
+bc_hestia_informar_cron() {
+  local datos="${1:-}" copia="${2:-}" permisos="${3:-?}"
+  local estado antes despues codigo salida
+  estado="$(bc_hestia_dato_de "$datos" estado)"
+  antes="$(bc_hestia_dato_de "$datos" antes)"
+  despues="$(bc_hestia_dato_de "$datos" despues)"
+  codigo="$(bc_hestia_dato_de "$datos" codigo)"
+  salida="$(bc_hestia_dato_de "$datos" salida)"
+  estado="${estado:-CIEGO}"
+
+  local antes_txt despues_txt
+  antes_txt="$(bc_hestia_restaurar_saltos "$antes")"
+  despues_txt="$(bc_hestia_restaurar_saltos "$despues")"
+  bc_informe_dato "Línea programada" \
+    "$(bc_hestia_cron_linea_de "$antes_txt")" "$(bc_hestia_cron_linea_de "$despues_txt")"
+  [[ -n "$salida" ]] && bc_informe_dato "Lo que respondió la orden" "" \
+    "$(bc_hestia_restaurar_saltos "$salida")"
+
+  local rc=0 mensaje=""
+  case "$estado" in
+    SIN_CAMBIO)
+      bc_ok "No había nada que cambiar: ya estaba programado y bien puesto."
+      mensaje="ya estaba programado correctamente" ;;
+    HECHO)
+      bc_ok "Respaldo incremental programado, y comprobado leyéndolo de vuelta:"
+      bc_log "    $(bc_hestia_cron_linea_de "$despues_txt")"
+      mensaje="programado y confirmado releyendo el crontab" ;;
+    SIN_CONFIRMAR)
+      rc=1
+      bc_err "Se escribió la línea, pero al releer el crontab NO queda bien."
+      local puesta; puesta="$(bc_hestia_cron_linea_de "$despues_txt")"
+      if [[ -z "$puesta" ]]; then
+        bc_log "No se encuentra ninguna línea de respaldo incremental en el crontab."
+      else
+        bc_log "La línea que hay es:"
+        bc_log "    $puesta"
+        bc_log "Y el diagnóstico la rechaza: $(bc_hestia_diag_cron "$puesta" "$BC_HESTIA_CRONTAB_SIS" | cut -f2-)"
+      fi
+      [[ -n "$copia" ]] && bc_log "El crontab anterior está en: $copia"
+      mensaje="se escribió y la relectura no la da por buena" ;;
+    ESCRITO_SIN_COMPROBAR)
+      rc=1
+      bc_err "SE ESCRIBIÓ en el crontab, pero no se pudo volver a leer."
+      bc_log  "No se sabe cómo quedó. Míralo: $BC_HESTIA_CRONTAB_SIS"
+      [[ -n "$copia" ]] && bc_log "El crontab anterior está en: $copia"
+      mensaje="se escribió y no se pudo leer el resultado" ;;
+    FALLO)
+      rc=1
+      bc_err "No se pudo escribir en el crontab (código $codigo)."
+      [[ -n "$salida" ]] && { bc_log "Lo que respondió:"; \
+        bc_hestia_restaurar_saltos "$salida" | sed 's/^/        /'; }
+      mensaje="la orden falló y la línea no está" ;;
+    CIEGO|*)
+      rc=1
+      bc_err "No se pudo leer $BC_HESTIA_CRONTAB_SIS: NO se ha tocado nada."
+      mensaje="no se pudo leer el crontab; no se escribió nada" ;;
+  esac
+  bc_informe_paso "Programar el respaldo" "$estado" "$mensaje"
+
+  # Los permisos y el dueño, con su propio veredicto: un crontab con otros
+  # permisos lo ignora cron ENTERO, y eso no se distingue de «no hay respaldo»
+  # hasta que pasan semanas sin una sola copia.
+  if [[ "$estado" == "HECHO" || "$estado" == "SIN_CAMBIO" ]]; then
+    bc_informe_dato "Permisos y dueño del crontab" "" "$permisos"
+    case "$permisos" in
+      "600 hestiaweb:hestiaweb")
+        bc_ok "El crontab tiene los permisos y el dueño correctos (600 hestiaweb:hestiaweb)."
+        bc_informe_paso "Permisos del crontab" HECHO "600 hestiaweb:hestiaweb" ;;
+      "?"|"")
+        rc=1
+        bc_err "No se pudieron comprobar los permisos ni el dueño del crontab."
+        bc_log  "Compruébalo a mano: debe ser 600 y de hestiaweb:hestiaweb."
+        bc_informe_paso "Permisos del crontab" CIEGO "no se pudieron leer" ;;
+      *)
+        rc=1
+        bc_err "El crontab tiene permisos o dueño equivocados: '$permisos'."
+        bc_log  "Debe ser 600 y de hestiaweb:hestiaweb. Con otros valores, cron"
+        bc_log  "puede ignorar el archivo ENTERO, y no se notaría hasta que"
+        bc_log  "pasaran semanas sin una sola copia."
+        bc_informe_paso "Permisos del crontab" FALLO \
+          "'$permisos' en vez de '600 hestiaweb:hestiaweb'" ;;
+    esac
+  fi
+
+  local ruta_informe
+  ruta_informe="$(bc_informe_cerrar "$estado")"
+  [[ -n "$ruta_informe" ]] && bc_log "Informe de lo hecho: $ruta_informe"
+  return "$rc"
 }
 
 # =============================================================================
