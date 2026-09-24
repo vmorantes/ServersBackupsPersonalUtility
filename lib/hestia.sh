@@ -497,6 +497,58 @@ bc_hestia_duracion_llana() {
   fi
 }
 
+# -----------------------------------------------------------------------------
+# Comparar claves sin mirarlas
+# -----------------------------------------------------------------------------
+# Puras. Existen por algo que pasó en producción: cuando el panel no encuentra
+# la contraseña de una cuenta, GENERA UNA NUEVA. Si esa cuenta ya tenía copias
+# hechas con la anterior, la nueva NO las abre. Quedan ahí, ocupando espacio,
+# ilegibles para siempre.
+#
+# Por eso cada rescate se compara con el anterior. Y se compara por HUELLA:
+# ninguna clave se imprime, ni entera ni en parte, ni en pantalla ni en el
+# informe. Lo único que sale de aquí es «igual», «CAMBIÓ» o «no hay con qué
+# comparar».
+
+# La huella de un texto. Vacío si no se puede calcular.
+bc_hestia_huella() {
+  local t="${1:-}"
+  [[ -n "$t" ]] || return 0
+  printf '%s' "$t" | sha256sum 2>/dev/null | cut -c1-16
+}
+
+# El bloque de una cuenta dentro de un archivo de rescate. Los rescates se
+# escriben con una cabecera «# <cuenta>:» y un separador detrás, así que se
+# recorta entre los dos.
+# $1 contenido del archivo de rescate   $2 cuenta
+bc_hestia_bloque_rescatado() {
+  awk -v cuenta="${2:-}" '
+    $0 == "# " cuenta ":" { dentro = 1; next }
+    dentro && /^=====/    { dentro = 0 }
+    dentro                { print }
+  ' <<<"${1:-}" | sed '/^[[:space:]]*$/d'
+}
+
+# El veredicto de comparar dos huellas. Nunca recibe ni devuelve una clave.
+#   sin-anterior  no había rescate previo de esa cuenta
+#   igual         la guardada sigue sirviendo
+#   CAMBIO        la contraseña ha cambiado desde el último rescate
+bc_hestia_comparar_huellas() {
+  local ahora="${1:-}" antes="${2:-}"
+  [[ -n "$antes" ]] || { printf 'sin-anterior'; return 0; }
+  [[ "$ahora" == "$antes" ]] && { printf 'igual'; return 0; }
+  printf 'CAMBIO'
+}
+
+# El rescate anterior más reciente que haya en un directorio, o vacío.
+# $1 directorio   $2 archivo que NO cuenta (el que se está escribiendo ahora)
+bc_hestia_rescate_anterior() {
+  local dir="${1:-}" excluir="${2:-}"
+  [[ -d "$dir" ]] || return 0
+  { find "$dir" -maxdepth 1 -name 'Restic_Configs_*.txt' -printf '%T@ %p\n' 2>/dev/null || true; } \
+    | sort -rn | cut -d' ' -f2- | grep -vxF "${excluir:-/dev/null}" | sed -n '1p'
+}
+
 # Segundos -> lenguaje llano. Pura, auxiliar de la de arriba.
 bc_hestia_edad_llana() {
   local s="${1:-0}"
@@ -2863,30 +2915,107 @@ bc_hestia_keys() {
   mkdir -p "$destino" 2>/dev/null \
     || bc_die "no se puede escribir en $destino. Comprueba los permisos."
   bc_log "Las claves se guardarán en: $destino"
-  local fecha; fecha="$(date +%Y%m%d)"
+  # Con la HORA, no solo la fecha: dos rescates el mismo día se pisaban, y un
+  # rescate anterior es justo lo que NO se puede perder — es el único sitio
+  # donde queda una contraseña que el panel haya cambiado.
+  local fecha; fecha="$(date +%Y%m%d-%H%M%S)"
   local n_restic=0
 
-  # --- restic.conf de cada usuario ------------------------------------------
   local salida="$destino/Restic_Configs_${fecha}.txt"
+  local anterior; anterior="$(bc_hestia_rescate_anterior "$destino" "$salida")"
+  local anterior_txt=""
+  if [[ -n "$anterior" ]]; then
+    bc_log "Se comparará con el rescate anterior: $(basename "$anterior")"
+    anterior_txt="$(cat "$anterior" 2>/dev/null || true)"
+  else
+    bc_log "No hay ningún rescate anterior con el que comparar: este es el primero."
+  fi
+
+  # --- La clave de cada cuenta ----------------------------------------------
   local confs
   confs="$(bc_hestia_read "find '$HESTIA_DIR' -type f -name restic.conf" || true)"
+  local cuentas_con_clave="" cambiadas=0 iguales=0 nuevas=0
   if [[ -n "$confs" ]]; then
     n_restic="$(grep -c . <<<"$confs" || true)"
+
+    if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
+      bc_step "Simulación (--dry-run): esto es lo que PASARÍA, no lo que ha pasado."
+      bc_log "Se rescatarían las claves de $n_restic cuenta(s), a:"
+      bc_log "    $salida"
+      bc_log "y se compararían con el rescate anterior para avisar si alguna cambió."
+      bc_ok "No se ha escrito nada, y no se ha guardado ningún informe."
+      return 0
+    fi
+
+    bc_informe_abrir "Rescate de claves" "${DEPLOY_HOST:-este servidor}"
+
+    # El archivo se compone en un temporal y se mueve al final: si algo falla a
+    # mitad, no queda un rescate a medias que parezca completo.
+    local tmp; tmp="$(mktemp)"
+    bc_cleanup_register "keys:$tmp" "rm -f $(printf '%q' "$tmp")"
     {
-      printf '# Claves de repositorio Restic de HestiaCP\n'
+      printf '# Claves de repositorio de las cuentas de HestiaCP\n'
       printf '# Servidor: %s\n' "$( (( BC_HESTIA_REMOTO )) && echo "$DEPLOY_HOST" || hostname -f 2>/dev/null || hostname )"
-      printf '# Generado: %s por backupctl %s\n\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$BC_VERSION"
-      while IFS= read -r c; do
-        [[ -z "$c" ]] && continue
-        printf '# %s:\n' "$(basename "$(dirname "$c")")"
-        bc_hestia_read "cat '$c'"
-        printf '\n=====================\n\n'
-      done <<<"$confs"
-    } > "$salida"
-    bc_ok "Claves Restic: $salida"
+      printf '# Generado: %s por backupctl %s\n\n' "$(date '+%Y-%m-%d %H:%M:%S %z')" "$BC_VERSION"
+    } > "$tmp"
+
+    local c u contenido huella huella_antes veredicto
+    while IFS= read -r c; do
+      [[ -z "$c" ]] && continue
+      u="$(basename "$(dirname "$c")")"
+      contenido="$(bc_hestia_read "cat $(printf '%q' "$c")" || true)"
+      if [[ -z "$contenido" ]]; then
+        bc_err "  $u: NO se pudo leer su clave."
+        bc_informe_paso "Clave de $u" CIEGO "no se pudo leer"
+        continue
+      fi
+      cuentas_con_clave+="$u"$'\n'
+
+      # Se escribe la clave en el archivo de rescate —que para eso está— pero
+      # NO sale por ninguna otra parte: lo que se compara y se informa es la
+      # huella, nunca el valor.
+      { printf '# %s:\n' "$u"; printf '%s\n' "$contenido"; printf '\n=====================\n\n'; } >> "$tmp"
+
+      huella="$(bc_hestia_huella "$contenido")"
+      huella_antes="$(bc_hestia_huella "$(bc_hestia_bloque_rescatado "$anterior_txt" "$u")")"
+      veredicto="$(bc_hestia_comparar_huellas "$huella" "$huella_antes")"
+
+      case "$veredicto" in
+        igual)
+          iguales=$(( iguales + 1 ))
+          bc_ok "  $u: la misma clave que en el rescate anterior. Lo guardado sigue sirviendo."
+          bc_informe_paso "Clave de $u" SIN_CAMBIO "igual que en el rescate anterior" ;;
+        sin-anterior)
+          nuevas=$(( nuevas + 1 ))
+          bc_ok "  $u: rescatada. No había rescate anterior de esta cuenta con el que comparar."
+          bc_informe_paso "Clave de $u" HECHO "rescatada; sin rescate anterior con el que comparar" ;;
+        *)
+          cambiadas=$(( cambiadas + 1 ))
+          bc_err "  $u: LA CONTRASEÑA HA CAMBIADO desde el último rescate."
+          bc_log  "     Las copias de esta cuenta hechas ANTES del cambio NO se abren con"
+          bc_log  "     la nueva. La anterior sigue en $(basename "${anterior:-<sin anterior>}"),"
+          bc_log  "     que NO se borra ni se sobrescribe. Conserva las DOS mientras existan"
+          bc_log  "     copias de las dos épocas."
+          bc_informe_paso "Clave de $u" FALLO \
+            "la contraseña CAMBIÓ desde el rescate anterior; las copias previas al cambio no se abren con la nueva" ;;
+      esac
+      bc_informe_dato "Clave de $u" "$([[ -n "$huella_antes" ]] && echo "rescatada antes" || echo "sin rescate anterior")" \
+        "$veredicto"
+    done <<<"$confs"
+
+    mv -f "$tmp" "$salida" && bc_cleanup_forget "keys:$tmp"
+    bc_ok "Claves de las cuentas: $salida"
   else
-    bc_err "no se encontró ningún restic.conf."
+    bc_err "no se encontró ninguna clave de cuenta."
+    [[ "${BC_OPT_DRY:-0}" == "1" ]] && return 1
+    bc_informe_abrir "Rescate de claves" "${DEPLOY_HOST:-este servidor}"
+    bc_informe_paso "Rescate de claves" FALLO "no se encontró ninguna clave de cuenta"
   fi
+
+  # --- Cuentas con copias y SIN clave rescatable ----------------------------
+  # Una cuenta con repositorio cuya clave no se pueda rescatar tiene copias que
+  # nadie podrá abrir si se pierde el servidor. Eso es un fallo con nombre.
+  bc_hestia_avisar_sin_clave "$cuentas_con_clave"
 
   # --- rclone.conf ----------------------------------------------------------
   # Este es el que casi nadie guarda: Restic respalda las cuentas de usuario,
@@ -2902,11 +3031,80 @@ bc_hestia_keys() {
 
   echo
   bc_err "GUARDA ESTOS ARCHIVOS FUERA DEL SERVIDOR."
-  bc_log "En un gestor de contraseñas o en otra máquina. Si solo están aquí, se"
-  bc_log "pierden con el servidor, y con ellos la posibilidad de recuperar nada."
+  bc_log "En un gestor de contraseñas o en otra máquina. Mientras vivan solo dentro"
+  bc_log "del servidor que protegen, NO PROTEGEN NADA: se pierden con él, y con"
+  bc_log "ellos la posibilidad de recuperar una sola copia."
+  bc_informe_dato "Dónde han quedado" "" "$destino"
+  bc_informe_deshacer "Nada que deshacer: este paso solo LEE del servidor y escribe en el perfil. Ningún rescate anterior se borra ni se sobrescribe."
+
+  echo
+  if (( cambiadas > 0 )); then
+    bc_err "Resumen: $cambiadas clave(s) CAMBIADAS, $iguales igual(es), $nuevas nueva(s)."
+    bc_err "Una clave cambiada significa copias viejas que la nueva no abre. No borres"
+    bc_err "ningún rescate anterior."
+  else
+    bc_ok "Resumen: $iguales clave(s) igual(es) que antes, $nuevas nueva(s), ninguna cambiada."
+  fi
 
   bc_prune "$destino" 'Restic_Configs_*.txt' "$RESTIC_RETENTION_DAYS" 2 "claves Restic" 0
   bc_prune "$destino" 'rclone_*.conf'        "$RESTIC_RETENTION_DAYS" 2 "config rclone"  0
+
+  local estado_final=HECHO
+  (( cambiadas > 0 || BC_HESTIA_SIN_CLAVE > 0 )) && estado_final=FALLO
+  bc_informe_paso "Rescate de claves" "$estado_final" \
+    "$iguales igual(es), $nuevas nueva(s), $cambiadas cambiada(s), $BC_HESTIA_SIN_CLAVE con copias y sin clave"
+  local ruta; ruta="$(bc_informe_cerrar "$estado_final")"
+  [[ -n "$ruta" ]] && bc_log "Informe de lo hecho: $ruta"
+
+  if [[ "$estado_final" == "FALLO" ]]; then BC_DELIBERATE_EXIT=1; return 1; fi
+  return 0
+}
+
+# Cuántas cuentas tienen copias y ninguna clave rescatable.
+BC_HESTIA_SIN_CLAVE=0
+
+# Avisa, con nombre, de las cuentas que tienen repositorio y de las que no se
+# ha podido rescatar ninguna clave: sus copias no las abrirá nadie si se pierde
+# el servidor.
+# $1 las cuentas cuya clave SÍ se rescató, una por línea
+bc_hestia_avisar_sin_clave() {
+  local rescatadas="${1:-}"
+  BC_HESTIA_SIN_CLAVE=0
+
+  local lista
+  lista="$(bc_hestia_read "$HESTIA_DIR/bin/v-list-users plain" || true)"
+  if [[ -z "$lista" ]]; then
+    bc_warn "No se pudo leer la lista de cuentas: no se puede comprobar si alguna"
+    bc_warn "tiene copias sin clave rescatada. Compruébalo en el panel."
+    bc_informe_paso "Cuentas con copias y sin clave" CIEGO "no se pudo leer la lista de cuentas"
+    return 0
+  fi
+
+  local conf repo
+  conf="$(bc_hestia_read "cat $(printf '%q' "$HESTIA_CONF_RESTIC")" || true)"
+  repo="$(bc_hestia_conf_valor "$conf" REPO)"
+  if [[ -z "$repo" ]]; then
+    bc_log "No hay ningún repositorio registrado: no hay copias que puedan quedarse sin clave."
+    return 0
+  fi
+
+  local u sin_clave=()
+  while IFS= read -r u; do
+    u="$(awk '{print $1}' <<<"$u")"
+    [[ -z "$u" || "$u" == "USER" ]] && continue
+    grep -qxF "$u" <<<"$rescatadas" && continue
+    [[ "$(bc_hestia_sondear_repo "$repo" "$u")" == "1" ]] && sin_clave+=("$u")
+  done <<<"$lista"
+
+  (( ${#sin_clave[@]} == 0 )) && return 0
+  BC_HESTIA_SIN_CLAVE="${#sin_clave[@]}"
+  echo
+  bc_err "TIENEN COPIAS Y NO SE HA RESCATADO SU CLAVE (${#sin_clave[@]}): ${sin_clave[*]}"
+  bc_log  "Si se pierde el servidor, esas copias no las abrirá nadie. Mira por qué no"
+  bc_log  "tienen clave en \$HESTIA/data/users/<cuenta>/restic.conf antes de fiarte de"
+  bc_log  "esos respaldos."
+  bc_informe_paso "Cuentas con copias y sin clave" FALLO "${sin_clave[*]}"
+  return 0
 }
 
 # -----------------------------------------------------------------------------
