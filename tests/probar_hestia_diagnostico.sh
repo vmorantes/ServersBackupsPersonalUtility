@@ -124,7 +124,7 @@ test_cron_well_formed_is_ok_with_the_time() {
 
 test_snapshot_missing_is_a_failure() {
   nueva_prueba t7
-  local ahora; ahora="$(date -d "2026-09-24 12:00:00" +%s)"
+  local ahora; ahora="$(date -d "2026-09-24T12:00:00Z" +%s)"
   afirmar_nivel "$(veredicto bc_hestia_diag_instantanea "" "$ahora" "24")" "FALLO" \
     "sin ninguna copia: FALLO" "no tiene ninguna copia"
 }
@@ -132,22 +132,22 @@ test_snapshot_missing_is_a_failure() {
 # El diagnóstico que ningún log del servidor da: tres días con cron diario.
 test_snapshot_three_days_old_with_daily_cron_is_a_failure() {
   nueva_prueba t8
-  local ahora; ahora="$(date -d "2026-09-24 12:00:00" +%s)"
-  afirmar_nivel "$(veredicto bc_hestia_diag_instantanea "2026-09-21 03:00:00" "$ahora" "24")" \
+  local ahora; ahora="$(date -d "2026-09-24T12:00:00Z" +%s)"
+  afirmar_nivel "$(veredicto bc_hestia_diag_instantanea "2026-09-21T03:00:00Z" "$ahora" "24")" \
     "FALLO" "3 días con cron diario: FALLO" "no hicieron nada"
 }
 
 test_snapshot_slightly_late_is_a_warning() {
   nueva_prueba t9
-  local ahora; ahora="$(date -d "2026-09-24 12:00:00" +%s)"
-  afirmar_nivel "$(veredicto bc_hestia_diag_instantanea "2026-09-23 03:00:00" "$ahora" "24")" \
+  local ahora; ahora="$(date -d "2026-09-24T12:00:00Z" +%s)"
+  afirmar_nivel "$(veredicto bc_hestia_diag_instantanea "2026-09-23T03:00:00Z" "$ahora" "24")" \
     "AVISO" "33 horas con cron diario: AVISO"
 }
 
 test_snapshot_recent_is_ok() {
   nueva_prueba t10
-  local ahora; ahora="$(date -d "2026-09-24 12:00:00" +%s)"
-  afirmar_nivel "$(veredicto bc_hestia_diag_instantanea "2026-09-24 03:00:00" "$ahora" "24")" \
+  local ahora; ahora="$(date -d "2026-09-24T12:00:00Z" +%s)"
+  afirmar_nivel "$(veredicto bc_hestia_diag_instantanea "2026-09-24T03:00:00Z" "$ahora" "24")" \
     "OK" "de esta madrugada: OK" "9 horas"
 }
 
@@ -155,9 +155,110 @@ test_snapshot_recent_is_ok() {
 # confundirlas es justo lo que hace que un diagnóstico mienta.
 test_snapshot_unreadable_date_is_blindness_not_a_warning() {
   nueva_prueba t11
-  local ahora; ahora="$(date -d "2026-09-24 12:00:00" +%s)"
+  local ahora; ahora="$(date -d "2026-09-24T12:00:00Z" +%s)"
   afirmar_nivel "$(veredicto bc_hestia_diag_instantanea "no-es-una-fecha" "$ahora" "24")" \
     "CIEGO" "fecha ilegible: CIEGO, ni FALLO ni AVISO" "no se pudo leer"
+}
+
+# --- en qué referencia está cada fecha ---------------------------------------
+#
+# En un servidor real se vio LA MISMA copia impresa con cinco horas de
+# diferencia entre dos consultas: no cambió el respaldo, cambió la zona del
+# entorno desde el que se pidió el listado. Si una punta de la comparación está
+# en una referencia y la otra en otra, el desfase entra entero en la antigüedad
+# y una copia que sí se saltó una noche puede parecer reciente.
+
+# Ejecuta una función de fechas y devuelve lo que imprime, entre corchetes para
+# que un resultado vacío se vea.
+fecha_fn() {
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/hestia.sh"
+    printf "[%s]" "$("$2" "$3")"
+  ' _ "$BANCO_RAIZ" "$1" "$2" 2>&1
+}
+
+# EL CASO QUE MOTIVA TODO: el orden alfabético elige la instantánea equivocada.
+# "2026-09-24T02:00:00+07:00" es mayor como TEXTO que "2026-09-23T21:25:50+02:00"
+# y sin embargo ocurrió ANTES.
+test_the_latest_snapshot_is_chosen_by_instant_not_by_text() {
+  nueva_prueba t58
+  local a="2026-09-23T21:25:50+02:00" b="2026-09-24T02:00:00+07:00"
+  afirmar_igual "$(printf '%s\n%s\n' "$a" "$b" | sort | tail -1)" "$b" \
+    "por texto se elegiría la de las 02:00 (+07:00), que es la MÁS VIEJA"
+  afirmar_igual "$(fecha_fn bc_hestia_fecha_mas_reciente "$(printf '%s\n%s' "$a" "$b")")" \
+    "[$a]" "por instante se elige la correcta"
+}
+
+# Y con un solo huso sigue eligiendo bien, que es el caso normal.
+test_the_latest_snapshot_with_a_single_zone() {
+  nueva_prueba t59
+  local lista; lista="$(printf '%s\n%s\n%s' \
+    "2026-09-22T03:00:00Z" "2026-09-24T03:00:00Z" "2026-09-23T03:00:00Z")"
+  afirmar_igual "$(fecha_fn bc_hestia_fecha_mas_reciente "$lista")" "[2026-09-24T03:00:00Z]" \
+    "la más reciente de tres con el mismo huso"
+}
+
+# Una lista con alguna fecha SIN huso no se puede ordenar ni restar: se
+# devuelve esa, para que quien juzgue pueda nombrarla.
+test_a_list_with_a_zoneless_date_returns_it() {
+  nueva_prueba t60
+  local lista; lista="$(printf '%s\n%s' "2026-09-22T03:00:00Z" "2026-09-24 03:00:00")"
+  afirmar_igual "$(fecha_fn bc_hestia_fecha_mas_reciente "$lista")" "[2026-09-24 03:00:00]" \
+    "con una fecha sin huso en la lista, se devuelve esa"
+}
+
+# El detector de huso, en las formas que puede traer una fecha ISO.
+test_zone_detection() {
+  nueva_prueba t61
+  local f malos=0
+  for f in "2026-09-23T21:25:50.972078216Z" "2026-09-23T21:25:50+02:00" \
+           "2026-09-23T21:25:50+0200" "2026-09-23 21:25:50 UTC"; do
+    fecha_fn bc_hestia_fecha_epoch "$f" | grep -q '\[[0-9]' || { malos=$(( malos + 1 )); }
+  done
+  afirmar_igual "$malos" "0" "las formas con huso se convierten a instante"
+  afirmar_igual "$(fecha_fn bc_hestia_fecha_epoch "2026-09-23 21:25:50")" "[]" \
+    "y una hora de pared a secas NO se convierte"
+}
+
+# El mismo instante escrito en dos husos distintos da el MISMO resultado. Es
+# literalmente el caso del servidor real.
+test_the_same_instant_in_two_zones_gives_the_same_verdict() {
+  nueva_prueba t62
+  local ahora; ahora="$(date -d "2026-09-24T12:00:00Z" +%s)"
+  local en_z; en_z="$(veredicto bc_hestia_diag_instantanea "2026-09-23T21:25:50Z" "$ahora" "24")"
+  local en_otro; en_otro="$(veredicto bc_hestia_diag_instantanea "2026-09-24T04:25:50+07:00" "$ahora" "24")"
+  afirmar_igual "$en_otro" "$en_z" \
+    "la misma copia escrita en dos husos da el mismo veredicto, palabra por palabra"
+  afirmar_nivel "$en_z" "OK" "y con huso la antigüedad se calcula bien"
+}
+
+# Sin huso NO se inventa una zona: es ceguera, y el mensaje tiene que decir qué
+# pasa y qué mirar, no un «no se pudo».
+test_a_zoneless_date_is_blindness_with_an_actionable_message() {
+  nueva_prueba t63
+  local ahora; ahora="$(date -d "2026-09-24T12:00:00Z" +%s)"
+  local linea; linea="$(veredicto bc_hestia_diag_instantanea "2026-09-24 03:00:00" "$ahora" "24")"
+  afirmar_nivel "$linea" "CIEGO" "una fecha sin huso es CIEGO, nunca OK" "SIN huso"
+  case "${linea#*$'\t'}" in
+    *"no es que falten copias"*|*"No es que falten copias"*)
+      afirmar_igual "si" "si" "el mensaje distingue esto de «no hay copias»" ;;
+    *) afirmar_igual "no" "si" "el mensaje distingue esto de «no hay copias»" ;;
+  esac
+  case "${linea#*$'\t'}" in
+    *versión*) afirmar_igual "si" "si" "y dice qué mirar" ;;
+    *) afirmar_igual "no" "si" "y dice qué mirar" ;;
+  esac
+}
+
+# Una copia vieja con huso SIGUE siendo un fallo: la exigencia de huso no puede
+# convertir en ceguera lo que antes se detectaba.
+test_an_old_dated_snapshot_is_still_a_failure() {
+  nueva_prueba t64
+  local ahora; ahora="$(date -d "2026-09-24T12:00:00Z" +%s)"
+  afirmar_nivel "$(veredicto bc_hestia_diag_instantanea "2026-09-21T03:00:00Z" "$ahora" "24")" \
+    "FALLO" "tres días con huso: sigue siendo FALLO" "no hicieron nada"
 }
 
 # --- cuenta ------------------------------------------------------------------
@@ -388,10 +489,18 @@ con_hestia_falso() {
 # `restic --json snapshots`, que serializa el array entero de golpe.
 BC_JSON_DOS='[{"time":"2026-09-22T03:00:00.123456+02:00","short_id":"a1b2c3d4","paths":["/home/cliente07"]},{"time":"2026-09-24T03:00:00.654321+02:00","short_id":"e5f6a7b8","paths":["/home/cliente07"]}]'
 
-test_last_snapshot_is_the_most_recent_trimmed() {
+# La columna enseña la fecha en la hora local de quien mira y CON su huso: dos
+# ejecuciones de la misma orden no pueden dar dos horas distintas para la misma
+# copia, y quien la lee tiene que saber en qué referencia está.
+test_the_shown_date_carries_its_reference() {
   nueva_prueba t31
-  afirmar_igual "$(con_hestia_falso "$BC_JSON_DOS" bc_hestia_restic_ultima)" \
-    "2026-09-24 03:00:00" "la última instantánea es la más reciente, recortada a segundos"
+  local mostrada; mostrada="$(con_hestia_falso "$BC_JSON_DOS" bc_hestia_restic_ultima)"
+  afirmar_igual "$mostrada" "$(date -d '2026-09-24T03:00:00.654321+02:00' '+%Y-%m-%d %H:%M:%S %z')" \
+    "es la más reciente, en hora local y con su huso"
+  case "$mostrada" in
+    *[+-][0-9][0-9][0-9][0-9]) afirmar_igual "si" "si" "la fecha mostrada lleva su referencia" ;;
+    *) afirmar_igual "no ('$mostrada')" "si" "la fecha mostrada lleva su referencia" ;;
+  esac
 }
 
 test_snapshot_count_does_not_depend_on_lines() {
@@ -585,7 +694,7 @@ reg() { local IFS=$'\x1f'; printf '%s\n' "$*"; }
 # cuenta con copia de esta madrugada.
 test_a_healthy_server_reports_zero_of_everything() {
   nueva_prueba t51
-  local ahora; ahora="$(date -d "2026-09-24 12:00:00" +%s)"
+  local ahora; ahora="$(date -d "2026-09-24T12:00:00Z" +%s)"
   local datos
   datos="$(
     reg repo "rclone:almacen:/IncrementalBackups" "s3"
@@ -594,7 +703,7 @@ test_a_healthy_server_reports_zero_of_everything() {
     reg cada_h 24 leido
     reg ahora "$ahora"
     reg cuentas si
-    reg cuenta cliente07 1 1 1 "2026-09-24 03:00:00"
+    reg cuenta cliente07 1 1 1 "2026-09-24T03:00:00Z"
   )"
   local salida; salida="$(pintar_diagnostico "" "$datos")"
   echo "$salida" > "$BANCO_TMP/t51/salida.log"
@@ -609,7 +718,7 @@ test_a_healthy_server_reports_zero_of_everything() {
 # tienen que salir por separado.
 test_a_mixed_report_counts_the_three_things_apart() {
   nueva_prueba t52
-  local ahora; ahora="$(date -d "2026-09-24 12:00:00" +%s)"
+  local ahora; ahora="$(date -d "2026-09-24T12:00:00Z" +%s)"
   local datos
   datos="$(
     reg repo "rclone:almacen:/IncrementalBackups" "alias"
@@ -618,8 +727,8 @@ test_a_mixed_report_counts_the_three_things_apart() {
     reg cada_h 24 leido
     reg ahora "$ahora"
     reg cuentas si
-    reg cuenta uno 1 0 1 "2026-09-24 03:00:00"
-    reg cuenta dos "?" "?" 1 "2026-09-24 03:00:00"
+    reg cuenta uno 1 0 1 "2026-09-24T03:00:00Z"
+    reg cuenta dos "?" "?" 1 "2026-09-24T03:00:00Z"
     reg cuenta tres 1 1 1 "__ILEGIBLE__"
   )"
   local salida; salida="$(pintar_diagnostico "" "$datos")"
@@ -633,7 +742,7 @@ test_a_mixed_report_counts_the_three_things_apart() {
 # Sin fallos, pero con algo sin leer: el caso que antes salía con 0.
 test_blindness_alone_is_enough_to_exit_with_one() {
   nueva_prueba t53
-  local ahora; ahora="$(date -d "2026-09-24 12:00:00" +%s)"
+  local ahora; ahora="$(date -d "2026-09-24T12:00:00Z" +%s)"
   local datos
   datos="$(
     reg repo "rclone:almacen:/IncrementalBackups" "s3"
@@ -642,7 +751,7 @@ test_blindness_alone_is_enough_to_exit_with_one() {
     reg cada_h 24 leido
     reg ahora "$ahora"
     reg cuentas si
-    reg cuenta uno 1 "?" 1 "2026-09-24 03:00:00"
+    reg cuenta uno 1 "?" 1 "2026-09-24T03:00:00Z"
   )"
   local salida; salida="$(pintar_diagnostico "" "$datos")"
   echo "$salida" > "$BANCO_TMP/t53/salida.log"
@@ -744,6 +853,13 @@ test_snapshot_three_days_old_with_daily_cron_is_a_failure
 test_snapshot_slightly_late_is_a_warning
 test_snapshot_recent_is_ok
 test_snapshot_unreadable_date_is_blindness_not_a_warning
+test_the_latest_snapshot_is_chosen_by_instant_not_by_text
+test_the_latest_snapshot_with_a_single_zone
+test_a_list_with_a_zoneless_date_returns_it
+test_zone_detection
+test_the_same_instant_in_two_zones_gives_the_same_verdict
+test_a_zoneless_date_is_blindness_with_an_actionable_message
+test_an_old_dated_snapshot_is_still_a_failure
 test_account_marked_with_key_but_no_repo_is_a_failure
 test_account_marked_without_key_or_repo_is_ok
 test_account_unmarked_with_repo_is_a_warning
@@ -765,7 +881,7 @@ test_unreadable_mark_is_not_treated_as_zero
 test_probe_text_survives_a_sudo_prefix
 test_probe_reports_yes_no_and_error_apart
 test_probe_accepts_a_pipeline
-test_last_snapshot_is_the_most_recent_trimmed
+test_the_shown_date_carries_its_reference
 test_snapshot_count_does_not_depend_on_lines
 test_empty_array_means_none
 test_non_json_output_is_not_read_as_no_backups

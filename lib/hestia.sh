@@ -294,12 +294,24 @@ bc_hestia_diag_instantanea() {
     return 0
   fi
 
-  local epoch
-  if ! epoch="$(date -d "$fecha" +%s 2>/dev/null)" || [[ -z "$epoch" ]]; then
+  # Dos preguntas distintas, y en este orden: ¿esto se entiende como fecha?, y
+  # solo entonces ¿dice a qué hora fue? Juntarlas daría el mensaje equivocado
+  # a la mitad de los casos.
+  if ! date -d "$fecha" +%s >/dev/null 2>&1; then
     # Ceguera, no aviso: lo que hay que responder no es «¿falló la lectura?»
     # sino «¿puedo afirmar que esta cuenta se respalda?». Sin saber cuándo fue
     # la última copia, no puedo — da igual que la lectura llegara a ocurrir.
     bc_hestia_veredicto CIEGO "no se pudo leer la fecha de la última copia ('$fecha'): no es lo mismo que no tenerla"
+    return 0
+  fi
+
+  # Una fecha SIN huso no se interpreta: se declara. `date -d` la aceptaría y
+  # la leería en la zona local de quien ejecuta esto, que trabajando por SSH
+  # normalmente no es la del servidor — y ese desfase entraría entero en la
+  # antigüedad, pudiendo convertir una copia vieja en una «reciente».
+  local epoch
+  if ! epoch="$(bc_hestia_fecha_epoch "$fecha")" || [[ -z "$epoch" ]]; then
+    bc_hestia_veredicto CIEGO "la fecha de la última copia ('$fecha') llega SIN huso horario: no se sabe a qué instante corresponde, así que no se puede calcular su antigüedad. No es que falten copias — es que no se entiende la hora. Mira con qué versión de la herramienta de respaldo se escribieron: las que dicen el huso se leen bien"
     return 0
   fi
 
@@ -314,6 +326,84 @@ bc_hestia_diag_instantanea() {
   else
     bc_hestia_veredicto OK "última copia de hace $(bc_hestia_edad_llana "$edad")"
   fi
+}
+
+# -----------------------------------------------------------------------------
+# Fechas: en qué referencia está cada una
+# -----------------------------------------------------------------------------
+# Todas PURAS. Existen porque en un servidor real se vio LA MISMA copia
+# impresa con cinco horas de diferencia entre dos consultas: no cambió el
+# respaldo, cambió la zona del entorno desde el que se pidió el listado, que es
+# quien decide cómo se imprime. Si una punta de la comparación está en una
+# referencia y la otra en otra, el desfase entra directo en el cálculo de
+# antigüedad y una copia que sí se saltó una noche puede parecer reciente.
+#
+# El formato de esa lista NO lo decide HestiaCP: lo decide la versión de la
+# herramienta de respaldo instalada en cada servidor. Así que aquí no se exige
+# un formato concreto — se exige lo único que hace falta para que la cuenta
+# salga bien: que la fecha diga a qué hora fue.
+
+# ¿Esta fecha lleva indicador de huso?
+# Se aceptan las formas que una fecha ISO puede traer —Z, ±HH:MM, ±HHMM, ±HH—
+# y un nombre de zona al final (UTC, CEST…). Lo que NO se acepta es una hora de
+# pared a secas: esa no dice a qué instante corresponde.
+bc_hestia_fecha_con_huso() {
+  local f="${1:-}"
+  [[ "$f" =~ [Zz]$ ]]                      && return 0
+  [[ "$f" =~ [+-][0-9]{2}:[0-9]{2}$ ]]     && return 0
+  [[ "$f" =~ [+-][0-9]{4}$ ]]              && return 0
+  [[ "$f" =~ [+-][0-9]{2}$ ]]              && return 0
+  [[ "$f" =~ [[:space:]][A-Za-z]{2,5}$ ]]  && return 0
+  return 1
+}
+
+# El instante absoluto de una fecha, en segundos. Devuelve 1 —sin imprimir
+# nada— si la fecha no lleva huso o si no se puede interpretar.
+#
+# La comprobación del huso va ANTES de llamar a `date`: `date -d` acepta
+# encantado una hora sin huso y la interpreta en la zona local de QUIEN EJECUTA
+# esto, que trabajando por SSH normalmente no es el servidor. Eso no es leer
+# una fecha, es inventarle una zona.
+bc_hestia_fecha_epoch() {
+  local f="${1:-}" e
+  [[ -n "$f" ]] || return 1
+  bc_hestia_fecha_con_huso "$f" || return 1
+  e="$(date -d "$f" +%s 2>/dev/null)" || return 1
+  [[ -n "$e" ]] || return 1
+  printf '%s' "$e"
+}
+
+# La fecha, en la hora local de quien mira y CON su huso a la vista.
+# Dos ejecuciones de la misma orden no pueden enseñar dos horas distintas para
+# la misma copia, y quien la lee tiene que saber en qué referencia está.
+bc_hestia_fecha_legible() {
+  local f="${1:-}"
+  bc_hestia_fecha_con_huso "$f" || { printf 'sin huso'; return 0; }
+  date -d "$f" '+%Y-%m-%d %H:%M:%S %z' 2>/dev/null || printf 'sin huso'
+}
+
+# La más reciente de una lista de fechas (una por línea).
+#
+# Por INSTANTE, no por texto. Ordenar cadenas con husos distintos elige mal:
+# "2026-09-24T02:00:00+07:00" es mayor como texto que "2026-09-23T21:25:50+02:00"
+# y sin embargo ocurrió ANTES. Eso envejece una cuenta bien respaldada y manda
+# a alguien a buscar un problema que no existe.
+#
+# Si alguna fecha NO lleva huso, se devuelve ESA: con la lista en dos
+# referencias distintas no se puede ordenar ni restar, y quien juzgue tiene que
+# poder decir cuál es la que no se entiende.
+bc_hestia_fecha_mas_reciente() {
+  local lista="${1:-}" f e mejor="" mejor_e=""
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    if ! bc_hestia_fecha_con_huso "$f"; then
+      printf '%s' "$f"
+      return 0
+    fi
+    e="$(bc_hestia_fecha_epoch "$f")" || continue
+    if [[ -z "$mejor_e" ]] || (( e > mejor_e )); then mejor="$f"; mejor_e="$e"; fi
+  done <<<"$lista"
+  printf '%s' "$mejor"
 }
 
 # Segundos -> lenguaje llano. Pura, auxiliar de la de arriba.
@@ -1240,11 +1330,12 @@ bc_hestia_ultima_instantanea() {
   [[ "$salida" == *"{"* || "$salida" == *"["* ]] || { echo "__ILEGIBLE__"; return 0; }
 
   # La fecha de cada instantánea viene como "time": "2026-09-24T03:00:00...".
-  # Se coge la mayor, que es la más reciente, sin depender del orden.
-  local fecha
-  fecha="$(grep -oE '"time"[[:space:]]*:[[:space:]]*"[^"]+"' <<<"$salida" \
-           | sed 's/.*"\([^"]*\)"$/\1/' | sort | tail -1)"
-  echo "$fecha"
+  # La más reciente se elige por INSTANTE, no ordenando texto: con husos
+  # distintos el orden alfabético elige mal (ver bc_hestia_fecha_mas_reciente).
+  local fechas
+  fechas="$(grep -oE '"time"[[:space:]]*:[[:space:]]*"[^"]+"' <<<"$salida" \
+            | sed 's/.*"\([^"]*\)"$/\1/')"
+  printf '%s\n' "$(bc_hestia_fecha_mas_reciente "$fechas")"
 }
 
 # Pinta un veredicto "NIVEL<TAB>mensaje" y suma al contador que corresponda.
@@ -2583,15 +2674,19 @@ bc_hestia_restic_ultima() {
   [[ -n "$salida" ]] || { echo "no disponible"; return 0; }
   [[ "$salida" == *"{"* || "$salida" == *"["* ]] || { echo "no disponible"; return 0; }
 
-  # La mayor es la más reciente, sin depender del orden en que vengan. Se
-  # recorta a "AAAA-MM-DD HH:MM:SS" para que la columna siga siendo la misma
-  # que se imprimía antes: el resto del ISO (fracción y huso) no cabe.
-  local ultima
-  ultima="$(grep -oE '"time"[[:space:]]*:[[:space:]]*"[^"]+"' <<<"$salida" \
-            | sed 's/.*"\([^"]*\)"$/\1/' | sort | tail -1)"
+  # La más reciente por INSTANTE, y se muestra en la hora local de quien mira
+  # CON su huso a la vista. Antes se recortaba a 19 caracteres para que la
+  # columna cupiera, y eso borraba justo el dato que dice qué significa esa
+  # hora: la misma copia salía con horas distintas según el huso con que la
+  # hubiera escrito el servidor. Si hay que acortar la columna, se acorta por
+  # otro sitio, no por el dato que dice qué significa la hora.
+  local fechas ultima
+  fechas="$(grep -oE '"time"[[:space:]]*:[[:space:]]*"[^"]+"' <<<"$salida" \
+            | sed 's/.*"\([^"]*\)"$/\1/')"
+  ultima="$(bc_hestia_fecha_mas_reciente "$fechas")"
   [[ -n "$ultima" ]] || { echo "ninguna"; return 0; }
-  ultima="${ultima:0:19}"
-  echo "${ultima/T/ }"
+  bc_hestia_fecha_legible "$ultima"
+  echo
 }
 
 # Cuántas instantáneas tiene un usuario, para contrastarlo con SNAPSHOTS.
