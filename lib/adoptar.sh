@@ -32,24 +32,94 @@
 BC_ADOPTAR_LOADED=1
 
 BC_AD_CONF_ORIGINAL=""
+# ¿Tenía el destino su propio restic.conf antes de que adoptar lo pisara?
+# Distinto de "BC_AD_CONF_ORIGINAL vacío": un archivo vacío en el origen
+# también daría BC_AD_CONF_ORIGINAL="", y confundirlo con "no existía"
+# llevaría a BORRAR un restic.conf que sí había en vez de devolverlo.
+BC_AD_CONF_EXISTIA=0
+# ¿Falló la escritura o el borrado al devolver restic.conf? Lo consulta
+# bc_adoptar_run después de bc_cleanup_run adoptar_conf para no terminar con
+# éxito si el destino pudo quedarse apuntando al repositorio rescatado.
+BC_AD_CONF_FALLO=0
+# ¿Llegó adoptar a ESCRIBIR el restic.conf temporal? Si el destino no tenía
+# uno propio (EXISTIA=0) pero la escritura del temporal nunca llegó a
+# intentarse (por ejemplo, bc_die entre leer y escribir), no hay nada que
+# borrar: solo se borra lo que esta misma ejecución puso.
+BC_AD_CONF_ESCRITO=0
 BC_AD_DESTINO=""
 
 # Devuelve el conf/restic.conf del destino a como estaba. Se llama pase lo que
 # pase: si no, el servidor de destino quedaría respaldándose en un repositorio
 # que no es suyo, y nadie se daría cuenta hasta necesitarlo.
+#
+# Escribe con bc_ssh_sudo_stdin, NUNCA con bc_ssh_sudo (T2,
+# .agents/context/30-trampas.md): bc_ssh_sudo empieza comprobando "id -u" con
+# un ssh que, sin cerrarle la entrada estándar, se come lo que se le mande por
+# la tubería — el "cat > restic.conf" recibiría la nada, y el destino se
+# quedaría con el archivo VACÍO mientras esta función informa de éxito.
+#
+# Si falla (escritura o borrado), devuelve 1 y NO vacía BC_AD_DESTINO ni el
+# resto del estado: bc_cleanup_run, al ver que esta orden terminó en error,
+# la deja registrada (C3), y bc_cleanup_pending la reintenta al salir —
+# reintento que solo puede tener sentido si BC_AD_DESTINO, EXISTIA, ESCRITO y
+# ORIGINAL siguen siendo los mismos que la primera vez.
 bc_ad_restaurar_conf() {
   [[ -n "$BC_AD_DESTINO" ]] || return 0
   local remoto="/usr/local/hestia/conf/restic.conf"
-  if [[ -n "$BC_AD_CONF_ORIGINAL" ]]; then
-    printf '%s\n' "$BC_AD_CONF_ORIGINAL" | bc_ssh_sudo "cat > '$remoto'" >/dev/null 2>&1 \
-      && bc_ok "Devuelta la configuración de respaldo propia del destino." \
-      || bc_err "NO se pudo devolver conf/restic.conf del destino. Revísalo a mano."
-  else
-    bc_ssh_sudo "rm -f '$remoto'" >/dev/null 2>&1 \
-      && bc_log "Retirado el conf/restic.conf temporal (el destino no tenía uno)." \
-      || true
+  if (( BC_AD_CONF_EXISTIA )); then
+    if printf '%s\n' "$BC_AD_CONF_ORIGINAL" | bc_ssh_sudo_stdin "cat > '$remoto'" >/dev/null 2>&1; then
+      bc_ok "Devuelta la configuración de respaldo propia del destino."
+    else
+      bc_err "NO se pudo devolver conf/restic.conf del destino. Revísalo a mano."
+      BC_AD_CONF_FALLO=1
+      return 1
+    fi
+  elif (( BC_AD_CONF_ESCRITO )); then
+    if bc_ssh_sudo "rm -f '$remoto'" >/dev/null 2>&1; then
+      bc_log "Retirado el conf/restic.conf temporal (el destino no tenía uno)."
+    else
+      bc_err "NO se pudo retirar el conf/restic.conf temporal del destino. Revísalo a mano."
+      BC_AD_CONF_FALLO=1
+      return 1
+    fi
   fi
-  BC_AD_CONF_ORIGINAL=""; BC_AD_DESTINO=""
+  # Si EXISTIA=0 y ESCRITO=0, no hay nada que hacer: adoptar nunca llegó a
+  # escribir el temporal, así que tampoco hay nada que borrar.
+  BC_AD_CONF_ORIGINAL=""; BC_AD_DESTINO=""; BC_AD_CONF_EXISTIA=0; BC_AD_CONF_ESCRITO=0
+}
+
+# Pregunta al destino si /usr/local/hestia/conf/restic.conf existe de verdad,
+# y si existe lo lee. Deja el resultado en BC_AD_CONF_EXISTIA/BC_AD_CONF_ORIGINAL
+# (las mismas variables que consulta bc_ad_restaurar_conf). Extraída para
+# poder probarla sola, sin el resto de bc_adoptar_run.
+#
+# Con centinela, NO con el código de salida de "test -e": ese código sale
+# distinto de 0 tanto si el archivo no existe como si la conexión falló, sudo
+# pidió contraseña sin poder preguntarla, o cualquier otro corte — y tratar
+# todo eso como "no existe" llevaría a que bc_ad_restaurar_conf BORRE un
+# restic.conf real del destino que solo no se pudo comprobar. "SI"/"NO" que
+# el propio remoto imprime no deja lugar a esa ambigüedad: cualquier otra
+# respuesta (vacía, basura, un mensaje de error) se trata como "no se pudo
+# preguntar" y aborta ANTES de tocar nada.
+bc_ad_leer_conf_destino() {
+  local remoto="/usr/local/hestia/conf/restic.conf" respuesta
+  respuesta="$(bc_ssh_sudo "if test -e '$remoto'; then echo SI; else echo NO; fi" < /dev/null 2>/dev/null)"
+  case "$respuesta" in
+    SI)
+      BC_AD_CONF_EXISTIA=1
+      BC_AD_CONF_ORIGINAL="$(bc_ssh_sudo "cat '$remoto'" < /dev/null)" \
+        || bc_die "no se pudo leer el restic.conf del destino; no se toca nada."
+      bc_warn "El destino ya tenía su propia configuración de respaldo. Se guarda y se"
+      bc_warn "devolverá al terminar, pase lo que pase."
+      ;;
+    NO)
+      BC_AD_CONF_EXISTIA=0
+      BC_AD_CONF_ORIGINAL=""
+      ;;
+    *)
+      bc_die "no se pudo saber si el destino ya tenía restic.conf (respuesta: '${respuesta:-<vacía>}'); no se toca nada."
+      ;;
+  esac
 }
 
 # Lee las claves rescatadas. Devuelve, por la salida estándar, líneas
@@ -136,8 +206,9 @@ bc_adoptar_inventario() {
   bc_require_cmd rclone
 
   local tmp; tmp="$(mktemp -d)"; chmod 700 "$tmp"
-  # shellcheck disable=SC2064
-  trap "rm -rf '$tmp'" RETURN
+  # ADR 0012: registrada en cuanto se crea.
+  bc_cleanup_register adoptar_inv_tmp "rm -rf $(printf '%q' "$tmp")"
+  trap 'bc_cleanup_run adoptar_inv_tmp' RETURN
   cp "$rc" "$tmp/rclone.conf"; chmod 600 "$tmp/rclone.conf"
 
   local filas="$tmp/filas"; : > "$filas"
@@ -269,7 +340,12 @@ bc_adoptar_run() {
   bc_step "2 · El servidor de destino"
   bc_require_cmd ssh
   bc_ssh_init "$destino" || bc_die "no se pudo conectar a $destino."
-  trap 'bc_ad_restaurar_conf; bc_ssh_close' RETURN
+  # adoptar_conf se registra más abajo, justo antes de pisar restic.conf
+  # (ADR 0012); aquí todavía no hay nada que devolver, y bc_cleanup_run no
+  # hace nada si la clave no existe. bc_ssh_close se deja en el RETURN de
+  # siempre — pero AL FINAL, para que la limpieza remota de adoptar_conf,
+  # si hace falta, use la conexión antes de que se cierre.
+  trap 'bc_cleanup_run adoptar_conf; bc_ssh_close' RETURN
 
   bc_ssh_sudo "test -x /usr/local/hestia/bin/v-add-user" >/dev/null 2>&1 \
     || bc_die "en $destino no hay HestiaCP (falta /usr/local/hestia/bin/v-add-user)."
@@ -354,11 +430,19 @@ bc_adoptar_run() {
   # --- 6. Apuntar al repositorio ajeno, temporalmente -----------------------
   bc_step "5 · Apuntar al repositorio rescatado (temporal)"
   BC_AD_DESTINO="$destino"
-  BC_AD_CONF_ORIGINAL="$(bc_ssh_sudo "cat /usr/local/hestia/conf/restic.conf 2>/dev/null" < /dev/null || true)"
-  if [[ -n "$BC_AD_CONF_ORIGINAL" ]]; then
-    bc_warn "El destino ya tenía su propia configuración de respaldo. Se guarda y se"
-    bc_warn "devolverá al terminar, pase lo que pase."
-  fi
+  bc_ad_leer_conf_destino
+  # ADR 0012: registrada ANTES de la escritura, no después. Así, si la propia
+  # escritura falla (su bc_die, dos líneas más abajo, sale con exit), la
+  # limpieza igual se ejecuta desde bc_cleanup_pending — antes solo ocurría si
+  # la función llegaba a RETORNAR (T20: un fallo aquí podía dejar el destino
+  # respaldándose en el repositorio rescatado). bc_ad_restaurar_conf ya
+  # comprueba BC_AD_DESTINO antes de hacer nada: es segura de nombrar ahora.
+  bc_cleanup_register adoptar_conf "bc_ad_restaurar_conf"
+  # ESCRITO=1 justo ANTES de intentar el temporal: si esta escritura falla
+  # (bc_die, la línea de abajo), bc_ad_restaurar_conf sabrá que SÍ se llegó a
+  # intentar y que, si el destino no tenía restic.conf propio (EXISTIA=0),
+  # hay que borrar lo que haya quedado a medias (C2).
+  BC_AD_CONF_ESCRITO=1
   printf "REPO='%s'\nSNAPSHOTS='30'\nKEEP_DAILY='8'\nKEEP_WEEKLY='5'\nKEEP_MONTHLY='3'\nKEEP_YEARLY='-1'\n" "${BC_AD_REPO%/}" \
     | bc_ssh_sudo_stdin "cat > /usr/local/hestia/conf/restic.conf" \
     || bc_die "no se pudo apuntar al repositorio rescatado."
@@ -385,11 +469,25 @@ bc_adoptar_run() {
   done
 
   echo
-  bc_ad_restaurar_conf
+  bc_cleanup_run adoptar_conf
+  local conf_fallo=0
+  if (( BC_AD_CONF_FALLO )); then
+    bc_err "el destino puede haberse quedado con otra configuración de Restic: revisa /usr/local/hestia/conf/restic.conf"
+    fallos=$((fallos+1))
+    conf_fallo=1
+  fi
 
   echo
   if (( fallos )); then
     bc_err "Terminado con $fallos fallo(s) de ${#lista[@]}."
+    # Si el ÚNICO problema añadido es el restic.conf del destino (conf_fallo),
+    # los usuarios que sí se restauraron bien siguen necesitando estos
+    # avisos — perderlos en cuanto fallos>0 sería malo aunque todos los
+    # usuarios hubieran quedado vivos.
+    if (( conf_fallo )); then
+      bc_warn "Su contraseña de panel es, de momento, su clave Restic: cámbiala."
+      bc_log  "Comprueba en el panel: dominios, correo y bases de datos."
+    fi
     BC_DELIBERATE_EXIT=1
     return 1
   fi
@@ -545,8 +643,9 @@ bc_adoptar_bases() {
 
   # --- Traslado ---------------------------------------------------------------
   local tmp; tmp="$(mktemp -d)"; chmod 700 "$tmp"
-  # shellcheck disable=SC2064
-  trap "rm -rf '$tmp'; bc_ssh_close" RETURN
+  # ADR 0012: registrada en cuanto se crea; bc_ssh_close se deja en el RETURN.
+  bc_cleanup_register adoptar_bases_tmp "rm -rf $(printf '%q' "$tmp")"
+  trap 'bc_cleanup_run adoptar_bases_tmp; bc_ssh_close' RETURN
 
   local fallos=0 hechas=0 seg
   for b in "${lista[@]}"; do
@@ -675,7 +774,7 @@ import json,sys
 d=json.load(sys.stdin)
 for s in d[-6:][::-1]: print(s['short_id'])
 " 2>/dev/null || true)"
-  [[ -n "$ids" ]] || { rm -rf "$BC_AD_TMP"; BC_AD_TMP=""; return 0; }
+  [[ -n "$ids" ]] || { bc_cleanup_run adoptar_prep; BC_AD_TMP=""; return 0; }
 
   local elegida="$snap"
   [[ "$elegida" == "latest" ]] && elegida="$(head -1 <<<"$ids")"
@@ -686,7 +785,7 @@ for s in d[-6:][::-1]: print(s['short_id'])
     [[ -n "$id" ]] || continue
     printf '%s\t%s\n' "$id" "$(bc_ad_contenido "$repo" "$u" "$id")" >> "$filas"
   done <<<"$ids"
-  rm -rf "$BC_AD_TMP"; BC_AD_TMP=""
+  bc_cleanup_run adoptar_prep; BC_AD_TMP=""
 
   local act mejor_w mejor_m mejor_d act_w act_m act_d
   act="$(awk -F'\t' -v s="$elegida" '$1 ~ "^"s {print; exit}' "$filas")"
@@ -733,7 +832,7 @@ bc_ad_conflictos() {
   local c
   c="$(RCLONE_CONFIG="$BC_AD_TMP/rclone.conf" RESTIC_PASSWORD_FILE="$BC_AD_TMP/clave" \
        restic -r "${repo%/}/$u" dump "$snap" "/home/$u/backup/backup.conf" 2>/dev/null || true)"
-  rm -rf "$BC_AD_TMP"; BC_AD_TMP=""
+  bc_cleanup_run adoptar_prep; BC_AD_TMP=""
   [[ -n "$c" ]] || return 0
   local doms campo
   doms="$(for campo in WEB DNS MAIL; do tr ' ' '\n' <<<"$c" | grep "^$campo=" | cut -d\' -f2 | tr ',' '\n'; done | sed '/^$/d' | sort -u)"
@@ -850,9 +949,33 @@ bc_adoptar_como() {
   local ws
   ws="$(bc_ssh_sudo "mktemp -d /root/.adoptar.XXXXXXXX" < /dev/null | tr -d '\r')"
   [[ -n "$ws" ]] || bc_die "no se pudo crear el directorio de trabajo en el destino."
+  # $ws viaja después dentro de un "rm -rf" remoto (más abajo) y de las
+  # órdenes que envían la clave y la contraseña: se valida ANTES de registrar
+  # nada ni de enviar ningún secreto. Un destino que devolviera algo distinto
+  # de lo que "mktemp -d /root/.adoptar.XXXXXXXX" puede dar (ruido en
+  # ~/.bashrc, una respuesta inesperada) no debe acabar en un "rm -rf" con una
+  # ruta que no se controla.
+  [[ "$ws" =~ ^/root/\.adoptar\.[A-Za-z0-9]{8}$ ]] \
+    || bc_die "el destino devolvió una ruta de trabajo inesperada: '$ws'."
   bc_ssh_sudo "chmod 700 '$ws'" < /dev/null || true
+  # ADR 0012: registrada en cuanto se crea. Es una limpieza REMOTA (por eso no
+  # lleva printf %q: $ws viaja dentro de una orden que se ejecuta en el
+  # destino vía bc_ssh_sudo, con el mismo comillado que ya usaba este trap);
+  # bc_ssh_close se deja en el RETURN, DESPUÉS, para que la conexión siga
+  # abierta mientras se borra el espacio de trabajo.
+  #
+  # SIN "|| true": $ws lleva la clave Restic del origen, la
+  # contraseña de panel nueva y el rclone.conf rescatado, y el script remoto
+  # nunca los borra por su cuenta — esta es la ÚNICA limpieza que los quita.
+  # Un "|| true" aquí hacía que bc_cleanup_eval SIEMPRE viera código 0,
+  # aunque el "rm -rf" remoto hubiera fallado de verdad (red caída, sudo
+  # caducado): C3 nunca reintentaba ni avisaba, y los tres secretos podían
+  # quedarse en el destino sin que nadie se enterase. "rm -rf" de algo que ya
+  # no existe sigue saliendo 0 por su cuenta: la limpieza sigue siendo
+  # idempotente sin necesidad del "|| true".
   # shellcheck disable=SC2064
-  trap "bc_ssh_sudo \"rm -rf '$ws'\" </dev/null >/dev/null 2>&1 || true; bc_ssh_close" RETURN
+  bc_cleanup_register adoptar_ws "bc_ssh_sudo \"rm -rf '$ws'\" </dev/null >/dev/null 2>&1"
+  trap 'bc_cleanup_run adoptar_ws; bc_ssh_close' RETURN
 
   printf '%s' "$clave"      | bc_ssh_sudo_stdin "umask 077; cat > '$ws/clave'"       || bc_die "no se pudo enviar la clave."
   printf '%s' "$contrasena" | bc_ssh_sudo_stdin "umask 077; cat > '$ws/pass'"        || bc_die "no se pudo enviar la contraseña."
@@ -911,6 +1034,11 @@ echo "[2/6] Creando la cuenta '$NUEVO'..."
 CONTACTO="$(grep -oP "^CONTACT='\K[^']*" "$B/hestia/user.conf" 2>/dev/null || true)"
 [ -n "$CONTACTO" ] || CONTACTO="$NUEVO@localhost"
 $H/bin/v-add-user "$NUEVO" "$PASS" "$CONTACTO" || { echo "FALLO: v-add-user"; exit 1; }
+# A partir de aquí la cuenta EXISTE en el destino, tenga o no todo lo demás:
+# la parte local usa esta marca para decidir si tiene sentido enseñar la
+# contraseña del panel, incluso cuando algo posterior (bases de datos, sobre
+# todo) queda a medias.
+touch "$WS/CUENTA_CREADA"
 
 echo "[3/7] Preparando dominios..."
 # ---------------------------------------------------------------------------
@@ -1176,11 +1304,14 @@ echo "  bases: $($H/bin/v-list-databases "$NUEVO" plain 2>/dev/null | wc -l)"
 # La marca solo si además están todas las bases que anunciaba el respaldo: un
 # usuario sin sus datos no es un traslado correcto, y al borrar sin querer este
 # bloque la orden llegó a informar de un éxito con CERO bases restauradas.
-ESPERADAS=$( { echo "${DB:-}" | tr ',' '\n' | grep -c . ; } || echo 0)
-LOGRADAS=$($H/bin/v-list-databases "$NUEVO" plain 2>/dev/null | grep -c . || echo 0)
-if [ "$ESPERADAS" -gt 0 ] && [ "$LOGRADAS" -lt "$ESPERADAS" ]; then
-  echo "AVISO: el respaldo tenía $ESPERADAS base(s) y solo hay $LOGRADAS."
+ESPERADAS=$( { echo "${DB:-}" | tr ',' '\n' | grep -c . ; } || true)
+LOGRADAS=$($H/bin/v-list-databases "$NUEVO" plain 2>/dev/null | grep -c . || true)
+if [ "${ESPERADAS:-0}" -gt 0 ] && [ "${LOGRADAS:-0}" -lt "${ESPERADAS:-0}" ]; then
+  echo "AVISO: el respaldo tenía ${ESPERADAS:-0} base(s) y solo hay ${LOGRADAS:-0}."
   FALLO_DB=1
+  # "esperadas logradas", en ese orden: la parte local resta para decir
+  # "faltan N de M" sin tener que volver a preguntar nada al destino (C6).
+  echo "${ESPERADAS:-0} ${LOGRADAS:-0}" > "$WS/BASES_FALTAN"
 fi
 [ "${FALLO_DB:-0}" -eq 0 ] && touch "$WS/LISTO"
 echo "LISTO"
@@ -1194,23 +1325,60 @@ REMOTO
     BC_DELIBERATE_EXIT=1
     return 1
   fi
+
+  # En cuanto se sabe que la cuenta EXISTE de verdad, se muestra la
+  # contraseña YA — antes de leer nada más del destino: es la única copia
+  # que existe, y una lectura posterior que falle o tarde no debe poder
+  # costarla. Leer LISTO y BASES_FALTAN primero condicionaría la contraseña
+  # a terminar de leer todo eso.
+  local cuenta_creada=0
+  bc_ssh_sudo "test -f '$ws/CUENTA_CREADA'" < /dev/null 2>/dev/null && cuenta_creada=1
+  if (( cuenta_creada )); then
+    bc_warn "Contraseña del panel para '$nuevo': $contrasena"
+    bc_log  "Apúntala ahora: no se guarda en ninguna parte."
+  fi
+
+  local listo=0
+  bc_ssh_sudo "test -f '$ws/LISTO'" < /dev/null 2>/dev/null && listo=1
+
   # El código de salida no basta: una tubería vacía también sale con cero. Se
   # exige la marca que solo escribe el script tras completar los seis pasos.
-  if (( rc_final == 0 )) && ! bc_ssh_sudo "test -f '$ws/LISTO'" < /dev/null 2>/dev/null; then
-    bc_err "El script del destino no llegó al final: no se hizo el traslado."
-    rc_final=1
-  fi
+  (( rc_final == 0 )) && (( ! listo )) && rc_final=1
+
   if (( rc_final != 0 )); then
-    bc_err "El traslado terminó con errores. La cuenta '$nuevo' puede haber quedado a medias."
-    bc_log "Revísala en el panel, o elimínala con: v-delete-user $nuevo"
+    local bases_faltan=""
+    # `if var=$(...); then` en vez de `orden && var=$(...)`: bajo
+    # set -Eeuo pipefail, un fallo del lado derecho de un `&&` como ÚLTIMO
+    # mandato de la lista SÍ dispara errexit; como condición de un `if`,
+    # nunca.
+    if (( ! listo )) && bases_faltan="$(bc_ssh_sudo "cat '$ws/BASES_FALTAN'" < /dev/null)"; then
+      bc_ad_informar_bases_faltan "$nuevo" "$bases_faltan"
+    else
+      bc_err "El traslado terminó con errores. La cuenta '$nuevo' puede haber quedado a medias."
+      bc_log "Revísala en el panel, o elimínala con: v-delete-user $nuevo"
+    fi
     BC_DELIBERATE_EXIT=1
     return 1
   fi
   bc_ok "'$viejo' está en $destino como '$nuevo'."
-  bc_warn "Contraseña del panel para '$nuevo': $contrasena"
-  bc_log  "Apúntala ahora: no se guarda en ninguna parte."
-  bc_log  "Comprueba dominios, correo y bases en el panel antes de dar por buena la migración."
+  bc_log "Comprueba dominios, correo y bases en el panel antes de dar por buena la migración."
   return 0
+}
+
+# Análisis PURO (sin ssh, sin efectos): decide qué decir sobre el contenido
+# de BASES_FALTAN sin operar nunca sobre texto que no se haya validado antes.
+# Si el texto no es EXACTAMENTE "N M" con N y M enteros, ni
+# $(( )) ni [[ -eq ]] lo tocan: un dato del destino que llegara corrupto, con
+# ruido de shell, o deliberadamente hostil, no puede disparar más que un
+# aviso genérico — nunca una expansión aritmética sobre texto ajeno.
+bc_ad_informar_bases_faltan() {
+  local nombre="$1" texto="$2" esperadas="" logradas=""
+  if [[ "$texto" =~ ^([0-9]+)[[:space:]]+([0-9]+)$ ]]; then
+    esperadas="${BASH_REMATCH[1]}"; logradas="${BASH_REMATCH[2]}"
+    bc_err "la cuenta '$nombre' se creó con sus dominios, correo y archivos, pero faltan $(( esperadas - logradas )) de $esperadas bases: ver los avisos de arriba."
+  else
+    bc_err "la cuenta '$nombre' se creó con sus dominios, correo y archivos, pero no se pudo leer cuántas bases faltan: ver los avisos de arriba."
+  fi
 }
 
 # =============================================================================
@@ -1234,11 +1402,19 @@ REMOTO
 # =============================================================================
 
 # Prepara un directorio temporal con el acceso y la clave de un usuario.
-# Deja en BC_AD_TMP la ruta; quien llama se encarga de borrarla.
+# Deja en BC_AD_TMP la ruta; quien llama se encarga de borrarla con
+# bc_cleanup_run adoptar_prep (una sola clave: bc_ad_preparar puede llamarse
+# muchas veces seguidas —una por usuario candidato—, y cada llamada sustituye
+# el temporal de la anterior).
 BC_AD_TMP=""
 bc_ad_preparar() {
   local usuario="$1" claves="$2" rc="$3"
+  # Por si quedó algo de una llamada anterior sin que quien la usó lo borrara.
+  bc_cleanup_run adoptar_prep
   BC_AD_TMP="$(mktemp -d)"; chmod 700 "$BC_AD_TMP"
+  # Registrado ANTES del posible "return 1" de abajo (no hay clave para este
+  # usuario): así ese camino también deja el directorio cubierto.
+  bc_cleanup_register adoptar_prep "rm -rf $(printf '%q' "$BC_AD_TMP")"
   cp "$rc" "$BC_AD_TMP/rclone.conf"; chmod 600 "$BC_AD_TMP/rclone.conf"
   local k; k="$(awk -F'\t' -v u="$usuario" '$1==u{print $2; exit}' <<<"$claves")"
   [[ -n "$k" ]] || return 1
@@ -1287,8 +1463,10 @@ bc_adoptar_historial() {
   for u in "${usuarios[@]}"; do
     bc_section "Historial de '$u'"
     bc_ad_preparar "$u" "$claves" "$rc" || { bc_err "no hay clave de '$u'."; continue; }
-    # shellcheck disable=SC2064
-    trap "rm -rf '$BC_AD_TMP'" RETURN
+    # bc_ad_preparar ya registró "adoptar_prep": no hace falta una clave por
+    # usuario (antes sí, con un trap RETURN que se reescribía en cada vuelta
+    # y solo protegía —y solo con un return normal, nunca con exit— al ÚLTIMO
+    # usuario de la lista).
 
     local ids
     ids="$(RCLONE_CONFIG="$BC_AD_TMP/rclone.conf" RESTIC_PASSWORD_FILE="$BC_AD_TMP/clave" \
@@ -1300,7 +1478,7 @@ for s in d[-int('$cuantas'):][::-1]: print(s['short_id'])
 " 2>/dev/null || true)"
     if [[ -z "$ids" ]]; then
       bc_err "no se pudo abrir el repositorio de '$u'."
-      rm -rf "$BC_AD_TMP"; continue
+      bc_cleanup_run adoptar_prep; continue
     fi
 
     local filas; filas="$(mktemp)"
@@ -1335,7 +1513,7 @@ for s in d[-int('$cuantas'):][::-1]: print(s['short_id'])
     else
       bc_ok "La más reciente es la más completa: se puede usar «latest» con confianza."
     fi
-    rm -rf "$BC_AD_TMP"; BC_AD_TMP=""
+    bc_cleanup_run adoptar_prep; BC_AD_TMP=""
   done
   return 0
 }

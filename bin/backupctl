@@ -73,7 +73,27 @@ bc_trap_err() {
 trap 'bc_trap_err "$BASH_COMMAND"' ERR
 
 bc_cleanup_all() {
+  # Un segundo Ctrl-C mientras se deshace algo (por ejemplo, adoptar
+  # devolviendo el restic.conf de un servidor ajeno) no debe cortar ESA
+  # limpieza a mitad: dejaría el destino peor que si no se hubiera intentado
+  # devolver nada. El proceso ya está saliendo de todos modos.
+  #
+  # IGNORADA, no un manejador que solo marca una variable: la señal del
+  # terminal (Ctrl-C) se manda al GRUPO DE PROCESOS entero, no solo a este
+  # shell — un manejador no vacío solo difiere la señal AQUÍ; el hijo en
+  # primer plano (el ssh que está devolviendo restic.conf) la recibe igual y
+  # muere a mitad de la escritura, dejando el archivo truncado. Con
+  # "ignorada" los hijos heredan esa misma disposición vía exec y terminan lo
+  # que estaban escribiendo. El precio (un ssh de verdad colgado, no solo
+  # cortado por Ctrl-C, ya no se puede interrumpir con una segunda señal) se
+  # acota aparte: bc_ssh_init lleva ServerAliveInterval/CountMax, así que una
+  # conexión muerta de verdad sale sola en menos de un minuto.
+  trap '' INT TERM
   set +e
+  # Primero lo registrado (ADR 0012): puede depender de las credenciales de
+  # MySQL que bc_mysql_cleanup borra a continuación (verify --restore-test
+  # necesita conectar para soltar su base de prueba).
+  bc_cleanup_pending
   [[ -n "${BC_TEMP_DIR:-}" && -d "${BC_TEMP_DIR:-}" ]] && rm -rf "$BC_TEMP_DIR"
   bc_mysql_cleanup 2>/dev/null
 }
@@ -517,6 +537,15 @@ case "$BC_CMD" in
         *) bc_die "opción desconocida para 'adoptar': $1" ;;
       esac
     done
+    # Mismo criterio que _v_snapshot en web/server.py: 'latest' o un hash
+    # hexadecimal de Restic (8-64 caracteres). Sin esto, un valor con
+    # comillas llega SIN escapar hasta una orden remota como root
+    # (lib/adoptar.sh, v-restore-user-full-restic y el heredoc de --como):
+    # la web ya lo valida; la CLI era el vector abierto.
+    if [[ -n "${BC_OPT_SNAPSHOT:-}" && "$BC_OPT_SNAPSHOT" != "latest" \
+          && ! "$BC_OPT_SNAPSHOT" =~ ^[0-9a-f]{8,64}$ ]]; then
+      bc_die "--snapshot debe ser 'latest' o un hash hexadecimal de 8 a 64 caracteres: '$BC_OPT_SNAPSHOT'"
+    fi
     if [[ "${BC_OPT_HISTORIAL:-0}" == "1" ]]; then
       bc_adoptar_historial
     elif [[ "${BC_OPT_INVENTARIO:-0}" == "1" || -z "${BC_OPT_TO:-}" ]]; then

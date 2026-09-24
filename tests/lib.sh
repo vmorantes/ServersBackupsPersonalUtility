@@ -22,19 +22,19 @@ BC_PRUEBA_LIB_LOADED=1
 # BANCO_TMP y BANCO_RAIZ sostienen todas las demás salvaguardas de este
 # archivo (backupctl_prueba, nueva_prueba): si cualquiera de las dos está
 # vacía, no es absoluta, o no es un directorio, cualquier comparación de rutas
-# posterior puede degenerar en "acepta cualquiera" (revisión de la ronda
-# #008: con $BANCO_TMP="", el patrón "$base"/*|"$base" se volvía /*|"", que
-# aceptaba cualquier ruta absoluta). Se comprueba ANTES de cualquier mkdir o
-# rm, y de nuevo dentro de nueva_prueba (defensa en profundidad).
+# posterior puede degenerar en "acepta cualquiera" (con $BANCO_TMP="", el
+# patrón "$base"/*|"$base" se vuelve /*|"", que acepta cualquier ruta
+# absoluta). Se comprueba ANTES de cualquier mkdir o rm, y de nuevo dentro de
+# nueva_prueba (defensa en profundidad).
 #
-# ADR 0010: esto NO basta. La ronda #010 encontró que una suite lanzada a
-# mano, sin pasar por tests/ejecutar.sh, superaba todo lo anterior con solo
-# exportar BANCO_RAIZ/BANCO_TMP a un directorio real — y entonces
-# backupctl_prueba ejecutaba con el PATH real del usuario (mysql, ssh...
-# reales en esta máquina). Por eso, además: la marca .banco que escribe
-# ejecutar.sh en el directorio PADRE de BANCO_TMP tiene que coincidir con
-# BANCO_TESTIGO, y cada orden de ordenes.txt tiene que resolver al enlace que
-# el propio ejecutar.sh creó.
+# ADR 0010: esto NO basta. Una suite lanzada a mano, sin pasar por
+# tests/ejecutar.sh, podría superar todo lo anterior con solo exportar
+# BANCO_RAIZ/BANCO_TMP a un directorio real — y entonces backupctl_prueba
+# ejecutaría con el PATH real del usuario (mysql, ssh... reales en esta
+# máquina). Por eso, además: la marca .banco que escribe ejecutar.sh en el
+# directorio PADRE de BANCO_TMP tiene que coincidir con BANCO_TESTIGO, y cada
+# orden de ordenes.txt tiene que resolver al enlace que el propio
+# ejecutar.sh creó.
 bc_comprobar_entorno_banco() {
   if [[ "$(id -u)" == "0" ]]; then
     echo "tests/lib.sh: no se ejecuta como root." >&2
@@ -307,10 +307,10 @@ EOF
 # declara: su valor por defecto, /usr/local/hestia, no es lo que aquí se
 # vigila (nunca va a estar dentro de un temporal, y no tiene por qué).
 #
-# Ronda #012: un perfil dentro de $BANCO_TMP con env.sh normal (no enlace)
-# podía declarar BACKUP_OUTPUT_DIR/LOG_DIR apuntando FUERA, y backupctl
-# escribía —y con retention, borraba— ahí sin que nada lo impidiera. Esto lo
-# cierra: se valida el CONTENIDO del perfil, no solo su ubicación.
+# Un perfil dentro de $BANCO_TMP con env.sh normal (no enlace) podía declarar
+# BACKUP_OUTPUT_DIR/LOG_DIR apuntando FUERA, y backupctl escribía —y con
+# retention, borraba— ahí sin que nada lo impidiera. Esto lo cierra: se
+# valida el CONTENIDO del perfil, no solo su ubicación.
 #
 # Deja el motivo del fallo en BC_MOTIVO_RUTAS_PERFIL; no imprime ni escribe
 # en .resultados por su cuenta (lo hace quien la llama, como las demás
@@ -405,13 +405,13 @@ bc_comprobar_rutas_perfil() {
 # en $BANCO_TMP/.resultados, no solo en una variable— en cuatro casos: el
 # perfil no está dentro de $BANCO_TMP (T3); su env.sh es un enlace simbólico
 # (podría llevar a cualquier sitio, credenciales reales incluidas); el propio
-# env.sh declara una ruta fuera de $BANCO_TMP (ronda #012:
-# bc_comprobar_rutas_perfil); o el PATH ya no resuelve las órdenes peligrosas
-# a sus falsas (ADR 0010 — la misma comprobación de bc_comprobar_orden_falsa,
-# repetida aquí porque el entorno pudo cambiar entre la carga de la
-# biblioteca y esta llamada). Compara realpath -e/-m de perfil y $BANCO_TMP;
-# si cualquiera de los dos falla o devuelve vacío, SE NIEGA (ronda #008: con
-# base="", "$base"/*|"$base" se volvía /*|"", que aceptaba cualquier ruta).
+# env.sh declara una ruta fuera de $BANCO_TMP (bc_comprobar_rutas_perfil); o
+# el PATH ya no resuelve las órdenes peligrosas a sus falsas (ADR 0010 — la
+# misma comprobación de bc_comprobar_orden_falsa, repetida aquí porque el
+# entorno pudo cambiar entre la carga de la biblioteca y esta llamada).
+# Compara realpath -e/-m de perfil y $BANCO_TMP; si cualquiera de los dos
+# falla o devuelve vacío, SE NIEGA (con base="", "$base"/*|"$base" se
+# volvería /*|"", que aceptaría cualquier ruta).
 backupctl_prueba() {
   local perfil_dir="$1"; shift
   local real base negar=1 motivo=""

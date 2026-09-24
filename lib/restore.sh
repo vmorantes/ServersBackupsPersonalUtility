@@ -58,8 +58,10 @@ bc_restore_run() {
 
   # --- Extracción ------------------------------------------------------------
   local tmp; tmp="$(mktemp -d "${TMPDIR:-/tmp}/backupctl-restore.XXXXXXXX")"
-  # shellcheck disable=SC2064
-  trap "rm -rf '$tmp'" RETURN
+  # ADR 0012: registrada en cuanto se crea, no solo en el trap RETURN (que no
+  # corre si bc_die o una señal terminan el proceso con exit — T20).
+  bc_cleanup_register restore_tmp "rm -rf $(printf '%q' "$tmp")"
+  trap 'bc_cleanup_run restore_tmp' RETURN
 
   local member; member="$(bc_safe_name "$db")"
   if ! unzip -qq "$zip_path" "$member/*" -d "$tmp" 2>/dev/null; then

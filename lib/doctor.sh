@@ -97,8 +97,8 @@ bc_doctor_run() {
   elif bc_mysql_check >/dev/null 2>&1; then
     bc_doc_ok "conexión correcta como '$MYSQL_USER'"
     bc_doc_ok "versión del servidor: $(bc_mysql_version)"
-    local n; n="$(bc_mysql_databases 2>/dev/null | grep -c . || echo 0)"
-    if (( n > 0 )); then bc_doc_ok "$n bases de datos a respaldar"
+    local n; n="$(bc_mysql_databases 2>/dev/null | grep -c . || true)"
+    if (( ${n:-0} > 0 )); then bc_doc_ok "${n:-0} bases de datos a respaldar"
     else bc_doc_fail "0 bases de datos: revisa EXCLUDE_DBS y los privilegios"; fi
 
     # Privilegios concretos que exige el volcado completo
@@ -109,9 +109,9 @@ bc_doctor_run() {
       else bc_doc_warn "sin privilegio $priv: parte del volcado podría fallar"; fi
     done
 
-    local nid; nid="$(bc_mysql_non_innodb 2>/dev/null | grep -c . || echo 0)"
-    if (( nid > 0 )); then
-      bc_doc_warn "$nid tablas no InnoDB: --single-transaction no garantiza coherencia en ellas"
+    local nid; nid="$(bc_mysql_non_innodb 2>/dev/null | grep -c . || true)"
+    if (( ${nid:-0} > 0 )); then
+      bc_doc_warn "${nid:-0} tablas no InnoDB: --single-transaction no garantiza coherencia en ellas"
     else
       bc_doc_ok "todas las tablas son InnoDB (instantánea coherente garantizada)"
     fi

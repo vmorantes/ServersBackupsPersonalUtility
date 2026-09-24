@@ -38,6 +38,148 @@ bc_warn() { BC_WARN_COUNT=$((BC_WARN_COUNT+1)); printf '%s %s[AVISO]%s %s\n' "$(
 bc_err()  { BC_ERR_COUNT=$((BC_ERR_COUNT+1));  printf '%s %s[ERROR]%s %s\n' "$(bc_ts)" "$BC_RED" "$BC_RST" "$*" >&2; }
 bc_die()  { bc_err "$*"; BC_DELIBERATE_EXIT=1; exit "${2:-2}"; }
 
+# -----------------------------------------------------------------------------
+# Registro de limpieza (ADR 0012)
+# -----------------------------------------------------------------------------
+# bc_die y la señal INT/TERM salen con `exit`, no con `return`: un
+# `trap … RETURN` puesto dentro de la función que crea un temporal (o pisa
+# algo remoto) nunca llega a dispararse en esos casos. Este registro es lo que
+# SÍ corre siempre, porque lo ejecuta bc_cleanup_all desde el `trap … EXIT` de
+# bin/backupctl (52), que no se salta nunca.
+#
+# Cada módulo registra la limpieza EN CUANTO crea lo que habrá que deshacer,
+# antes de cualquier operación que pueda fallar, y en el camino normal la
+# ejecuta con bc_cleanup_run (el trap … RETURN de siempre puede quedarse,
+# llamando a bc_cleanup_run en vez de hacer el rm -rf a mano). Las órdenes se
+# guardan como TEXTO y se ejecutan con `eval` en este mismo proceso —nunca en
+# una subshell—, así que una función definida en el módulo (bc_verify_drop_scratch,
+# por ejemplo) sigue pudiendo nombrarse en el texto registrado.
+#
+# Deben ser idempotentes: con INT/TERM a mitad de una limpieza, o si el mismo
+# camino normal también llama a bc_cleanup_run, pueden llegar a "ejecutarse"
+# dos veces (la segunda no encuentra la clave y no hace nada).
+#
+# OJO con las subshells: lo que se registra dentro de "$(...)" o de una
+# tubería vive en un proceso hijo y se pierde con él; una función que cree
+# algo ahí necesita resolverlo por su cuenta, no con este registro.
+declare -ga BC_CLEANUP_KEYS=()
+declare -gA BC_CLEANUP_CMDS=()
+# Código de salida de la ÚLTIMA orden que evaluó bc_cleanup_eval. No lo mira
+# bc_cleanup_eval por su cuenta (sigue devolviendo siempre 0, ver ahí): lo
+# dejan aquí bc_cleanup_run y bc_cleanup_pending para distinguir una limpieza
+# que TERMINÓ en error de una que se interrumpió a mitad — sin esto no hay
+# forma de saber si "ya se ejecutó" también quería decir "y salió bien".
+BC_CLEANUP_ULTIMO_RC=0
+
+# Apunta (o sustituye) una limpieza pendiente bajo <clave>. Si la clave ya
+# existía, la orden se sustituye pero NO se duplica en el orden de ejecución.
+bc_cleanup_register() {
+  local clave="$1" orden="$2"
+  [[ -n "${BC_CLEANUP_CMDS[$clave]+x}" ]] || BC_CLEANUP_KEYS+=("$clave")
+  BC_CLEANUP_CMDS["$clave"]="$orden"
+}
+
+# Ejecuta ya la limpieza de <clave>, si existe, y la quita del registro
+# DESPUÉS —no antes— de ejecutarla. NUNCA en una subshell: bc_verify_drop_scratch,
+# por ejemplo, tiene que poder dejar BC_SCRATCH_DB="" en ESTE proceso, no en
+# uno que desaparece al terminar.
+#
+# El orden (ejecutar, LUEGO quitar) importa: si el proceso muere a mitad de
+# bc_cleanup_eval (una señal que no sea INT/TERM, o esta misma limpieza
+# corriendo dentro de bc_cleanup_pending — ver ahí), la clave SIGUE
+# registrada y bc_cleanup_pending la reintenta al salir. Esto exige que toda
+# limpieza sea idempotente (ya lo era: un rm -rf o un cat > repetidos no
+# hacen daño la segunda vez).
+#
+# Si la orden TERMINA en error (no se interrumpe: llega a devolver un código
+# distinto de 0), la clave se deja registrada en vez de quitarla: al salir,
+# bc_cleanup_pending le da un reintento más (C3). bc_cleanup_run en sí nunca
+# refleja ese fallo en su propio código de salida —igual que bc_cleanup_eval—
+# para no disparar el errexit de quien la llama por algo que ya gestiona su
+# propia marca (BC_AD_CONF_FALLO, por ejemplo); quien necesite saberlo
+# consulta BC_CLEANUP_ULTIMO_RC justo después de llamarla.
+bc_cleanup_run() {
+  local clave="$1"
+  [[ -n "${BC_CLEANUP_CMDS[$clave]+x}" ]] || return 0
+  local orden="${BC_CLEANUP_CMDS[$clave]}"
+  bc_cleanup_eval "$orden"
+  if (( BC_CLEANUP_ULTIMO_RC == 0 )); then
+    unset 'BC_CLEANUP_CMDS[$clave]'
+    bc_cleanup_quitar_clave "$clave"
+  fi
+  return 0
+}
+
+# Evalúa una orden de limpieza sin que su fallo interrumpa el proceso (set -e
+# global de bin/backupctl) ni dispare el trap ERR como "fallo no controlado":
+# una limpieza que falla es una limpieza a medias, no un bug. Se restauran
+# los dos exactamente como estaban, nunca con una subshell de por medio.
+#
+# Nombres de variable con prefijo _bc_cleanup_ a propósito: la orden que se
+# evalúa es texto de otro módulo y no debe poder pisar estas locales.
+#
+# "Restaurar exactamente como estaba" incluye el propio errexit: un `set -e`
+# incondicional al final impondría errexit sobre quien llamó con `set +e`
+# (bc_cleanup_all, por ejemplo, hace `set +e` antes de bc_cleanup_pending) en
+# vez de devolverle su estado. Se guarda con `[[ $- == *e* ]]` (igual que se
+# guarda el trap ERR) y se reactiva SOLO si estaba activo.
+#
+# Termina con `return 0` explícito: sin un trap ERR previo (fuera de
+# bin/backupctl, que siempre lo pone, esto puede pasar en una prueba), la
+# última línea de abajo devuelve 1 con toda normalidad (su lado izquierdo es
+# falso) y, sin el return, ESE 1 se convertiría en el código de salida de
+# bc_cleanup_eval — y de bc_cleanup_run, que termina llamándola — activando
+# el errexit que se acaba de restaurar por algo que no fue ningún fallo.
+bc_cleanup_eval() {
+  local _bc_cleanup_orden="$1" _bc_cleanup_previo _bc_cleanup_errexit=0
+  [[ $- == *e* ]] && _bc_cleanup_errexit=1
+  _bc_cleanup_previo="$(trap -p ERR)"
+  trap - ERR
+  set +e
+  eval "$_bc_cleanup_orden"
+  BC_CLEANUP_ULTIMO_RC=$?
+  (( _bc_cleanup_errexit )) && set -e
+  [[ -n "$_bc_cleanup_previo" ]] && eval "$_bc_cleanup_previo"
+  return 0
+}
+
+# Quita <clave> del registro SIN ejecutar su limpieza (para cuando ya no hace
+# falta deshacer nada: por ejemplo, tras publicar con éxito lo que la
+# limpieza habría borrado — restic.sh, tras el mv final).
+bc_cleanup_forget() {
+  local clave="$1"
+  [[ -n "${BC_CLEANUP_CMDS[$clave]+x}" ]] || return 0
+  unset 'BC_CLEANUP_CMDS[$clave]'
+  bc_cleanup_quitar_clave "$clave"
+}
+
+bc_cleanup_quitar_clave() {
+  local clave="$1" k restantes=()
+  for k in "${BC_CLEANUP_KEYS[@]}"; do
+    [[ "$k" == "$clave" ]] || restantes+=("$k")
+  done
+  BC_CLEANUP_KEYS=("${restantes[@]}")
+}
+
+# Ejecuta TODAS las limpiezas pendientes, en orden INVERSO al de registro (lo
+# último creado es lo primero en deshacerse: si una limpieza remota depende de
+# que la conexión ssh siga abierta, y esta se registró antes que la conexión
+# se cerrara, el orden inverso la ejecuta primero). Cada una en su propio
+# `set +e`: que una falle no impide las siguientes. Vacía el registro entero.
+bc_cleanup_pending() {
+  local i clave orden
+  for (( i = ${#BC_CLEANUP_KEYS[@]} - 1; i >= 0; i-- )); do
+    clave="${BC_CLEANUP_KEYS[$i]}"
+    orden="${BC_CLEANUP_CMDS[$clave]:-}"
+    if [[ -n "$orden" ]]; then
+      bc_cleanup_eval "$orden"
+      (( BC_CLEANUP_ULTIMO_RC != 0 )) && bc_err "la limpieza '$clave' terminó en error (código $BC_CLEANUP_ULTIMO_RC)."
+    fi
+  done
+  BC_CLEANUP_KEYS=()
+  BC_CLEANUP_CMDS=()
+}
+
 # Solo se ve con BC_DEBUG=1. Útil para depurar sin ensuciar el uso normal.
 bc_debug() { [[ "${BC_DEBUG:-0}" == "1" ]] || return 0; printf '%s %s[DEBUG]%s %s\n' "$(bc_ts)" "$BC_BLU" "$BC_RST" "$*" >&2; }
 

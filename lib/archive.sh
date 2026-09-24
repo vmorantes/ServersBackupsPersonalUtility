@@ -159,8 +159,8 @@ bc_archive_status() {
     bc_log "        Para verlo:  backupctl -p $BC_PROFILE remote status"
   elif bc_mysql_check >/dev/null 2>&1; then
     local dbs
-    dbs="$(bc_mysql_databases 2>/dev/null | grep -c . || echo 0)"
-    bc_ok "MySQL: accesible como '$MYSQL_USER', $dbs bases de datos a respaldar."
+    dbs="$(bc_mysql_databases 2>/dev/null | grep -c . || true)"
+    bc_ok "MySQL: accesible como '$MYSQL_USER', ${dbs:-0} bases de datos a respaldar."
   else
     bc_err "MySQL: NO se puede conectar como '$MYSQL_USER'."
     problems=$(( problems + 1 ))
