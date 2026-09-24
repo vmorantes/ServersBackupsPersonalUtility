@@ -69,8 +69,12 @@ def _v_segments(v):
 #   forma "flag:--x"   -> se añade "--x" si el valor es verdadero
 # Un destino SSH: usuario@host o solo host. Se acota a lo que puede ser un
 # nombre de máquina o una IP, porque este valor acaba en una línea de órdenes.
+# Ni el usuario ni el host pueden EMPEZAR por guion: ssh tomaría un
+# "-oProxyCommand=..." por una opción suya y no por un destino. Mismo patrón
+# que bc_valido_destino en lib/core.sh.
 def _v_destino(v):
-    return bool(re.match(r"^(?:[A-Za-z0-9._-]{1,32}@)?[A-Za-z0-9._-]{1,253}$", v))
+    return bool(re.match(
+        r"^(?:[A-Za-z0-9._][A-Za-z0-9._-]{0,31}@)?[A-Za-z0-9._][A-Za-z0-9._-]{0,252}$", v))
 
 
 # Lista de usuarios separada por comas, con los nombres que admite HestiaCP.
