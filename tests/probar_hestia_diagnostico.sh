@@ -257,35 +257,35 @@ test_repo_probe_neither_answers_is_unknown() {
 # de los que salen al tratar el '?' como un 0, que también son AVISO pero
 # afirman algo que nadie comprobó.
 
-test_account_with_unreadable_key_is_a_warning() {
+test_account_with_unreadable_key_is_blindness() {
   nueva_prueba t23
-  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "?" "1" "1")" "AVISO" \
-    "contraseña ilegible: AVISO, no OK" "si tiene contraseña de repositorio"
+  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "?" "1" "1")" "CIEGO" \
+    "contraseña ilegible: CIEGO, ni OK ni AVISO" "si tiene contraseña de repositorio"
 }
 
-test_account_with_unreadable_repo_is_a_warning() {
+test_account_with_unreadable_repo_is_blindness() {
   nueva_prueba t24
-  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "1" "?" "1")" "AVISO" \
-    "repositorio no sondeable: AVISO, no OK" "si su repositorio existe"
+  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "1" "?" "1")" "CIEGO" \
+    "repositorio no sondeable: CIEGO, ni OK ni AVISO" "si su repositorio existe"
 }
 
-test_account_with_unreadable_mark_is_a_warning() {
+test_account_with_unreadable_mark_is_blindness() {
   nueva_prueba t25
-  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "1" "1" "?")" "AVISO" \
-    "marca ilegible: AVISO, no OK" "si está marcada para respaldo incremental"
+  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "1" "1" "?")" "CIEGO" \
+    "marca ilegible: CIEGO, ni OK ni AVISO" "si está marcada para respaldo incremental"
 }
 
-test_account_with_nothing_readable_is_a_warning() {
+test_account_with_nothing_readable_is_blindness() {
   nueva_prueba t26
-  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "?" "?" "?")" "AVISO" \
-    "los tres datos ilegibles: AVISO, no OK" "no se pudo comprobar"
+  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "?" "?" "?")" "CIEGO" \
+    "los tres datos ilegibles: CIEGO, ni OK ni AVISO" "no se pudo comprobar"
 }
 
 # El '?' tampoco puede colarse como 0 cuando el 0 daría un veredicto peor: sin
 # saber si está marcada, no se puede decir «esta cuenta no entra».
 test_unreadable_mark_is_not_treated_as_zero() {
   nueva_prueba t27
-  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "0" "0" "?")" "AVISO" \
+  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "0" "0" "?")" "CIEGO" \
     "marca ilegible y nada más: no se afirma que no entre" "si está marcada para respaldo incremental"
 }
 
@@ -509,12 +509,13 @@ test_blind_verdicts_are_counted_apart_from_warnings() {
     "un fallo sigue sumando a fallos"
 }
 
-# Quien llame sin contador de ciegos no pierde el veredicto: se cuenta como
-# aviso, que es lo que hacía antes.
-test_a_caller_without_a_blind_counter_still_counts_it() {
+# Quien llama sin contador de ciegos es porque los cuenta él, por dato y no por
+# veredicto. Si el pintor los contara además como avisos, la misma ceguera
+# saldría dos veces en el resumen.
+test_a_caller_without_a_blind_counter_is_not_double_counted() {
   nueva_prueba t49
-  afirmar_igual "$(contar_veredicto "$(printf 'CIEGO\tno se pudo leer')" sin)" "0 1 0" \
-    "sin contador de ciegos, un ciego cuenta como aviso"
+  afirmar_igual "$(contar_veredicto "$(printf 'CIEGO\tno se pudo leer')" sin)" "0 0 0" \
+    "sin contador de ciegos, el pintor no lo suma a los avisos"
 }
 
 # --- ruta del repositorio ----------------------------------------------------
@@ -542,6 +543,14 @@ test_repo_path_with_wrapper_remote_is_a_warning() {
   nueva_prueba t20
   afirmar_nivel "$(veredicto bc_hestia_diag_ruta_repo "rclone:almacen:/IncrementalBackups" "alias")" \
     "AVISO" "remoto envolvente: AVISO"
+}
+
+# El mismo caso, ya como veredicto: no puede salir OK, y tampoco es un aviso
+# sobre algo que se miró. Es ceguera.
+test_repo_path_with_unreadable_remote_type_is_blindness() {
+  nueva_prueba t50
+  afirmar_nivel "$(veredicto bc_hestia_diag_ruta_repo "rclone:almacen:/IncrementalBackups" "?")" \
+    "CIEGO" "tipo del remoto ilegible: CIEGO, nunca OK" "no se pudo leer el tipo"
 }
 
 test_repo_path_absolute_on_s3_is_ok() {
@@ -574,10 +583,10 @@ test_no_registered_repo_and_unmarked_says_only_that
 test_repo_probe_account_answers_means_it_exists
 test_repo_probe_parent_answers_and_account_does_not_means_it_is_gone
 test_repo_probe_neither_answers_is_unknown
-test_account_with_unreadable_key_is_a_warning
-test_account_with_unreadable_repo_is_a_warning
-test_account_with_unreadable_mark_is_a_warning
-test_account_with_nothing_readable_is_a_warning
+test_account_with_unreadable_key_is_blindness
+test_account_with_unreadable_repo_is_blindness
+test_account_with_unreadable_mark_is_blindness
+test_account_with_nothing_readable_is_blindness
 test_unreadable_mark_is_not_treated_as_zero
 test_probe_text_survives_a_sudo_prefix
 test_probe_reports_yes_no_and_error_apart
@@ -587,7 +596,7 @@ test_snapshot_count_does_not_depend_on_lines
 test_empty_array_means_none
 test_non_json_output_is_not_read_as_no_backups
 test_blind_verdicts_are_counted_apart_from_warnings
-test_a_caller_without_a_blind_counter_still_counts_it
+test_a_caller_without_a_blind_counter_is_not_double_counted
 test_exit_code_is_zero_when_everything_was_read_and_fine
 test_warnings_alone_do_not_change_the_exit_code
 test_a_failure_changes_the_exit_code
@@ -598,6 +607,7 @@ test_repo_path_missing_is_a_failure
 test_repo_path_relative_with_local_remote_is_a_failure
 test_repo_path_inside_a_website_is_a_failure
 test_repo_path_with_wrapper_remote_is_a_warning
+test_repo_path_with_unreadable_remote_type_is_blindness
 test_repo_path_absolute_on_s3_is_ok
 
 fin_de_suite

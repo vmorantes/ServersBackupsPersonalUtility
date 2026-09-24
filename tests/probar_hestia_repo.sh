@@ -178,6 +178,39 @@ test_other_scheme_s3_with_dotdot_is_rejected() {
   afirmar_contiene "$BANCO_TMP/t17/salida.log" "CODIGO:1" "s3:bucket/../otro se rechaza por los '..'"
 }
 
+# El caso que motiva todo esto: un remoto de rclone cuyo tipo NO se pudo leer,
+# con una ruta absoluta. Antes pasaba en silencio y el diagnóstico decía «la
+# ruta no cae dentro de ninguna web» — afirmando lo que nadie miró. Si ese
+# remoto fuera envolvente, la ruta absoluta no garantiza nada, que es
+# exactamente como un repositorio acabó dentro de un sitio web (T24).
+test_unreadable_type_with_absolute_path_does_not_pass_in_silence() {
+  nueva_prueba t18
+  local salida; salida="$(ejecutar_validar_repo "rclone:almacen:/IncrementalBackups" "?")"
+  echo "$salida" > "$BANCO_TMP/t18/salida.log"
+  afirmar_contiene "$BANCO_TMP/t18/salida.log" "CODIGO:0" "no se rechaza: puede estar perfectamente"
+  afirmar_contiene "$BANCO_TMP/t18/salida.log" "AVISO" "pero NO pasa en silencio"
+  afirmar_contiene "$BANCO_TMP/t18/salida.log" "no se pudo leer el tipo" \
+    "y dice exactamente qué no se pudo saber"
+}
+
+# Con la ruta relativa, el tipo ilegible se sigue rechazando, igual que antes.
+test_unreadable_type_with_relative_path_is_still_rejected() {
+  nueva_prueba t19
+  local salida; salida="$(ejecutar_validar_repo "rclone:almacen:hestiacp/" "?")"
+  echo "$salida" > "$BANCO_TMP/t19/salida.log"
+  afirmar_contiene "$BANCO_TMP/t19/salida.log" "CODIGO:1" "tipo ilegible + ruta relativa: se rechaza"
+}
+
+# Y el tipo VACÍO sigue significando «aquí no hay tipo que mirar»: un
+# repositorio que no es de rclone no tiene por qué arrastrar un aviso.
+test_empty_type_still_means_not_applicable() {
+  nueva_prueba t20
+  local salida; salida="$(ejecutar_validar_repo "sftp:servidor.example.org:/respaldos" "")"
+  echo "$salida" > "$BANCO_TMP/t20/salida.log"
+  afirmar_contiene "$BANCO_TMP/t20/salida.log" "CODIGO:0" "tipo vacío: pasa"
+  afirmar_no_contiene "$BANCO_TMP/t20/salida.log" "AVISO" "y sin aviso: no hay tipo que leer"
+}
+
 test_single_quote_is_rejected
 test_shell_metacharacters_are_rejected
 test_rclone_repo_without_second_colon_is_rejected
@@ -195,5 +228,8 @@ test_other_scheme_s3_url_with_double_slash_passes
 test_other_scheme_sftp_absolute_path_passes
 test_other_scheme_sftp_inside_a_website_is_rejected
 test_other_scheme_s3_with_dotdot_is_rejected
+test_unreadable_type_with_absolute_path_does_not_pass_in_silence
+test_unreadable_type_with_relative_path_is_still_rejected
+test_empty_type_still_means_not_applicable
 
 fin_de_suite

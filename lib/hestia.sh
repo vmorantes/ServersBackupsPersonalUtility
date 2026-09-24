@@ -343,7 +343,7 @@ bc_hestia_diag_cuenta() {
     [[ "$marcada" == "?" ]] && faltan+=", si está marcada para respaldo incremental"
     [[ "$clave"   == "?" ]] && faltan+=", si tiene contraseña de repositorio"
     [[ "$repo"    == "?" ]] && faltan+=", si su repositorio existe"
-    bc_hestia_veredicto AVISO "no se pudo comprobar${faltan#,}. Sin ese dato no se puede decir si esta cuenta se respalda: compruébalo en el servidor"
+    bc_hestia_veredicto CIEGO "no se pudo comprobar${faltan#,}. Sin ese dato no se puede decir si esta cuenta se respalda: compruébalo en el servidor"
     return 0
   fi
 
@@ -418,7 +418,8 @@ bc_hestia_juzgar_repo() {
 }
 
 # ¿La ruta que hay registrada HOY en el servidor es una ruta sensata?
-# $1 repositorio registrado   $2 tipo del remoto de rclone (o vacío)
+# $1 repositorio registrado   $2 tipo del remoto: el tipo, '?' si no se pudo
+#    leer, o vacío si no hay tipo que mirar
 #
 # No duplica la lógica: llama a bc_hestia_validar_repo y traduce. La llamada va
 # dentro de $( ), que es una subshell: así ni sus mensajes ni los contadores
@@ -438,7 +439,11 @@ bc_hestia_diag_ruta_repo() {
     # Se queda con la primera línea: es la que dice QUÉ está mal.
     bc_hestia_veredicto FALLO "la ruta registrada no es segura: $(sed -n '1p' <<<"$salida" | sed 's/.*\[ERROR\] *//')"
   elif [[ -n "$salida" ]]; then
-    bc_hestia_veredicto AVISO "$(sed -n '1p' <<<"$salida" | sed 's/.*\[AVISO\] *//')"
+    # Con el tipo sin leer, lo que sale no es un aviso sobre algo que se miró:
+    # es la constancia de que no se pudo mirar. Cuenta como ceguera.
+    local nivel=AVISO
+    [[ "$tipo" == "?" ]] && nivel=CIEGO
+    bc_hestia_veredicto "$nivel" "$(sed -n '1p' <<<"$salida" | sed 's/.*\[AVISO\] *//')"
   else
     bc_hestia_veredicto OK "la ruta registrada ('$repo') no cae dentro de ninguna web ni depende del directorio de trabajo"
   fi
@@ -561,6 +566,9 @@ bc_hestia_diagnosticar() {
     tipo_remoto="$( { bc_hestia_root "rclone config show $(printf '%q' "$rem") 2>/dev/null \
         | awk '/^type[[:space:]]*=/{sub(/^type[[:space:]]*=[[:space:]]*/,\"\"); print; exit}'" \
         || true; } | tr -d '\r' )"
+    # Es un remoto de rclone: aquí SÍ hay un tipo que mirar. Si no salió nada,
+    # no es «no aplica», es «no lo pude leer», y eso se dice con '?'.
+    [[ -n "$tipo_remoto" ]] || tipo_remoto='?'
   fi
   bc_hestia_pintar_veredicto "Ruta del repositorio" "$(bc_hestia_diag_ruta_repo "$repo" "$tipo_remoto")" \
     fallos avisos
@@ -725,12 +733,17 @@ bc_hestia_pintar_veredicto() {
   case "$nivel" in
     FALLO) bc_err  "$etiqueta: $mensaje"; printf -v "$n_fallos" '%s' "$(( ${!n_fallos} + 1 ))" ;;
     AVISO) bc_warn "$etiqueta: $mensaje"; printf -v "$n_avisos" '%s' "$(( ${!n_avisos} + 1 ))" ;;
-    # CIEGO se pinta como un aviso pero NO se cuenta como tal: no es algo que
-    # se miró y no gusta, es algo que no se pudo saber. Sin contador propio
-    # pasado, se cuenta como aviso, que es lo de antes.
+    # CIEGO se pinta como un aviso —al usuario el nombre interno le da igual—
+    # pero NO se cuenta como tal: un aviso es algo que se miró y no gusta; una
+    # ceguera es algo que no se pudo saber, y sumarlas deja al usuario creyendo
+    # que el diagnóstico fue completo.
+    #
+    # Sin contador de ciegos, NO se cuenta en ningún sitio: quien llama así es
+    # porque los cuenta él con más detalle (el veredicto de una cuenta puede
+    # tapar hasta tres datos ilegibles, y el contador cuenta por dato, no por
+    # veredicto). Contarlo aquí además sería contarlo dos veces.
     CIEGO) bc_warn "$etiqueta: $mensaje"
-           if [[ -n "$n_ciegos" ]]; then printf -v "$n_ciegos" '%s' "$(( ${!n_ciegos} + 1 ))"
-           else printf -v "$n_avisos" '%s' "$(( ${!n_avisos} + 1 ))"; fi ;;
+           [[ -n "$n_ciegos" ]] && printf -v "$n_ciegos" '%s' "$(( ${!n_ciegos} + 1 ))" ;;
     *)     bc_ok   "$etiqueta: $mensaje" ;;
   esac
 }
@@ -888,8 +901,8 @@ bc_hestia_texto_anuales_registro() {
 # así que una ruta local reproducía el incidente sin que nada lo dijera).
 # $1 repositorio tal como se registrará: rclone:remoto:ruta, una ruta local
 #    absoluta (/ruta), u otro esquema de restic (sftp:, s3:, b2:…)
-# $2 tipo del remoto de rclone (local, alias, s3, …) o vacío si no se pudo
-#    saber, o si el repositorio no es de tipo rclone:
+# $2 tipo del remoto de rclone (local, alias, s3, …), '?' si es de rclone y no
+#    se pudo leer su tipo, o vacío si no hay tipo que mirar
 # Devuelve 0 si es aceptable, 1 tras explicar por qué no. Función pura: no
 # conecta a nada, no lee ni escribe, solo mira el texto que se le pasa.
 bc_hestia_validar_repo() {
@@ -999,6 +1012,30 @@ bc_hestia_validar_repo() {
     bc_warn "el remoto${rem:+ '$rem'} es de tipo $tipo: envuelve a OTRO remoto."
     bc_warn "Una ruta absoluta NO garantiza nada aquí — la raíz del remoto real es"
     bc_warn "la que manda, y desde aquí no se puede saber a dónde apunta."
+    bc_warn "Comprueba tú mismo que su destino no está dentro de una web."
+    return 0
+  fi
+
+  # El tipo VACÍO y el tipo '?' NO son lo mismo, y confundirlos convierte un
+  # fallo de lectura en un aprobado:
+  #   ""   no hay tipo que mirar (el repositorio no es de rclone, no aplica).
+  #   '?'  es de rclone y NO se pudo leer su tipo.
+  # Antes los dos caían aquí, y con una ruta absoluta la función devolvía 0 sin
+  # más: el diagnóstico acababa diciendo «la ruta registrada no cae dentro de
+  # ninguna web». Eso es afirmar lo que no se miró. Si ese remoto fuera
+  # envolvente (alias, crypt, union…), la ruta absoluta NO garantiza nada —la
+  # raíz del remoto real es la que manda—, y por ahí fue exactamente como un
+  # repositorio acabó dentro de un sitio web servido por internet (T24).
+  if [[ "$tipo" == "?" ]]; then
+    if [[ "$ruta" != /* ]]; then
+      bc_err "no se pudo determinar el tipo del remoto${rem:+ '$rem'}."
+      bc_log  "No se registra a ciegas una ruta relativa: escríbela absoluta, o"
+      bc_log  "comprueba que el remoto existe en el servidor."
+      return 1
+    fi
+    bc_warn "no se pudo leer el tipo del remoto${rem:+ '$rem'}: desde aquí no se"
+    bc_warn "puede saber a dónde apunta. Si fuera de tipo envolvente (alias, crypt,"
+    bc_warn "union…), una ruta absoluta NO bastaría."
     bc_warn "Comprueba tú mismo que su destino no está dentro de una web."
     return 0
   fi
