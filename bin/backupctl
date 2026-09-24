@@ -157,6 +157,7 @@ ${BC_BLD}BLINDAJE (HestiaCP)${BC_RST}
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia rclone${BC_RST}          configurar el remoto (S3/Mega S4, disco, NAS)
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia restic${BC_RST}          registrar el host de respaldo y su retención
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia cron${BC_RST}            activar el cron de Restic
+  ${BC_YEL}~${BC_RST} ${BC_CYA}hestia cuentas${BC_RST}         marcar las cuentas para respaldo incremental
   ${BC_GRN}·${BC_RST} ${BC_CYA}hestia verify${BC_RST}          instantáneas, integridad y espacio real
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia keys${BC_RST}            rescatar restic.conf Y rclone.conf
   ${BC_GRN}·${BC_RST} ${BC_CYA}hestia dbs${BC_RST}             qué bases conoce HestiaCP y cuáles no (clave al migrar)
@@ -535,6 +536,7 @@ case "$BC_CMD" in
         --endpoint) BC_OPT_RC_ENDPOINT="${2:-}"; shift 2 ;;
         --region) BC_OPT_RC_REGION="${2:-}"; shift 2 ;;
         --desde-repo) BC_OPT_RC_REPO=1; shift ;;
+        --usuarios)  BC_OPT_USERS="${2:-}"; bc_exigir_usuarios "$BC_OPT_USERS"; shift 2 ;;
         *) bc_die "opción desconocida para 'hestia $_sub': $1" ;;
       esac
     done
@@ -548,9 +550,10 @@ case "$BC_CMD" in
       dbs|bases) bc_hestia_dbs ;;
       restic) bc_hestia_restic ;;
       cron)   bc_hestia_cron ;;
+      cuentas) bc_hestia_cuentas ;;
       verify) bc_hestia_verify ;;
       keys)   bc_hestia_keys ;;
-      *) bc_die "subórdenes de 'hestia': status setup rclone restic cron verify keys donde users dbs" ;;
+      *) bc_die "subórdenes de 'hestia': status setup rclone restic cron cuentas verify keys donde users dbs" ;;
     esac
     ;;
 

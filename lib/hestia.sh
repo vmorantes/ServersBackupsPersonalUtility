@@ -474,6 +474,271 @@ bc_hestia_diag_ruta_repo() {
 }
 
 # =============================================================================
+# Marcar las cuentas para respaldo incremental
+# =============================================================================
+# EL PASO MÁS PELIGROSO DE LOS OCHO, y el motivo está en la fuente de HestiaCP
+# 1.10.4:
+#
+#   - Lo que de verdad hace que una cuenta se respalde es BACKUPS_INCREMENTAL
+#     (con S) en SU user.conf. El interruptor global no sirve para eso.
+#   - v-change-user-config-value con una clave que NO existe dispara un
+#     v-rebuild-user COMPLETO —useradd si falta el usuario del sistema,
+#     reescritura de permisos, usermod, jaula sftp, colas de disco y tráfico—
+#     y después llama a update_user_value, que solo escribe si la línea ya
+#     estaba. Es decir: una operación enorme que encima puede no escribir nada.
+#   - rebuild_user_conf solo repara una lista cerrada de claves, y
+#     BACKUPS_INCREMENTAL no está en ella.
+#
+# De ahí la regla que manda aquí: ANTES de llamar a nada se comprueba que la
+# clave existe en ese user.conf. Si no existe, no se llama. Se explica por qué
+# y se ofrece la vía del paquete, que NO se ejecuta desde aquí: reaplicar un
+# paquete toca TODAS las cuentas que lo usan y cambia shells, cuotas y
+# límites. Eso no puede pasar como efecto colateral de «quiero respaldos».
+#
+# Y se trabaja cuenta por cuenta, con su copia, su relectura y su estado: una
+# que falle no impide intentar las demás, pero el resultado global lo refleja.
+bc_hestia_cuentas() {
+  bc_hestia_conectar
+  trap 'bc_hestia_cerrar' RETURN
+
+  bc_section "Cuentas en el respaldo incremental"
+
+  local lista
+  lista="$(bc_hestia_read "$HESTIA_DIR/bin/v-list-users plain" || true)"
+  if [[ -z "$lista" ]]; then
+    bc_err "no se pudo leer la lista de cuentas del panel."
+    bc_log  "Sin saber qué cuentas hay no se toca ninguna."
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+
+  # Solo las que pida --usuarios, si se pidió alguna.
+  local pedidas="${BC_OPT_USERS:-}"
+  local cuentas=() u
+  while IFS= read -r u; do
+    u="$(awk '{print $1}' <<<"$u")"
+    [[ -z "$u" || "$u" == "USER" ]] && continue
+    if [[ -n "$pedidas" ]]; then
+      [[ ",$pedidas," == *",$u,"* ]] || continue
+    fi
+    cuentas+=("$u")
+  done <<<"$lista"
+
+  if (( ${#cuentas[@]} == 0 )); then
+    bc_err "ninguna cuenta que tocar${pedidas:+ (se pidieron: $pedidas)}."
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+
+  # --- Qué hay hoy en cada una ----------------------------------------------
+  # Se lee TODO antes de escribir NADA: así el ensayo y el informe dicen lo
+  # mismo, y el usuario ve la foto completa antes de decidir.
+  local -a estado_de=() ; local conf marca
+  for u in "${cuentas[@]}"; do
+    conf="$(bc_hestia_leer_texto "cat $(printf '%q' "$HESTIA_DIR/data/users/$u/user.conf")")" \
+      && marca="$(bc_hestia_marca_de "$conf")" || marca="ilegible"
+    estado_de+=("$u:$marca")
+  done
+
+  bc_hestia_pintar_cuentas "${estado_de[@]}"
+
+  if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
+    bc_step "Simulación (--dry-run): esto es lo que PASARÍA, no lo que ha pasado."
+    bc_hestia_plan_cuentas "${estado_de[@]}"
+    bc_ok "No se ha tocado nada, y no se ha guardado ningún informe."
+    return 0
+  fi
+
+  # Las que no tienen la clave se nombran y se explican ANTES de preguntar: es
+  # parte de a qué está diciendo que sí, y de lo que va a quedar sin hacer.
+  local a_tocar=() sin_clave=()
+  for marca in "${estado_de[@]}"; do
+    case "${marca#*:}" in
+      no)        a_tocar+=("${marca%%:*}") ;;
+      sin-clave) sin_clave+=("${marca%%:*}") ;;
+    esac
+  done
+  if (( ${#sin_clave[@]} > 0 )); then
+    echo
+    bc_warn "NO SE PUEDEN MARCAR desde aquí (${#sin_clave[@]}): ${sin_clave[*]}"
+    bc_hestia_explicar_sin_clave
+  fi
+
+  if (( ${#a_tocar[@]} == 0 )); then
+    bc_ok "No hay ninguna cuenta que marcar."
+    (( ${#sin_clave[@]} > 0 )) && { BC_DELIBERATE_EXIT=1; return 1; }
+    return 0
+  fi
+  echo
+
+  bc_confirm "¿Marcar ${#a_tocar[@]} cuenta(s) para respaldo incremental?" y \
+    || { bc_log "Cancelado."; return 0; }
+
+  bc_informe_abrir "Marcar cuentas para respaldo incremental" "${DEPLOY_HOST:-este servidor}"
+
+  local rc=0 hechas=0 fallidas=0
+  for u in "${a_tocar[@]}"; do
+    echo
+    bc_log "Cuenta '$u':"
+    # Una que falle no impide intentar las demás: son independientes, y dejar
+    # nueve sin respaldo porque la décima falló no ayuda a nadie.
+    if bc_hestia_marcar_cuenta "$u"; then
+      hechas=$(( hechas + 1 ))
+    else
+      fallidas=$(( fallidas + 1 )); rc=1
+    fi
+  done
+
+  echo
+  bc_log "Resumen: $hechas cuenta(s) marcada(s), $fallidas con problemas."
+  bc_informe_paso "Marcar cuentas" "$([[ $fallidas -eq 0 ]] && echo HECHO || echo FALLO)" \
+    "$hechas marcada(s), $fallidas con problemas"
+  local ruta_informe; ruta_informe="$(bc_informe_cerrar "$([[ $fallidas -eq 0 ]] && echo HECHO || echo FALLO)")"
+  [[ -n "$ruta_informe" ]] && bc_log "Informe de lo hecho: $ruta_informe"
+  (( rc != 0 )) && BC_DELIBERATE_EXIT=1
+  return "$rc"
+}
+
+# Qué dice el user.conf sobre el respaldo incremental de esa cuenta. Pura.
+#   yes       la clave está y vale 'yes'
+#   no        la clave está y vale otra cosa
+#   sin-clave la clave NO ESTÁ. No es lo mismo que 'no': es una cuenta anterior
+#             al paquete que la trae, y ahí NO se puede llamar a la orden.
+bc_hestia_marca_de() {
+  local conf="${1:-}"
+  grep -q "^BACKUPS_INCREMENTAL=" <<<"$conf" || { echo "sin-clave"; return 0; }
+  if grep -q "^BACKUPS_INCREMENTAL='yes'" <<<"$conf"; then echo "yes"; else echo "no"; fi
+}
+
+# La foto de partida, para que el usuario vea a qué está diciendo que sí.
+bc_hestia_pintar_cuentas() {
+  local par u marca
+  for par in "$@"; do
+    u="${par%%:*}"; marca="${par#*:}"
+    case "$marca" in
+      yes)       bc_ok   "  $u: ya está marcada" ;;
+      no)        bc_log  "  $u: NO está marcada (se marcaría)" ;;
+      sin-clave) bc_warn "  $u: no tiene la clave BACKUPS_INCREMENTAL" ;;
+      *)         bc_warn "  $u: no se pudo leer su user.conf" ;;
+    esac
+  done
+}
+
+# El plan del ensayo: qué cuentas se tocarían, cuáles no, y por qué. En un
+# servidor con diez cuentas esto es lo más valioso del paso.
+bc_hestia_plan_cuentas() {
+  local par u marca
+  local -a se_tocan=() ya=() sin_clave=() ilegibles=()
+  for par in "$@"; do
+    u="${par%%:*}"; marca="${par#*:}"
+    case "$marca" in
+      no)        se_tocan+=("$u") ;;
+      yes)       ya+=("$u") ;;
+      sin-clave) sin_clave+=("$u") ;;
+      *)         ilegibles+=("$u") ;;
+    esac
+  done
+
+  if (( ${#se_tocan[@]} > 0 )); then
+    bc_log "SE TOCARÍAN (${#se_tocan[@]}): ${se_tocan[*]}"
+    bc_log "  De cada una se dejaría antes una copia fechada de su user.conf."
+  else
+    bc_log "No se tocaría ninguna cuenta."
+  fi
+  (( ${#ya[@]} > 0 )) && bc_log "Ya marcadas, no se tocan (${#ya[@]}): ${ya[*]}"
+  if (( ${#sin_clave[@]} > 0 )); then
+    bc_warn "NO SE PUEDEN MARCAR desde aquí (${#sin_clave[@]}): ${sin_clave[*]}"
+    bc_hestia_explicar_sin_clave
+  fi
+  (( ${#ilegibles[@]} > 0 )) && bc_warn "No se pudo leer su configuración (${#ilegibles[@]}): ${ilegibles[*]}"
+  return 0
+}
+
+# Por qué una cuenta sin la clave no se toca, y qué puede hacer el usuario.
+bc_hestia_explicar_sin_clave() {
+  bc_log "Esas cuentas son anteriores al paquete que trae BACKUPS_INCREMENTAL."
+  bc_log "Pedirle a HestiaCP que cambie una clave que NO existe en el user.conf"
+  bc_log "dispara una RECONSTRUCCIÓN COMPLETA de la cuenta —crear el usuario del"
+  bc_log "sistema si falta, reescribir permisos, usermod, la jaula de sftp y las"
+  bc_log "colas de disco y tráfico— y aun así probablemente no escribiría nada,"
+  bc_log "porque solo actualiza la línea si ya estaba."
+  bc_log "Por eso esta orden NO lo intenta."
+  bc_log "La vía es reaplicar el paquete de esas cuentas, y esa la ejecutas tú:"
+  bc_log "    v-update-user-package <paquete>"
+  bc_warn "OJO: eso reaplica el paquete a TODAS sus cuentas y puede cambiar shell,"
+  bc_warn "cuotas y límites. Míralo antes de ejecutarlo."
+  return 0
+}
+
+# Marca UNA cuenta. Devuelve 0 solo si quedó marcada y comprobado.
+bc_hestia_marcar_cuenta() {
+  local u="${1:-}"
+  local archivo="$HESTIA_DIR/data/users/$u/user.conf"
+  local esc; esc="$(printf '%q' "$archivo")"
+
+  local copia=""
+  if ! copia="$(bc_hestia_copia_fechada "$archivo")"; then
+    bc_err "  no se pudo copiar su user.conf: NO se toca esta cuenta."
+    bc_informe_paso "Cuenta $u" FALLO "no se pudo copiar su user.conf; no se tocó"
+    return 1
+  fi
+  if [[ -z "$copia" ]]; then
+    bc_err "  no existe $archivo: NO se toca esta cuenta."
+    bc_informe_paso "Cuenta $u" FALLO "no existe su user.conf"
+    return 1
+  fi
+  bc_informe_copia "$archivo" "$copia"
+  bc_informe_deshacer "cp -p $copia $archivo   # cuenta $u"
+
+  local orden_escritura="$HESTIA_DIR/bin/v-change-user-config-value $(printf '%q' "$u") BACKUPS_INCREMENTAL yes"
+  bc_informe_orden "$orden_escritura"
+
+  BC_HESTIA_CUENTA_ACTUAL="$u"
+  local datos
+  datos="$(bc_hestia_escribir_y_confirmar "Cuenta $u" "$orden_escritura" "cat $esc" \
+      bc_hestia_cuenta_ya_estaba bc_hestia_cuenta_se_hizo)"
+
+  local estado antes despues codigo
+  estado="$(bc_hestia_dato_de "$datos" estado)"; estado="${estado:-CIEGO}"
+  antes="$(bc_hestia_restaurar_saltos "$(bc_hestia_dato_de "$datos" antes)")"
+  despues="$(bc_hestia_restaurar_saltos "$(bc_hestia_dato_de "$datos" despues)")"
+  codigo="$(bc_hestia_dato_de "$datos" codigo)"
+
+  bc_informe_dato "Cuenta $u — respaldo incremental" \
+    "$(bc_hestia_marca_de "$antes")" "$(bc_hestia_marca_de "$despues")"
+
+  case "$estado" in
+    HECHO)
+      bc_ok "  marcada, y comprobado leyendo su user.conf de vuelta."
+      bc_informe_paso "Cuenta $u" HECHO "marcada y confirmada"; return 0 ;;
+    SIN_CAMBIO)
+      bc_ok "  ya estaba marcada."
+      bc_informe_paso "Cuenta $u" SIN_CAMBIO "ya estaba marcada"; return 0 ;;
+    SIN_CONFIRMAR)
+      bc_err "  la orden dijo que fue bien (código $codigo) y su user.conf NO lo confirma."
+      bc_log  "  Sigue en: $(bc_hestia_marca_de "$despues"). La copia está en $copia"
+      bc_informe_paso "Cuenta $u" SIN_CONFIRMAR "la relectura no confirma el cambio"; return 1 ;;
+    ESCRITO_SIN_COMPROBAR)
+      bc_err "  SE ESCRIBIÓ y no se pudo volver a leer su user.conf. Míralo: $archivo"
+      bc_informe_paso "Cuenta $u" ESCRITO_SIN_COMPROBAR "se escribió y no se pudo comprobar"; return 1 ;;
+    FALLO)
+      bc_err "  la orden falló (código $codigo) y la cuenta no cambió."
+      bc_informe_paso "Cuenta $u" FALLO "la orden falló"; return 1 ;;
+    *)
+      bc_err "  no se pudo leer su user.conf: NO se ha tocado nada."
+      bc_informe_paso "Cuenta $u" CIEGO "no se pudo leer su user.conf"; return 1 ;;
+  esac
+}
+
+# La cuenta que se está marcando, para los jueces.
+BC_HESTIA_CUENTA_ACTUAL=""
+
+# Los dos jueces. Una cuenta SIN la clave nunca cumple: no es que esté en
+# 'no', es que ahí no se puede escribir con esta orden.
+bc_hestia_cuenta_ya_estaba() { [[ "$(bc_hestia_marca_de "${1:-}")" == "yes" ]]; }
+bc_hestia_cuenta_se_hizo()   { [[ "$(bc_hestia_marca_de "${2:-}")" == "yes" ]]; }
+
+# =============================================================================
 # Escribir en el servidor y COMPROBARLO
 # =============================================================================
 # La regla del ADR 0017: HestiaCP puede decir que hizo algo y no haberlo hecho
