@@ -75,6 +75,32 @@ cargarse (no vacías, absolutas, directorios, `BANCO_TMP` dentro de un
 `/tmp/backupctl-pruebas.*`) y aborta si no. Una variable vacía convertía la comprobación de
 rutas en «acepta cualquiera» (revisión de la ronda #008).
 
+### Pruebas que no pueden fallar
+
+Pasó **dos veces en la misma sesión** (2026-09-23, rondas #058 y #064), con el mismo patrón las
+dos: afirmar sobre un efecto que el caso elegido no podía producir. La prueba salía en verde y
+no vigilaba nada.
+
+- El caso elegido no dispara lo que se afirma. Al probar que una cuenta con `;` no ejecuta una
+  segunda orden en el servidor, se usó `x;id`: sin escapar, eso queda como `.../x;id/config`,
+  donde `id/config` es una **ruta**, no la orden `id`. Con `x;id;z` sí queda suelta.
+- La prueba afirma solo el **nivel** (OK/AVISO/FALLO) de un veredicto y no su texto. Una
+  mutación que cambia el mensaje —y con él lo que el usuario entiende— pasa sin que nadie la
+  vea.
+
+Regla: **toda prueba nueva se prueba a sí misma con su mutación de control** antes de darla por
+buena. Si al romper a propósito el código que vigila la prueba sigue verde, la prueba está mal y
+no es el código el que hay que mirar. Y cuando el mensaje es lo que lleva la información,
+aféctalo también: afirma sobre el texto, no solo sobre el nivel.
+
+### Lo que el banco simula del servidor
+
+Las suites que usan el `ssh` falso dependen de un detalle: `bc_ssh_sudo` pregunta primero
+`id -u`. El guion del falso responde «eres root» para que la orden viaje sin el prefijo `sudo` y
+la prueba pueda afirmar sobre el texto exacto que compone el código. **Si esa comprobación
+cambia, esas suites se rompen con un mensaje que no apunta a la causa.** Está dicho también en
+un comentario dentro del guion (`tests/probar_hestia_sonda.sh`).
+
 ## Verificación del proyecto
 
 ```

@@ -1,6 +1,6 @@
 # 0016 — Respaldos incrementales de punta a punta desde la herramienta
 
-- **Estado:** Propuesta (verificación de HestiaCP completa, 2026-09-16)
+- **Estado:** Reemplazada por 0017
 - **Fecha:** 2026-09-16
 - **Decide:** Arquitecto, por mandato del PO
 - **Estructural:** sí (qué escribe la herramienta en el servidor y con qué contrato)

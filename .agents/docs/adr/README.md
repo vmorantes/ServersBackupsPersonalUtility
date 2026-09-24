@@ -65,4 +65,5 @@ servidor). Su ADR lleva obligatoriamente:
 | [0013](0013-programa-version-estable-2-1.md) | Camino a una versión estable: rama `release/2.1`, prueba única del PO, etiqueta | sí | Aceptada |
 | [0014](0014-informe-de-lo-hecho.md) | Toda acción que escribe informa de lo que hizo | sí | Propuesta |
 | [0015](0015-interfaz-por-tareas.md) | La interfaz web se organiza por tareas, no por órdenes | sí | Propuesta |
-| [0016](0016-incrementales-de-punta-a-punta.md) | Respaldos incrementales de punta a punta desde la herramienta | sí | Propuesta |
+| [0016](0016-incrementales-de-punta-a-punta.md) | Respaldos incrementales de punta a punta desde la herramienta | sí | Reemplazada por 0017 |
+| [0017](0017-incrementales-hechos-corregidos.md) | Incrementales: los hechos corregidos; nada se da por bueno sin una instantánea | sí | Aceptada |

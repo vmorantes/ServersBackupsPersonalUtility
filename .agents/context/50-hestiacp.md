@@ -35,7 +35,7 @@ enlace), **SIN VERIFICAR**. Al verificar algo, se actualiza su estado con el enl
 | --- | --- | --- | --- |
 | `v-list-users` | inventario; `hestia status` lo pide **con sudo** | `hestia.sh:190, 740-801` | CÓDIGO |
 | `v-list-web-domains`, `v-list-mail-domains`, `v-list-databases`, `v-list-user-backups` | inventario por usuario | `hestia.sh:740-801` | CÓDIGO |
-| `v-list-user-backups-restic` | última instantánea | `hestia.sh:716-733` | CÓDIGO |
+| `v-list-user-backups-restic` | última instantánea. **El formato no es suyo**: no formatea nada, ejecuta la herramienta de respaldo y deja pasar su salida, así que las claves del json dependen de la versión instalada en cada servidor, no de HestiaCP | `hestia.sh:716-733` | FUENTE |
 | `v-add-backup-host-restic` | alta del destino Restic. **No programa el cron** | `hestia.sh:434` | SERVIDOR |
 | `v-backup-users-restic` | respaldo nocturno; se programa en el crontab de `hestiaweb` | `hestia.sh:538` | SERVIDOR |
 | `v-list-cron-jobs`, `v-add-cron-job`, `v-delete-cron-job` | cron del perfil local en un HestiaCP | `cron.sh:159-171, 228-230` | CÓDIGO |
@@ -66,6 +66,41 @@ enlace), **SIN VERIFICAR**. Al verificar algo, se actualiza su estado con el enl
   ese tramo». Con `-1` en todas, `forget --prune` se queda sin política. Verificado en la fuente
   el 2026-09-23 y en una salida real del servidor del PO (`Applying Policy: keep 30 latest, 8
   daily, 5 weekly, 3 monthly snapshots`, sin anuales). FUENTE + SERVIDOR.
+
+### Un respaldo incremental que falla se registra como correcto (fuente, 2026-09-23)
+
+- `v-backup-user-restic:80` llama a `check_result $E_BACKUP "Unable to backup user"`, y
+  **`E_BACKUP` no existe**: no está en `func/main.sh` (las constantes van de `OK=0` a
+  `E_RESTART=20`) ni en los otros tres `func/` que el script carga. Con la constante vacía esa
+  rama no ejecuta su `exit`, el script continúa y termina en `log_event "$OK"` (115). FUENTE
+  (lectura); la consecuencia exacta en bash, razonada, SIN VERIFICAR por ejecución.
+- **Nunca uses el código de salida ni el registro de HestiaCP como prueba de que un respaldo
+  incremental se hizo.** La única prueba es una instantánea nueva (ADR 0017).
+- `$HESTIA/log/backup.log` lo escribe **solo** `v-backup-users` (el clásico).
+  `v-backup-user-restic` no lo menciona: el incremental no deja rastro en ningún log de archivo,
+  solo en `v-log-action`. FUENTE. (El ADR 0016 afirmaba lo contrario; lo corrige el 0017.)
+- Códigos de salida de `v-backup-user-restic`: repo inaccesible o no creado, `E_CONNECT`=15;
+  sistema deshabilitado y incremental deshabilitado, **los dos** `E_DISABLED`=11 (el código no
+  los distingue, solo el mensaje); cuenta suspendida, `E_SUSPENDED`=5. FUENTE.
+- `v-list-user-backups-restic` solo implementa `json` y `plain`, **no valida el formato** y no
+  tiene rama por defecto: un formato desconocido devuelve **vacío con código 0**, que se leería
+  como «no hay copias». Tampoco comprueba que exista la contraseña de la cuenta ni maneja ningún
+  error de restic. FUENTE.
+- `v-change-user-config-value` con una clave que falta **dispara `v-rebuild-user` completo**
+  (`useradd`, permisos, `usermod`, jaula sftp, colas) y después `update_user_value` solo escribe
+  si la línea existe. `rebuild_user_conf` solo repara una lista cerrada de claves y
+  `BACKUPS_INCREMENTAL` **no está** en ella. Comprobar antes; no llamarlo a ciegas. FUENTE.
+- `v-delete-backup-host-restic` **no desactiva las cuentas**: pone el flag de sistema
+  `BACKUP_INCREMENTAL='no'` en `hestia.conf`, que no es el `BACKUPS_INCREMENTAL` por cuenta que
+  leen los respaldos. Las cuentas siguen en `yes`. FUENTE.
+- `backup-excludes.conf` se carga con `source` (es bash). Claves usadas: `WEB`, `DNS`, `MAIL`,
+  `DB`, listas separadas por comas; el valor `*` salta la sección entera. No hay clave `USER`, y
+  el campo `UDIR` del `backup.conf` nunca se rellena en 1.10.4. FUENTE.
+- El respaldo clásico lo instala el instalador como `10 05 * * * sudo …/v-backup-users` en el
+  crontab de `hestiaweb`, que HestiaCP edita **siempre a mano** (`echo >>`, `sed -i`), nunca con
+  `crontab -u`, con dueño `hestiaweb:hestiaweb` y permisos `600`. Ningún script de los leídos lo
+  regenera entero salvo el instalador. Si el paquete `.deb` lo rehace en una actualización: SIN
+  VERIFICAR.
 
 ### Clásico e incremental son independientes (verificado en la fuente, 2026-09-23)
 
