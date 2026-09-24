@@ -40,6 +40,7 @@ unset _m
 
 # --- Opciones globales con valores por defecto -------------------------------
 BC_OPT_ONLY=""; BC_OPT_EXCLUDE=""; BC_OPT_DRY=0; BC_OPT_NO_DATA=0
+BC_OPT_EXCLUIR=""
 BC_OPT_RESTORE_TEST=""; BC_OPT_WITH_DATA=0; BC_OPT_QUICK=0
 BC_OPT_INTO=""; BC_OPT_SEGMENTS=""
 BC_OPT_TO=""; BC_OPT_FROM=""; BC_OPT_FRESH=0; BC_OPT_PREFIX=""; BC_OPT_DATABASES=""
@@ -159,6 +160,7 @@ ${BC_BLD}BLINDAJE (HestiaCP)${BC_RST}
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia cron${BC_RST}            activar el cron de Restic
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia cuentas${BC_RST}         marcar las cuentas para respaldo incremental
   ${BC_RED}!${BC_RST} ${BC_CYA}hestia copia --usuarios <c>${BC_RST}  lanzar una copia y COMPROBAR que se hizo
+  ${BC_GRN}·${BC_RST} ${BC_CYA}hestia exclusiones${BC_RST}     qué se queda FUERA del respaldo, y por cuenta
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia desactivar${BC_RST}      dejar de hacer copias (NO borra las que hay)
   ${BC_GRN}·${BC_RST} ${BC_CYA}hestia verify${BC_RST}          instantáneas, integridad y espacio real
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia keys${BC_RST}            rescatar restic.conf Y rclone.conf
@@ -539,6 +541,7 @@ case "$BC_CMD" in
         --region) BC_OPT_RC_REGION="${2:-}"; shift 2 ;;
         --desde-repo) BC_OPT_RC_REPO=1; shift ;;
         --usuarios)  BC_OPT_USERS="${2:-}"; bc_exigir_usuarios "$BC_OPT_USERS"; shift 2 ;;
+        --excluir)   BC_OPT_EXCLUIR="${2:-}"; shift 2 ;;
         *) bc_die "opción desconocida para 'hestia $_sub': $1" ;;
       esac
     done
@@ -555,9 +558,10 @@ case "$BC_CMD" in
       cuentas) bc_hestia_cuentas ;;
       copia)  bc_hestia_copia ;;
       desactivar) bc_hestia_desactivar ;;
+      exclusiones) bc_hestia_exclusiones ;;
       verify) bc_hestia_verify ;;
       keys)   bc_hestia_keys ;;
-      *) bc_die "subórdenes de 'hestia': status setup rclone restic cron cuentas copia desactivar verify keys donde users dbs" ;;
+      *) bc_die "subórdenes de 'hestia': status setup rclone restic cron cuentas copia exclusiones desactivar verify keys donde users dbs" ;;
     esac
     ;;
 

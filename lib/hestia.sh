@@ -622,6 +622,81 @@ bc_hestia_remotos_perdidos() {
   done <<<"$(bc_hestia_nombres_de "$antes")"
 }
 
+# -----------------------------------------------------------------------------
+# Las exclusiones del respaldo
+# -----------------------------------------------------------------------------
+# Puras. Lo que gobierna qué se deja fuera de la copia de una cuenta vive en un
+# archivo que HestiaCP carga COMO CÓDIGO: no es una lista, es un archivo de
+# shell que se ejecuta. Lo que se escriba ahí correrá en el servidor la próxima
+# vez que se respalde esa cuenta.
+#
+# De ahí la regla que manda aquí: lo que se escriba se valida con el mismo
+# rigor que una ruta de repositorio. Una comilla mal puesta no es un valor
+# feo: es una orden que corre con privilegios la noche siguiente.
+#
+# Claves que se usan: WEB, DNS, MAIL y DB, con listas separadas por comas. El
+# valor '*' salta la sección ENTERA.
+BC_HESTIA_CLAVES_EXCL="WEB DNS MAIL DB"
+
+# ¿Es seguro escribir este valor en un archivo que se ejecuta?
+# Se admite lo que puede ser un dominio o una base de datos, y la lista de
+# ellos separada por comas, o el '*' solo. Nada más: ni comillas, ni ';', ni
+# '$', ni espacios, ni saltos de línea, ni '`', ni '('.
+bc_hestia_excl_valida() {
+  local v="${1:-}"
+  [[ "$v" == "*" ]] && return 0
+  [[ -n "$v" ]] || return 1
+  [[ "$v" =~ ^[A-Za-z0-9._-]+(,[A-Za-z0-9._-]+)*$ ]]
+}
+
+# Qué dice hoy el archivo, clave por clave: "CLAVE<TAB>valor".
+# Solo se miran las cuatro claves conocidas; lo demás se recoge aparte, porque
+# un archivo con algo que no entendemos NO se toca.
+bc_hestia_excl_de() {
+  local texto="${1:-}" clave valor
+  for clave in $BC_HESTIA_CLAVES_EXCL; do
+    valor="$(sed -n "s/^[[:space:]]*${clave}=[\"']\?\([^\"']*\)[\"']\?[[:space:]]*$/\1/p" <<<"$texto" | sed -n '1p')"
+    [[ -n "$valor" ]] && printf '%s\t%s\n' "$clave" "$valor"
+  done
+}
+
+# Las claves del archivo que NO conocemos. Si hay alguna, no se reescribe nada:
+# podríamos borrar algo que alguien puso a propósito y que no sabemos leer.
+bc_hestia_excl_desconocidas() {
+  local texto="${1:-}" linea clave
+  while IFS= read -r linea; do
+    [[ "$linea" =~ ^[[:space:]]*# ]] && continue
+    [[ "$linea" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)= ]] || continue
+    clave="${BASH_REMATCH[1]}"
+    grep -qw "$clave" <<<"$BC_HESTIA_CLAVES_EXCL" || printf '%s\n' "$clave"
+  done <<<"$texto" | sort -u
+}
+
+# Una clave y su valor, dichos como lo que significan para quien lee.
+# No «DB='x,y'», sino qué deja de respaldarse. Y un '*' no es un valor más: es
+# la sección entera fuera de la copia, y tiene que sonar así.
+bc_hestia_excl_llana() {
+  local clave="${1:-}" valor="${2:-}"
+  local que
+  case "$clave" in
+    WEB)  que="sitios web" ;;
+    DNS)  que="zonas DNS" ;;
+    MAIL) que="dominios de correo" ;;
+    DB)   que="bases de datos" ;;
+    *)    que="$clave" ;;
+  esac
+  if [[ "$valor" == "*" ]]; then
+    printf 'NO se respalda NADA de sus %s: esa parte entera queda fuera de la copia' "$que"
+    return 0
+  fi
+  local n; n="$(tr ',' '\n' <<<"$valor" | grep -c . || true)"
+  if (( n == 1 )); then
+    printf 'NO se respalda 1 de sus %s: %s' "$que" "$valor"
+  else
+    printf 'NO se respaldan %s de sus %s: %s' "$n" "$que" "${valor//,/, }"
+  fi
+}
+
 # Segundos -> lenguaje llano. Pura, auxiliar de la de arriba.
 bc_hestia_edad_llana() {
   local s="${1:-0}"
@@ -778,6 +853,272 @@ bc_hestia_diag_ruta_repo() {
     bc_hestia_veredicto OK "la ruta registrada ('$repo') no cae dentro de ninguna web ni depende del directorio de trabajo"
   fi
 }
+
+# =============================================================================
+# Qué se queda FUERA del respaldo
+# =============================================================================
+# Las exclusiones de una cuenta viven en un archivo suyo que HestiaCP carga con
+# `source`: no es una lista, es bash que se EJECUTA (fuente 1.10.4,
+# v-backup-user-config). Lo que se escriba ahí correrá en el servidor la
+# próxima vez que se respalde esa cuenta, con los privilegios del respaldo.
+# Por eso todo lo que entra se valida antes con el mismo rigor que una ruta de
+# repositorio, y si algo no pasa, no se escribe NADA.
+#
+# Dos cosas más que el usuario necesita saber, y que la orden dice:
+#   - Si el archivo no existe, no hay exclusiones. Crearlo es legítimo.
+#   - Una exclusión afecta a LOS DOS respaldos, el clásico y el incremental,
+#     porque los dos pasan por el mismo cargador. Quien excluya una base
+#     creyendo que solo la quita del incremental se queda sin ella en las dos.
+bc_hestia_exclusiones() {
+  bc_hestia_conectar
+  trap 'bc_hestia_cerrar' RETURN
+
+  bc_section "Qué se queda fuera del respaldo"
+  bc_log "Esto afecta a LOS DOS respaldos: el clásico y el incremental."
+
+  local cuentas=() u
+  if [[ -n "${BC_OPT_USERS:-}" ]]; then
+    while IFS= read -r u; do [[ -n "$u" ]] && cuentas+=("$u"); done \
+      <<<"$(tr ',' '\n' <<<"$BC_OPT_USERS")"
+  else
+    local lista; lista="$(bc_hestia_read "$HESTIA_DIR/bin/v-list-users plain" || true)"
+    if [[ -z "$lista" ]]; then
+      bc_err "no se pudo leer la lista de cuentas."
+      BC_DELIBERATE_EXIT=1
+      return 1
+    fi
+    while IFS= read -r u; do
+      u="$(awk '{print $1}' <<<"$u")"
+      [[ -z "$u" || "$u" == "USER" ]] && continue
+      cuentas+=("$u")
+    done <<<"$lista"
+  fi
+
+  # --- Lo que hay hoy, siempre, y en cristiano ------------------------------
+  local ciegos=0 con_exclusiones=0
+  for u in "${cuentas[@]}"; do
+    echo
+    bc_log "Cuenta '$u':"
+    local texto
+    if ! texto="$(bc_hestia_exclusiones_de "$u")"; then
+      bc_warn "  no se pudo leer su archivo de exclusiones."
+      ciegos=$(( ciegos + 1 ))
+      continue
+    fi
+    bc_hestia_pintar_exclusiones "$texto" && con_exclusiones=$(( con_exclusiones + 1 ))
+  done
+
+  # Sin nada que escribir, esta orden solo informa. Es el uso normal.
+  if [[ -z "${BC_OPT_EXCLUIR:-}" ]]; then
+    echo
+    if (( con_exclusiones > 0 )); then
+      bc_warn "$con_exclusiones cuenta(s) tienen cosas que NO se están respaldando."
+      bc_log  "Míralo antes de fiarte de esas copias."
+    fi
+    bc_log "Para cambiar una exclusión:"
+    bc_log "    backupctl -p $BC_PROFILE hestia exclusiones --usuarios <cuenta> --excluir DB=base1,base2"
+    bc_log "    (WEB, DNS, MAIL o DB; '*' deja fuera esa parte entera; vacío no vale)"
+    (( ciegos > 0 )) && { BC_DELIBERATE_EXIT=1; return 1; }
+    return 0
+  fi
+
+  # --- Escribir: solo lo que se pida, y solo en UNA cuenta ------------------
+  if (( ${#cuentas[@]} != 1 )); then
+    bc_err "para cambiar una exclusión hace falta UNA cuenta, y se han pedido ${#cuentas[@]}."
+    bc_log  "Usa --usuarios <cuenta>. Esto no se hace en bloque: lo que se deja fuera"
+    bc_log  "del respaldo se decide cuenta por cuenta."
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+  u="${cuentas[0]}"
+
+  local clave="${BC_OPT_EXCLUIR%%=*}" valor="${BC_OPT_EXCLUIR#*=}"
+  clave="${clave^^}"
+  if ! grep -qw "$clave" <<<"$BC_HESTIA_CLAVES_EXCL"; then
+    bc_err "'$clave' no es una clave de exclusión. Las que hay: $BC_HESTIA_CLAVES_EXCL."
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+  if ! bc_hestia_excl_valida "$valor"; then
+    bc_err "el valor '$valor' NO se puede escribir ahí, y no se ha escrito nada."
+    bc_log  "Ese archivo lo carga HestiaCP como CÓDIGO: lo que se escriba se ejecuta"
+    bc_log  "en el servidor la próxima vez que respalde esta cuenta. Así que solo se"
+    bc_log  "admiten nombres con letras, números, '.', '_' y '-', separados por comas,"
+    bc_log  "o un '*' solo. Sin comillas, sin ';', sin '\$', sin espacios."
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+
+  local texto
+  if ! texto="$(bc_hestia_exclusiones_de "$u")"; then
+    bc_err "no se pudo leer el archivo de exclusiones de '$u': NO se ha escrito nada."
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+
+  # Un archivo con algo que no entendemos NO se reescribe: podríamos borrar
+  # algo que alguien puso a propósito y que no sabemos leer.
+  local desconocidas; desconocidas="$(bc_hestia_excl_desconocidas "$texto")"
+  if [[ -n "$desconocidas" ]]; then
+    bc_err "el archivo de '$u' tiene claves que esta herramienta no conoce:"
+    sed 's/^/          /' <<<"$desconocidas" >&2
+    bc_log  "NO se toca: reescribirlo podría borrar algo que alguien puso a propósito."
+    bc_log  "Edítalo a mano si sabes lo que hacen esas claves."
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+
+  local nuevo; nuevo="$(bc_hestia_excl_componer "$texto" "$clave" "$valor")"
+  echo
+  bc_log "En '$u' quedaría:"
+  bc_hestia_pintar_exclusiones "$nuevo" >/dev/null
+  bc_hestia_excl_de "$nuevo" | while IFS=$'\t' read -r k v; do
+    bc_log "    $(bc_hestia_excl_llana "$k" "$v")"
+  done
+
+  if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
+    bc_step "Simulación (--dry-run): esto es lo que PASARÍA, no lo que ha pasado."
+    bc_log "Se dejaría antes una copia fechada del archivo."
+    bc_ok "No se ha escrito nada, y no se ha guardado ningún informe."
+    return 0
+  fi
+  bc_confirm "¿Escribirlo en el servidor?" n || { bc_log "Cancelado."; return 0; }
+
+  bc_hestia_escribir_exclusiones "$u" "$texto" "$nuevo" "$clave" "$valor"
+}
+
+# El archivo de exclusiones de una cuenta, en crudo. Devuelve 1 si no se pudo
+# leer. Que NO exista no es un error: es que no hay exclusiones.
+bc_hestia_exclusiones_de() {
+  local u="${1:-}"
+  local f; f="$(printf '%q' "$HESTIA_DIR/data/users/$u/backup-excludes.conf")"
+  bc_hestia_leer_texto "cat $f 2>/dev/null || true"
+}
+
+# Enseña lo que hay, traducido. Devuelve 0 si esa cuenta excluye algo.
+bc_hestia_pintar_exclusiones() {
+  local texto="${1:-}" hay=1 k v
+  local pares; pares="$(bc_hestia_excl_de "$texto")"
+  if [[ -z "$pares" ]]; then
+    bc_ok "  se respalda TODO: no hay nada excluido."
+  else
+    while IFS=$'\t' read -r k v; do
+      [[ -n "$k" ]] || continue
+      bc_warn "  $(bc_hestia_excl_llana "$k" "$v")"
+      hay=0
+    done <<<"$pares"
+  fi
+  local desconocidas; desconocidas="$(bc_hestia_excl_desconocidas "$texto")"
+  if [[ -n "$desconocidas" ]]; then
+    bc_warn "  además tiene claves que esta herramienta no conoce: $(tr '\n' ' ' <<<"$desconocidas")"
+    bc_log  "  Por eso su archivo no se reescribe desde aquí."
+  fi
+  return "$hay"
+}
+
+# El contenido nuevo del archivo: las claves conocidas que ya había, con la
+# pedida puesta o sustituida. Pura.
+bc_hestia_excl_componer() {
+  local texto="${1:-}" clave="${2:-}" valor="${3:-}" k v salida="" puesta=0
+  while IFS=$'\t' read -r k v; do
+    [[ -n "$k" ]] || continue
+    if [[ "$k" == "$clave" ]]; then salida+="$k='$valor'"$'\n'; puesta=1
+    else salida+="$k='$v'"$'\n'; fi
+  done <<<"$(bc_hestia_excl_de "$texto")"
+  (( puesta )) || salida+="$clave='$valor'"$'\n'
+  printf '%s' "$salida"
+}
+
+# Escribe, con copia fechada y relectura.
+bc_hestia_escribir_exclusiones() {
+  local u="${1:-}" antes="${2:-}" nuevo="${3:-}" clave="${4:-}" valor="${5:-}"
+  local archivo="$HESTIA_DIR/data/users/$u/backup-excludes.conf"
+  local f; f="$(printf '%q' "$archivo")"
+
+  bc_informe_abrir "Exclusiones del respaldo" "${DEPLOY_HOST:-este servidor}"
+  bc_informe_dato "Cuenta" "" "$u"
+  bc_informe_dato "Afecta a" "" "los DOS respaldos: el clásico y el incremental"
+
+  local copia=""
+  if ! copia="$(bc_hestia_copia_fechada "$archivo")"; then
+    bc_err "no se pudo copiar su archivo de exclusiones. NO se ha escrito nada."
+    bc_informe_paso "Copia de seguridad" FALLO "no se pudo copiar"
+    bc_informe_cerrar "FALLO" >/dev/null
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+  if [[ -n "$copia" ]]; then
+    bc_ok "Copia del archivo anterior: $copia"
+    bc_informe_copia "$archivo" "$copia"
+    bc_informe_deshacer "cp -p $copia $archivo"
+  else
+    bc_log "No había archivo de exclusiones: se creará uno."
+    bc_informe_deshacer "rm -f $archivo   # no había archivo antes"
+  fi
+
+  # Se escribe EN EL SITIO, sin temporal ni mv: así el archivo conserva su
+  # dueño y sus permisos, que aquí no los pone esta herramienta ni sabe cuáles
+  # debería poner. Y si la escritura se cortara a mitad, el peor resultado es
+  # un archivo con menos exclusiones, es decir MÁS cosas respaldadas. El lado
+  # seguro de los dos.
+  local orden="umask 077; mkdir -p \"\$(dirname $f)\"; cat > $f"
+  bc_informe_orden "$orden"
+
+  BC_HESTIA_EXCL_CLAVE="$clave"; BC_HESTIA_EXCL_VALOR="$valor"
+  local datos
+  datos="$(bc_hestia_escribir_y_confirmar "Exclusiones de $u" "$orden" \
+      "cat $f 2>/dev/null || true" bc_hestia_excl_ya_estaba bc_hestia_excl_se_hizo "$nuevo")"
+
+  local estado despues
+  estado="$(bc_hestia_dato_de "$datos" estado)"; estado="${estado:-CIEGO}"
+  despues="$(bc_hestia_restaurar_saltos "$(bc_hestia_dato_de "$datos" despues)")"
+  bc_informe_dato "Exclusiones antes" "$(bc_hestia_excl_de "$antes" | tr '\t' '=' | tr '\n' ' ')" ""
+  bc_informe_dato "Exclusiones después" "" "$(bc_hestia_excl_de "$despues" | tr '\t' '=' | tr '\n' ' ')"
+
+  local rc=0
+  case "$estado" in
+    HECHO)
+      bc_ok "Exclusiones escritas, y comprobado leyendo el archivo de vuelta."
+      bc_informe_paso "Exclusiones de $u" HECHO "$clave='$valor'" ;;
+    SIN_CAMBIO)
+      bc_ok "No había nada que cambiar: ya estaba así."
+      bc_informe_paso "Exclusiones de $u" SIN_CAMBIO "ya estaba $clave='$valor'" ;;
+    SIN_CONFIRMAR)
+      rc=1
+      bc_err "Se escribió y al releer el archivo NO dice lo que se pidió."
+      bc_log  "La copia anterior está en: ${copia:-<no había>}"
+      bc_informe_paso "Exclusiones de $u" SIN_CONFIRMAR "la relectura no lo confirma" ;;
+    ESCRITO_SIN_COMPROBAR)
+      rc=1
+      bc_err "SE ESCRIBIÓ y no se pudo volver a leer el archivo. Míralo: $archivo"
+      bc_informe_paso "Exclusiones de $u" ESCRITO_SIN_COMPROBAR "sin comprobar" ;;
+    *)
+      rc=1
+      bc_err "No se pudo escribir: NO se ha tocado nada."
+      bc_informe_paso "Exclusiones de $u" "$estado" "no se escribió" ;;
+  esac
+
+  if (( rc == 0 )); then
+    echo
+    bc_warn "Recuerda: esto deja esas cosas fuera de LOS DOS respaldos."
+  fi
+  local ruta; ruta="$(bc_informe_cerrar "$estado")"
+  [[ -n "$ruta" ]] && bc_log "Informe de lo hecho: $ruta"
+  (( rc != 0 )) && BC_DELIBERATE_EXIT=1
+  return "$rc"
+}
+
+# Lo pedido, para los jueces.
+BC_HESTIA_EXCL_CLAVE=""
+BC_HESTIA_EXCL_VALOR=""
+
+bc_hestia_excl_cumple() {
+  local texto="${1:-}" v
+  v="$(bc_hestia_excl_de "$texto" | grep -m1 -P "^${BC_HESTIA_EXCL_CLAVE}\t" || true)"
+  [[ "${v#*$'\t'}" == "$BC_HESTIA_EXCL_VALOR" ]]
+}
+bc_hestia_excl_ya_estaba() { bc_hestia_excl_cumple "${1:-}"; }
+bc_hestia_excl_se_hizo()   { bc_hestia_excl_cumple "${2:-}"; }
 
 # =============================================================================
 # Desactivar el respaldo incremental
