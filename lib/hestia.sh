@@ -1156,6 +1156,102 @@ bc_hestia_texto_anuales_registro() {
   [[ "$y" == "-1" ]] && echo "sin regla anual${sufijo}" || echo "$y"
 }
 
+# -----------------------------------------------------------------------------
+# Leer lo que hay en conf/restic.conf, y juzgarlo
+# -----------------------------------------------------------------------------
+# Todas PURAS: reciben el texto del archivo y no tocan nada. Lo que las llama es
+# bc_hestia_escribir_y_confirmar, que les da el «antes» y el «después».
+#
+# La configuración de Restic del panel es UNA sola para todo el HestiaCP, con
+# seis claves: REPO, SNAPSHOTS, KEEP_DAILY, KEEP_WEEKLY, KEEP_MONTHLY y
+# KEEP_YEARLY. Las escribe enteras v-add-backup-host-restic.
+
+# Saca el valor de una clave del texto de restic.conf. Vacío si no está.
+bc_hestia_conf_valor() {
+  local conf="${1:-}" clave="${2:-}"
+  sed -n "s/^${clave}='\(.*\)'$/\1/p" <<<"$conf" | sed -n '1p'
+}
+
+# La retención, en una sola línea comparable. No es para enseñar: es para
+# comparar lo pedido con lo leído sin depender del ORDEN de las líneas.
+bc_hestia_conf_retencion() {
+  local conf="${1:-}" clave salida=""
+  for clave in SNAPSHOTS KEEP_DAILY KEEP_WEEKLY KEEP_MONTHLY KEEP_YEARLY; do
+    salida+="${salida:+ }$clave=$(bc_hestia_conf_valor "$conf" "$clave")"
+  done
+  printf '%s' "$salida"
+}
+
+# La misma línea, a partir de los valores que se van a pedir.
+bc_hestia_retencion_pedida() {
+  printf 'SNAPSHOTS=%s KEEP_DAILY=%s KEEP_WEEKLY=%s KEEP_MONTHLY=%s KEEP_YEARLY=%s' \
+    "${1:-}" "${2:-}" "${3:-}" "${4:-}" "${5:-}"
+}
+
+# Lo que se pide. Los jueces reciben solo el texto leído
+# (bc_hestia_escribir_y_confirmar no les pasa nada más), así que lo pedido
+# viaja por aquí: explícito y greppable, en vez de fiarse del alcance dinámico
+# de bash para leer las variables de quien llama.
+BC_HESTIA_PEDIDO_REPO=""
+BC_HESTIA_PEDIDO_RETENCION=""
+
+# ¿Este texto de restic.conf tiene EXACTAMENTE lo que se pide?
+#
+# Un archivo que NO existe se lee como vacío, y eso no es «ya estaba»: es un
+# servidor sin configurar, que es el caso normal la primera vez. Tampoco es un
+# error — el error sería no haber podido leerlo, y de eso se encarga el
+# centinela de bc_hestia_leer_texto, no esta función.
+#
+# La retención se compara LITERAL, valor a valor. Si HestiaCP normalizara
+# alguno al escribirlo (por ejemplo el -1 de «sin regla anual»), esto daría
+# SIN_CONFIRMAR de más — molesto, pero nunca un HECHO de menos. La dirección
+# está elegida a propósito: un falso «no lo puedo confirmar» manda a mirar; un
+# falso «hecho» deja a alguien creyendo que su servidor está configurado.
+bc_hestia_restic_cumple() {
+  local conf="${1:-}"
+  [[ -n "$conf" ]] || return 1
+  [[ "$(bc_hestia_conf_valor "$conf" REPO)" == "$BC_HESTIA_PEDIDO_REPO" ]] || return 1
+  [[ "$(bc_hestia_conf_retencion "$conf")" == "$BC_HESTIA_PEDIDO_RETENCION" ]] || return 1
+  return 0
+}
+
+# Los dos jueces. Cada uno mira lo suyo: el primero el estado de partida, el
+# segundo en qué estado quedó el servidor.
+bc_hestia_restic_ya_estaba() { bc_hestia_restic_cumple "${1:-}"; }
+bc_hestia_restic_se_hizo()   { bc_hestia_restic_cumple "${2:-}"; }
+
+# -----------------------------------------------------------------------------
+# La copia a la que volver
+# -----------------------------------------------------------------------------
+# Deja una copia fechada de un archivo del servidor, junto al original y con sus
+# permisos. Imprime la ruta de la copia y devuelve 0; devuelve 1 si no se pudo
+# hacer, o si el original no existe y no hay nada que copiar (eso último se
+# distingue por la salida vacía).
+#
+# Un «cómo deshacerlo» que no tiene a qué volver no es una reversión, es una
+# frase. Por eso quien llame a esto tiene que tratar el fallo como motivo para
+# NO escribir: sin poder volver atrás no se toca un servidor de producción.
+#
+# `cp -p` conserva permisos y fechas. Se copia, NO se mueve: mover dejaría al
+# servidor sin el archivo durante el hueco entre las dos operaciones, y hay un
+# respaldo nocturno que lo lee.
+bc_hestia_copia_fechada() {
+  local ruta="${1:-}" marca copia
+  marca="$(date '+%Y%m%d-%H%M%S')"
+  copia="${ruta}.${marca}.bak"
+  local guion
+  guion="if [ ! -e $(printf '%q' "$ruta") ]; then printf 'BC_SIN_ORIGINAL\n'; exit 0; fi; \
+cp -p $(printf '%q' "$ruta") $(printf '%q' "$copia") && [ -e $(printf '%q' "$copia") ] \
+&& printf 'BC_COPIA_OK\n'"
+  local salida
+  salida="$( { bc_hestia_root "bash -c $(printf '%q' "$guion")" 2>/dev/null || true; } | tr -d '\r' )"
+  case "$salida" in
+    *BC_SIN_ORIGINAL*) return 0 ;;          # no había nada que copiar
+    *BC_COPIA_OK*)     printf '%s' "$copia"; return 0 ;;
+    *)                 return 1 ;;          # se intentó y no se pudo
+  esac
+}
+
 # Comprueba un repositorio ANTES de registrarlo en HestiaCP (T24, endurecida
 # tras la revisión de #038: H1 — $repo llegaba sin validar hasta una orden
 # ejecutada como root; H2 — antes solo se miraba si empezaba por "rclone:",
@@ -1383,10 +1479,31 @@ bc_hestia_restic() {
   bc_warn "El PRIMER número es el total de instantáneas, no los días. Es el error"
   bc_warn "más común al configurar esto a mano."
 
+  # Lo que se va a pedir, para los jueces y para el informe. Se compone aquí,
+  # una sola vez, porque lo usan el ensayo y el registro de verdad.
+  BC_HESTIA_PEDIDO_REPO="$repo"
+  BC_HESTIA_PEDIDO_RETENCION="$(bc_hestia_retencion_pedida "$snaps" "$d" "$w" "$m" "$y")"
+
+  # El estado de partida. Se lee ANTES de cualquier cosa, incluso en ensayo:
+  # sin saber qué hay no se puede decir qué cambiaría.
+  local conf_antes="" antes_legible=si
+  conf_antes="$(bc_hestia_leer_texto "cat $(printf '%q' "$HESTIA_CONF_RESTIC")")" || antes_legible=no
+
   if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
-    bc_ok "Simulación (--dry-run): no se ha registrado nada."
+    # El ensayo produce un PLAN, no un informe: no se archiva nada en
+    # <Perfil>/informes/. Un histórico lleno de cosas que no pasaron no sirve
+    # para saber qué pasó.
+    bc_step "Simulación (--dry-run): esto es lo que PASARÍA, no lo que ha pasado."
+    if [[ "$antes_legible" != "si" ]]; then
+      bc_warn "No se pudo leer $HESTIA_CONF_RESTIC: no se puede decir qué cambiaría."
+      BC_DELIBERATE_EXIT=1
+      return 1
+    fi
+    bc_hestia_plan_restic "$conf_antes" "$repo" "$BC_HESTIA_PEDIDO_RETENCION"
+    bc_ok "No se ha tocado nada, y no se ha guardado ningún informe."
     return 0
   fi
+
   bc_confirm "¿Registrarlo en HestiaCP?" y || { bc_log "Cancelado."; return 0; }
 
   # v-add-backup-host-restic ejecuta `rclone lsd` sobre el repositorio y aborta
@@ -1437,14 +1554,65 @@ bc_hestia_restic() {
     fi
   fi
 
-  bc_hestia_v "v-add-backup-host-restic '$repo' '$snaps' '$d' '$w' '$m' '$y'" \
-    || bc_die "v-add-backup-host-restic falló. Revisa el repositorio y el remoto."
-  bc_ok "Host de respaldo registrado."
+  # ---------------------------------------------------------------------------
+  # Escribir, y COMPROBAR lo escrito
+  # ---------------------------------------------------------------------------
+  # Antes esto era `bc_hestia_v … || bc_die`: mataba la orden usando el código
+  # de la propia orden como única prueba. Es exactamente lo que el ADR 0017
+  # dice que no se puede hacer —HestiaCP registra éxitos que no ocurrieron— y
+  # además impedía escribir el informe justo en el caso en que más falta hace.
+  bc_informe_abrir "Registrar el host de respaldo" "${DEPLOY_HOST:-este servidor}"
+
+  # La copia a la que volver, ANTES de tocar nada. Si no se puede hacer, no se
+  # escribe: sin poder volver atrás no se toca un servidor de producción.
+  local copia=""
+  if ! copia="$(bc_hestia_copia_fechada "$HESTIA_CONF_RESTIC")"; then
+    bc_err "no se pudo dejar una copia de $HESTIA_CONF_RESTIC. NO se ha registrado nada."
+    bc_log  "Sin una copia a la que volver no se toca la configuración del panel."
+    bc_log  "Comprueba el espacio libre y los permisos de $(dirname "$HESTIA_CONF_RESTIC")."
+    bc_informe_paso "Copia de seguridad" FALLO "no se pudo copiar $HESTIA_CONF_RESTIC"
+    bc_informe_cerrar "FALLO" >/dev/null
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+  if [[ -n "$copia" ]]; then
+    bc_ok "Copia de la configuración anterior: $copia"
+    bc_informe_copia "$HESTIA_CONF_RESTIC" "$copia"
+    bc_informe_deshacer "cp -p $copia $HESTIA_CONF_RESTIC"
+  else
+    bc_log "No había configuración previa que copiar: este servidor no tenía Restic registrado."
+    bc_informe_deshacer "rm -f $HESTIA_CONF_RESTIC   # no había configuración previa"
+  fi
+
+  local orden_escritura="$HESTIA_DIR/bin/v-add-backup-host-restic $(printf '%q' "$repo") \
+$(printf '%q' "$snaps") $(printf '%q' "$d") $(printf '%q' "$w") $(printf '%q' "$m") $(printf '%q' "$y")"
+  bc_informe_orden "$orden_escritura"
+
+  local datos
+  datos="$(bc_hestia_escribir_y_confirmar "Registrar el host de respaldo" \
+      "$orden_escritura" "cat $(printf '%q' "$HESTIA_CONF_RESTIC")" \
+      bc_hestia_restic_ya_estaba bc_hestia_restic_se_hizo)"
+
+  # Que el archivo haya quedado bien NO prueba que el servidor pueda respaldar.
+  # v-add-backup-host-restic no comprueba el resultado de instalar ni de
+  # actualizar restic: si eso falla, sigue de largo y escribe la configuración
+  # igualmente (fuente 1.10.4). Es la misma familia de fallo que el del
+  # respaldo incremental: dar por bueno lo que no se comprobó. Así que se
+  # pregunta aparte, y es de solo lectura.
+  local restic_vivo; restic_vivo="$(bc_hestia_comprobar_restic)"
+
+  local rc=0
+  bc_hestia_informar_restic "$datos" "$repo" "$copia" "$restic_vivo" || rc=$?
+  if (( rc != 0 )); then
+    BC_DELIBERATE_EXIT=1
+    return "$rc"
+  fi
 
   # NO se inicializa nada aquí. La ruta registrada NO es un repositorio: HestiaCP
   # guarda un repositorio POR USUARIO en "${REPO%/}/<usuario>", cada uno con la
-  # clave de ese usuario, y v-backup-user-restic ejecuta `restic init` sobre él
-  # la primera vez que lo respalda (comprobado en HestiaCP 1.10.4).
+  # clave de ese usuario, y la orden de respaldo incremental ejecuta `restic
+  # init` sobre él la primera vez que lo respalda (comprobado en HestiaCP
+  # 1.10.4).
   #
   # La versión anterior hacía `restic init` sobre la ruta global: sin contraseña
   # fallaba, y el mensaje mandaba a hacer a mano algo que no hay que hacer. Con
@@ -1453,6 +1621,164 @@ bc_hestia_restic() {
   bc_log "Cada cuenta tendrá su propio repositorio en ${repo%/}/<usuario>."
   bc_log "HestiaCP los crea solo la primera vez que las respalde: tras activar el"
   bc_log "cron, al día siguiente deberían aparecer en «Configuración de Restic»."
+  return 0
+}
+
+# -----------------------------------------------------------------------------
+# El plan del ensayo: lo que PASARÍA
+# -----------------------------------------------------------------------------
+# Mismo contenido que el informe, pero en futuro y sin archivar nada. Pura.
+# $1 restic.conf leído   $2 repositorio pedido   $3 retención pedida
+bc_hestia_plan_restic() {
+  local antes="${1:-}" repo="${2:-}" retencion="${3:-}"
+  local repo_antes ret_antes
+  repo_antes="$(bc_hestia_conf_valor "$antes" REPO)"
+  ret_antes="$(bc_hestia_conf_retencion "$antes")"
+
+  if [[ -z "$antes" ]]; then
+    bc_log "Ahora mismo este servidor NO tiene ningún host de respaldo registrado."
+    bc_log "Pasaría a:"
+    bc_log "  Repositorio: $repo"
+    bc_log "  Retención:   $retencion"
+    return 0
+  fi
+
+  if [[ "$repo_antes" == "$repo" ]]; then
+    bc_log "Repositorio: ya es '$repo'. No cambiaría."
+  else
+    bc_log "Repositorio: pasaría de '${repo_antes:-<ninguno>}' a '$repo'."
+  fi
+  if [[ "$ret_antes" == "$retencion" ]]; then
+    bc_log "Retención:   ya es la pedida. No cambiaría."
+  else
+    bc_log "Retención:   pasaría de '$ret_antes' a '$retencion'."
+  fi
+  if [[ "$repo_antes" == "$repo" && "$ret_antes" == "$retencion" ]]; then
+    bc_log "Es decir: no habría nada que cambiar."
+  else
+    bc_log "Se dejaría antes una copia fechada de $HESTIA_CONF_RESTIC."
+  fi
+  return 0
+}
+
+# -----------------------------------------------------------------------------
+# Traducir los datos de la escritura a algo que una persona pueda usar
+# -----------------------------------------------------------------------------
+# $1 los datos de bc_hestia_escribir_y_confirmar   $2 repositorio pedido
+# $3 la copia fechada (vacío si no había nada que copiar)
+#
+# Devuelve 0 solo si el servidor quedó como se pidió. Lo que decide NO es el
+# código de HestiaCP: es el estado que se leyó después.
+# ¿Responde restic en el servidor? 1 sí, 0 no, '?' no se pudo preguntar.
+# Solo lectura: preguntar la versión no toca ningún repositorio ni necesita
+# ninguna contraseña.
+bc_hestia_comprobar_restic() {
+  bc_hestia_sondear "command -v restic >/dev/null 2>&1 && restic version >/dev/null 2>&1"
+}
+
+bc_hestia_informar_restic() {
+  local datos="${1:-}" repo="${2:-}" copia="${3:-}" restic_vivo="${4:-?}"
+  local estado antes despues codigo salida clave valor
+
+  while IFS="$BC_HESTIA_SEP" read -r clave valor; do
+    case "$clave" in
+      estado)  estado="$valor" ;;
+      antes)   antes="$valor" ;;
+      despues) despues="$valor" ;;
+      codigo)  codigo="$valor" ;;
+      salida)  salida="$valor" ;;
+    esac
+  done <<<"$datos"
+  estado="${estado:-CIEGO}"; antes="${antes:-}"; despues="${despues:-}"
+  codigo="${codigo:-}"; salida="${salida:-}"
+
+  # Los dos datos por separado, aunque la orden sea una sola: un «no lo puedo
+  # confirmar» que no dice CUÁL de los dos no cuadró obliga a mirar a ciegas.
+  local antes_txt despues_txt
+  antes_txt="$(bc_hestia_restaurar_saltos "$antes")"
+  despues_txt="$(bc_hestia_restaurar_saltos "$despues")"
+  bc_informe_dato "Repositorio" \
+    "$(bc_hestia_conf_valor "$antes_txt" REPO)" "$(bc_hestia_conf_valor "$despues_txt" REPO)"
+  bc_informe_dato "Retención" \
+    "$(bc_hestia_conf_retencion "$antes_txt")" "$(bc_hestia_conf_retencion "$despues_txt")"
+  [[ -n "$salida" ]] && bc_informe_dato "Lo que respondió la orden" "" \
+    "$(bc_hestia_restaurar_saltos "$salida")"
+  [[ -n "$codigo" ]] && bc_informe_dato "Código de la orden (dato, no prueba)" "" "$codigo"
+
+  local rc=0 mensaje=""
+  case "$estado" in
+    SIN_CAMBIO)
+      bc_ok "No había nada que cambiar: ya estaba registrado exactamente así."
+      mensaje="el servidor ya tenía este repositorio y esta retención" ;;
+    HECHO)
+      bc_ok "Host de respaldo registrado, y comprobado leyéndolo de vuelta."
+      mensaje="registrado y confirmado releyendo la configuración" ;;
+    SIN_CONFIRMAR)
+      rc=1
+      bc_err "La orden dijo que fue bien, pero la configuración NO lo confirma."
+      bc_log  "  Se pidió:  $repo"
+      bc_log  "             $BC_HESTIA_PEDIDO_RETENCION"
+      bc_log  "  Se leyó:   $(bc_hestia_conf_valor "$despues_txt" REPO)"
+      bc_log  "             $(bc_hestia_conf_retencion "$despues_txt")"
+      # Si el archivo quedó EXACTAMENTE igual que antes, HestiaCP abortó sin
+      # llegar a escribir: validación de argumentos, directorio inexistente o
+      # un destino que no responde. Decirlo ahorra media hora de búsqueda.
+      if [[ "$antes_txt" == "$despues_txt" ]]; then
+        bc_log "La configuración quedó EXACTAMENTE como estaba: la orden ni llegó a"
+        bc_log "escribir. Mira el destino del repositorio y que responda."
+      fi
+      bc_log  "Esto NO es un error que se arregle reintentando: el servidor dice una"
+      bc_log  "cosa y enseña otra. Mira $HESTIA_CONF_RESTIC en el panel."
+      [[ -n "$copia" ]] && bc_log "La configuración anterior está en: $copia"
+      mensaje="la orden salió con $codigo y la relectura no confirma el cambio" ;;
+    ESCRITO_SIN_COMPROBAR)
+      rc=1
+      bc_err "SE ESCRIBIÓ, pero no se pudo volver a leer la configuración."
+      bc_log  "No se sabe cómo quedó el servidor. Hay que mirarlo:"
+      bc_log  "  $HESTIA_CONF_RESTIC"
+      [[ -n "$copia" ]] && bc_log "La configuración anterior está en: $copia"
+      mensaje="se escribió y no se pudo leer el resultado" ;;
+    FALLO)
+      rc=1
+      bc_err "La orden falló (código $codigo) y la configuración no cambió."
+      [[ -n "$salida" ]] && { bc_log "Lo que respondió:"; \
+        bc_hestia_restaurar_saltos "$salida" | sed 's/^/        /'; }
+      mensaje="la orden falló y el cambio no está" ;;
+    CIEGO|*)
+      rc=1
+      bc_err "No se pudo leer $HESTIA_CONF_RESTIC: NO se ha tocado nada."
+      bc_log  "El servidor está como estaba. Comprueba el acceso y vuelve a intentarlo."
+      mensaje="no se pudo leer la configuración; no se escribió nada" ;;
+  esac
+
+  bc_informe_paso "Registrar el host de respaldo" "$estado" "$mensaje"
+
+  # Segundo paso, con su propio estado: el objetivo no es dejar un archivo
+  # escrito, es dejar el servidor capaz de respaldar. Solo se informa cuando
+  # el primero salió bien; si el registro falló, esto es ruido.
+  if [[ "$estado" == "HECHO" || "$estado" == "SIN_CAMBIO" ]]; then
+    case "$restic_vivo" in
+      1) bc_ok "restic responde en el servidor."
+         bc_informe_paso "restic en el servidor" HECHO "responde" ;;
+      0) rc=1
+         bc_err "El destino quedó registrado, pero restic NO responde en el servidor."
+         bc_log  "Sin restic no se hará ninguna copia, por muy bien que esté la"
+         bc_log  "configuración. Esto NO se arregla repitiendo esta orden: hay que"
+         bc_log  "instalarlo en el servidor."
+         bc_informe_paso "restic en el servidor" FALLO \
+           "el destino quedó registrado pero restic no responde: sin él no se hará ninguna copia" ;;
+      *) rc=1
+         bc_err "El destino quedó registrado, pero NO se pudo comprobar si restic responde."
+         bc_log  "Compruébalo en el servidor antes de fiarte de este registro."
+         bc_informe_paso "restic en el servidor" CIEGO \
+           "no se pudo comprobar si restic responde" ;;
+    esac
+  fi
+
+  local ruta_informe
+  ruta_informe="$(bc_informe_cerrar "$estado")"
+  [[ -n "$ruta_informe" ]] && bc_log "Informe de lo hecho: $ruta_informe"
+  return "$rc"
 }
 
 # -----------------------------------------------------------------------------
