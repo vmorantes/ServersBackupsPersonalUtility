@@ -455,7 +455,7 @@ GUION
     trap "bc_trap_err \"\$BASH_COMMAND\"" ERR
     source "$1/lib/core.sh"
     source "$1/lib/ssh.sh"
-    trap bc_cleanup_pending EXIT
+    trap bc_cleanup_run_pending EXIT
     BC_SSH_TARGET="destino-sintetico"
     BC_SSH_CTL="$BANCO_TMP/socket-sintetico"
     ws="/root/.adoptar.ABCDEFGH"
@@ -473,8 +473,8 @@ GUION
     [[ -f "$f" ]] || continue
     grep -qF '.adoptar.ABCDEFGH' "$f" && veces=$(( veces + 1 ))
   done
-  afirmar_igual "$veces" "2" "el 'rm -rf' remoto se intentó DOS veces: bc_cleanup_run y, al salir, bc_cleanup_pending"
-  afirmar_contiene "$BANCO_TMP/t14/salida.log" "la limpieza 'adoptar_ws' terminó en error" "bc_cleanup_pending avisa nombrando la clave"
+  afirmar_igual "$veces" "2" "el 'rm -rf' remoto se intentó DOS veces: bc_cleanup_run y, al salir, bc_cleanup_run_pending"
+  afirmar_contiene "$BANCO_TMP/t14/salida.log" "la limpieza 'adoptar_ws' terminó en error" "bc_cleanup_run_pending avisa nombrando la clave"
 }
 
 test_loading_adoptar_does_not_execute_anything

@@ -93,7 +93,7 @@ bc_cleanup_all() {
   # Primero lo registrado (ADR 0012): puede depender de las credenciales de
   # MySQL que bc_mysql_cleanup borra a continuación (verify --restore-test
   # necesita conectar para soltar su base de prueba).
-  bc_cleanup_pending
+  bc_cleanup_run_pending
   [[ -n "${BC_TEMP_DIR:-}" && -d "${BC_TEMP_DIR:-}" ]] && rm -rf "$BC_TEMP_DIR"
   bc_mysql_cleanup 2>/dev/null
 }

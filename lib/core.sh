@@ -66,7 +66,7 @@ declare -ga BC_CLEANUP_KEYS=()
 declare -gA BC_CLEANUP_CMDS=()
 # Código de salida de la ÚLTIMA orden que evaluó bc_cleanup_eval. No lo mira
 # bc_cleanup_eval por su cuenta (sigue devolviendo siempre 0, ver ahí): lo
-# dejan aquí bc_cleanup_run y bc_cleanup_pending para distinguir una limpieza
+# dejan aquí bc_cleanup_run y bc_cleanup_run_pending para distinguir una limpieza
 # que TERMINÓ en error de una que se interrumpió a mitad — sin esto no hay
 # forma de saber si "ya se ejecutó" también quería decir "y salió bien".
 BC_CLEANUP_ULTIMO_RC=0
@@ -86,14 +86,14 @@ bc_cleanup_register() {
 #
 # El orden (ejecutar, LUEGO quitar) importa: si el proceso muere a mitad de
 # bc_cleanup_eval (una señal que no sea INT/TERM, o esta misma limpieza
-# corriendo dentro de bc_cleanup_pending — ver ahí), la clave SIGUE
-# registrada y bc_cleanup_pending la reintenta al salir. Esto exige que toda
+# corriendo dentro de bc_cleanup_run_pending — ver ahí), la clave SIGUE
+# registrada y bc_cleanup_run_pending la reintenta al salir. Esto exige que toda
 # limpieza sea idempotente (ya lo era: un rm -rf o un cat > repetidos no
 # hacen daño la segunda vez).
 #
 # Si la orden TERMINA en error (no se interrumpe: llega a devolver un código
 # distinto de 0), la clave se deja registrada en vez de quitarla: al salir,
-# bc_cleanup_pending le da un reintento más (C3). bc_cleanup_run en sí nunca
+# bc_cleanup_run_pending le da un reintento más (C3). bc_cleanup_run en sí nunca
 # refleja ese fallo en su propio código de salida —igual que bc_cleanup_eval—
 # para no disparar el errexit de quien la llama por algo que ya gestiona su
 # propia marca (BC_AD_CONF_FALLO, por ejemplo); quien necesite saberlo
@@ -120,7 +120,7 @@ bc_cleanup_run() {
 #
 # "Restaurar exactamente como estaba" incluye el propio errexit: un `set -e`
 # incondicional al final impondría errexit sobre quien llamó con `set +e`
-# (bc_cleanup_all, por ejemplo, hace `set +e` antes de bc_cleanup_pending) en
+# (bc_cleanup_all, por ejemplo, hace `set +e` antes de bc_cleanup_run_pending) en
 # vez de devolverle su estado. Se guarda con `[[ $- == *e* ]]` (igual que se
 # guarda el trap ERR) y se reactiva SOLO si estaba activo.
 #
@@ -166,7 +166,7 @@ bc_cleanup_quitar_clave() {
 # que la conexión ssh siga abierta, y esta se registró antes que la conexión
 # se cerrara, el orden inverso la ejecuta primero). Cada una en su propio
 # `set +e`: que una falle no impide las siguientes. Vacía el registro entero.
-bc_cleanup_pending() {
+bc_cleanup_run_pending() {
   local i clave orden
   for (( i = ${#BC_CLEANUP_KEYS[@]} - 1; i >= 0; i-- )); do
     clave="${BC_CLEANUP_KEYS[$i]}"

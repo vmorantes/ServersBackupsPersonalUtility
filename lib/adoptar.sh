@@ -60,7 +60,7 @@ BC_AD_DESTINO=""
 #
 # Si falla (escritura o borrado), devuelve 1 y NO vacía BC_AD_DESTINO ni el
 # resto del estado: bc_cleanup_run, al ver que esta orden terminó en error,
-# la deja registrada (C3), y bc_cleanup_pending la reintenta al salir —
+# la deja registrada (C3), y bc_cleanup_run_pending la reintenta al salir —
 # reintento que solo puede tener sentido si BC_AD_DESTINO, EXISTIA, ESCRITO y
 # ORIGINAL siguen siendo los mismos que la primera vez.
 bc_ad_restaurar_conf() {
@@ -435,7 +435,7 @@ bc_adoptar_run() {
   bc_ad_leer_conf_destino
   # ADR 0012: registrada ANTES de la escritura, no después. Así, si la propia
   # escritura falla (su bc_die, dos líneas más abajo, sale con exit), la
-  # limpieza igual se ejecuta desde bc_cleanup_pending — antes solo ocurría si
+  # limpieza igual se ejecuta desde bc_cleanup_run_pending — antes solo ocurría si
   # la función llegaba a RETORNAR (T20: un fallo aquí podía dejar el destino
   # respaldándose en el repositorio rescatado). bc_ad_restaurar_conf ya
   # comprueba BC_AD_DESTINO antes de hacer nada: es segura de nombrar ahora.

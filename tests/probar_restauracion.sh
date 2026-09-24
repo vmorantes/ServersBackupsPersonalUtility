@@ -105,7 +105,7 @@ test_restore_without_yes_refuses_an_existing_target() {
 # (lib/restore.sh:64-69, antes de 73-82). Al cancelarse, ese temporal quedaba
 # en $TMPDIR — lo mostró esta misma prueba antes de la corrección. Ahora
 # restore_tmp se registra en cuanto se crea (bc_cleanup_register) y
-# bc_cleanup_pending lo deshace desde el trap EXIT de bin/backupctl aunque
+# bc_cleanup_run_pending lo deshace desde el trap EXIT de bin/backupctl aunque
 # bc_die salga con exit, no con return.
 test_restore_cancel_leaves_no_extracted_dump() {
   nueva_prueba t3
