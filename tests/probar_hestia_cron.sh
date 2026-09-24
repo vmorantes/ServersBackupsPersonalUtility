@@ -266,6 +266,24 @@ test_a_dry_run_writes_nothing_and_files_nothing() {
     "y NO se archiva ningún informe de algo que no ha pasado"
 }
 
+# El ensayo con una programación ya puesta: lo más útil que puede decir es que
+# NO añadiría otra, y enseñar la que hay.
+test_a_dry_run_with_an_existing_schedule_shows_it() {
+  nueva_prueba t9
+  local existente="/var/spool/cron/crontabs/admin:45 25 * * * sudo $HESTIA_FALSO/bin/v-backup-users-restic"
+  local salida
+  salida="$(programar t9 "$existente" "cron-hora-mala" "cron-bueno" 0 ok "600 hestiaweb:hestiaweb" ensayo)"
+  echo "$salida" > "$BANCO_TMP/t9/salida.log"
+
+  afirmar_contiene "$BANCO_TMP/t9/salida.log" "CODIGO:0" "el ensayo termina bien"
+  afirmar_contiene "$BANCO_TMP/t9/salida.log" "Ya hay una programación" "y enseña la que hay"
+  afirmar_contiene "$BANCO_TMP/t9/salida.log" "crontabs/admin" "con el sitio donde está"
+  afirmar_contiene "$BANCO_TMP/t9/salida.log" "No se añadiría otra" "y dice que no añadiría otra"
+  afirmar_igual "$(cuantas_escrituras)" "0" "sin tocar nada"
+  afirmar_igual "$([[ -n "$(informe_de t9)" ]] && echo si || echo no)" "no" \
+    "y sin archivar ningún informe"
+}
+
 test_a_missing_schedule_is_added_and_confirmed
 test_a_correct_schedule_is_left_alone
 test_a_schedule_in_the_wrong_crontab_is_reported_not_duplicated
@@ -274,5 +292,6 @@ test_a_written_line_that_the_diagnosis_rejects_is_not_done
 test_wrong_permissions_are_not_a_success
 test_a_failed_backup_copy_stops_everything
 test_a_dry_run_writes_nothing_and_files_nothing
+test_a_dry_run_with_an_existing_schedule_shows_it
 
 fin_de_suite

@@ -255,8 +255,14 @@ bc_hestia_diag_cron() {
     return 0
   fi
 
-  if [[ "$cuerpo" != */usr/local/hestia/bin/* ]]; then
-    bc_hestia_veredicto FALLO "la orden del cron no lleva ruta absoluta (/usr/local/hestia/bin/...). El PATH de cron no incluye ese directorio: probablemente no se ejecuta nunca"
+  # La ruta sale de HESTIA_DIR, no escrita a pelo: en un servidor con HestiaCP
+  # instalado fuera de /usr/local/hestia, una ruta fija haría que este juez
+  # rechazara una línea perfectamente buena — un falso fallo en la cara del
+  # usuario, y justo en la orden que existe para que se fíe. El valor por
+  # defecto es el de siempre, para quien llame a esta función suelta (T18).
+  local bin_hestia="${HESTIA_DIR:-/usr/local/hestia}/bin/"
+  if [[ "$cuerpo" != *"$bin_hestia"* ]]; then
+    bc_hestia_veredicto FALLO "la orden del cron no lleva ruta absoluta (${bin_hestia}...). El PATH de cron no incluye ese directorio: probablemente no se ejecuta nunca"
     return 0
   fi
 

@@ -23,13 +23,15 @@ echo "== probar_hestia_diagnostico =="
 
 # Ejecuta una de las funciones puras en un subproceso aislado y devuelve su
 # línea de veredicto.
+# $1 función   $2..$4 sus argumentos   $5 HESTIA_DIR, si la prueba lo necesita
 veredicto() {
   bash -c '
     source "$1/lib/core.sh"
     source "$1/lib/ssh.sh"
     source "$1/lib/hestia.sh"
+    [[ -n "${6:-}" ]] && HESTIA_DIR="$6"
     "$2" "$3" "$4" "$5"
-  ' _ "$BANCO_RAIZ" "$1" "${2:-}" "${3:-}" "${4:-}" 2>&1
+  ' _ "$BANCO_RAIZ" "$1" "${2:-}" "${3:-}" "${4:-}" "${5:-}" 2>&1
 }
 
 # Afirma el NIVEL (primer campo) de un veredicto y, opcionalmente, que el
@@ -79,6 +81,27 @@ test_cron_without_absolute_path_is_a_failure() {
     "30 5 * * * v-backup-users-restic" \
     "/var/spool/cron/crontabs/admin")" "FALLO" \
     "sin ruta absoluta: FALLO" "PATH de cron"
+}
+
+# La ruta que exige el juez sale de HESTIA_DIR, no escrita a pelo. Con un
+# HestiaCP instalado fuera de /usr/local/hestia, una ruta fija haría que esta
+# función rechazara una línea perfectamente buena: un falso fallo en la cara
+# del usuario, y en la orden que existe para que se fíe.
+test_the_expected_path_follows_hestia_dir() {
+  nueva_prueba t56
+  afirmar_nivel "$(veredicto bc_hestia_diag_cron \
+    "30 5 * * * sudo /opt/hestia/bin/v-backup-users-restic" \
+    "/var/spool/cron/crontabs/hestiaweb" "" /opt/hestia)" "OK" \
+    "con HestiaCP en /opt/hestia, su propia ruta se acepta"
+}
+
+# Y al revés: con HestiaCP ahí, la ruta de siempre YA NO vale.
+test_the_default_path_is_rejected_when_hestia_lives_elsewhere() {
+  nueva_prueba t57
+  afirmar_nivel "$(veredicto bc_hestia_diag_cron \
+    "30 5 * * * sudo /usr/local/hestia/bin/v-backup-users-restic" \
+    "/var/spool/cron/crontabs/hestiaweb" "" /opt/hestia)" "FALLO" \
+    "con HestiaCP en /opt/hestia, la ruta de otro sitio se rechaza" "/opt/hestia/bin/"
 }
 
 test_cron_in_the_wrong_crontab_is_a_warning() {
@@ -712,6 +735,8 @@ test_cron_without_a_line_is_a_failure
 test_cron_with_impossible_hour_is_a_failure
 test_cron_with_impossible_minute_is_a_failure
 test_cron_without_absolute_path_is_a_failure
+test_the_expected_path_follows_hestia_dir
+test_the_default_path_is_rejected_when_hestia_lives_elsewhere
 test_cron_in_the_wrong_crontab_is_a_warning
 test_cron_well_formed_is_ok_with_the_time
 test_snapshot_missing_is_a_failure
