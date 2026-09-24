@@ -73,15 +73,17 @@ case "\$llana" in
     printf 'BC_COPIA_OK\\n'; exit 0 ;;
 
   *"stat -c"*)
+    printf 'BC_INI\\n'
     printf '%s\\n' "\$(cat "\$BANCO_TMP/permisos")"
-    printf 'BC_FIN\\n'; exit 0 ;;
+ exit 0 ;;
 
   *"cat "*"hestiaweb"*)
     valor="\$(sed -n '1p' "\$BANCO_TMP/lecturas")"
     sed -i '1d' "\$BANCO_TMP/lecturas"
     [[ "\$valor" == "@ilegible" ]] && exit 1
+    printf 'BC_INI\\n'
     [[ "\$valor" == "@vacio" ]] || printf '%s\\n' "\$(cat "\$BANCO_TMP/\$valor")"
-    printf 'BC_FIN\\n'; exit 0 ;;
+ exit 0 ;;
 
   *"printf"*"hestiaweb"*|*"chown"*)
     exit "\$(cat "\$BANCO_TMP/codigo-escritura")" ;;

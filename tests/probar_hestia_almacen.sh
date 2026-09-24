@@ -67,8 +67,8 @@ case "$llana" in
   *"grep -E"*type*)
     valor="$(cat "$BANCO_TMP/estado-archivo")"
     [[ "$valor" == "@ilegible" ]] && exit 1
+    printf 'BC_INI\n'
     cat "$BANCO_TMP/$valor" 2>/dev/null
-    printf 'BC_FIN\n'
     exit 0 ;;
 
   # ¿Responde el remoto?

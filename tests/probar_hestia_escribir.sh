@@ -32,9 +32,10 @@ MARCA_ESCRITURA="escribir-la-marca"
 #   - a la comprobación `id -u` de bc_ssh_sudo, que sí somos root, para que la
 #     orden viaje sin prefijo `sudo` y la prueba vea lo que se compuso;
 #   - a una LECTURA, sacando el siguiente valor de la cola $BANCO_TMP/lecturas.
-#     Imprime el valor y el centinela BC_FIN, que es lo que haría el shell del
-#     servidor de verdad. Un valor '@ilegible' no imprime nada y sale con 1:
-#     así se simula que la lectura no llegó a ocurrir.
+#     Imprime el valor y nada más: el centinela lo pone el propio envoltorio
+#     de la lectura, ANTES de ejecutar la orden, así que el simulador no tiene
+#     que emitirlo. Un valor '@ilegible' no imprime nada y sale con 1: así se
+#     simula que la lectura no llegó a ocurrir.
 #   - a una ESCRITURA, con el código que haya en $BANCO_TMP/codigo-escritura.
 escribir_guion_ssh() {
   cat > "$BANCO_TMP/guion/ssh.sh" <<FIN
@@ -50,8 +51,8 @@ case "\$llana" in
     valor="\$(sed -n '1p' "\$BANCO_TMP/lecturas")"
     sed -i '1d' "\$BANCO_TMP/lecturas"
     [[ "\$valor" == "@ilegible" ]] && exit 1
+    printf 'BC_INI\\n'
     [[ "\$valor" == "@vacio" ]] || printf '%s\\n' "\$valor"
-    printf 'BC_FIN\\n'
     exit 0
     ;;
   *"$MARCA_ESCRITURA"*)

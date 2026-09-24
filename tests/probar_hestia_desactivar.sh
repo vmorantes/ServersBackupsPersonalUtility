@@ -99,28 +99,31 @@ case "$llana" in
     exit "$(cat "$BANCO_TMP/codigo-cuenta-$cuenta" 2>/dev/null || echo 0)" ;;
 
   *"cat "*crontabs/hestiaweb*)
+    printf 'BC_INI\n'
     if [[ "$(cat "$BANCO_TMP/estado-cron")" == "sin-cron" ]]; then
       cat "$BANCO_TMP/cron-sin"
     else
       cat "$BANCO_TMP/cron-con"
     fi
-    printf 'BC_FIN\n'; exit 0 ;;
+    exit 0 ;;
 
   *"cat "*conf/restic.conf*)
+    printf 'BC_INI\n'
     if [[ "$(cat "$BANCO_TMP/estado-host")" == "sin-host" ]]; then
       cat "$BANCO_TMP/conf-vacio"
     else
       cat "$BANCO_TMP/conf-global"
     fi
-    printf 'BC_FIN\n'; exit 0 ;;
+    exit 0 ;;
 
   *"cat "*user.conf*)
+    printf 'BC_INI\n'
     if [[ "$(cat "$BANCO_TMP/marca-actual-$cuenta" 2>/dev/null || echo si)" == "no" ]]; then
       cat "$BANCO_TMP/user-no"
     else
       cat "$BANCO_TMP/user-si"
     fi
-    printf 'BC_FIN\n'; exit 0 ;;
+    exit 0 ;;
 esac
 echo "falso: ninguna respuesta prevista para: $llana" >&2
 exit 95

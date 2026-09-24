@@ -68,8 +68,8 @@ case "\$llana" in
     valor="\$(sed -n '1p' "\$BANCO_TMP/lecturas")"
     sed -i '1d' "\$BANCO_TMP/lecturas"
     [[ "\$valor" == "@ilegible" ]] && exit 1
+    printf 'BC_INI\\n'
     [[ "\$valor" == "@vacio" ]] || printf '%s\\n' "\$(cat "\$BANCO_TMP/\$valor")"
-    printf 'BC_FIN\\n'
     exit 0 ;;
 
   *"v-add-backup-host-restic"*)

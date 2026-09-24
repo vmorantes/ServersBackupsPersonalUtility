@@ -982,6 +982,38 @@ bc_hestia_exclusiones() {
     bc_ok "No se ha escrito nada, y no se ha guardado ningún informe."
     return 0
   fi
+  # ---------------------------------------------------------------------------
+  # ESCRIBIR ESTÁ DESACTIVADO A PROPÓSITO. No borrar este camino.
+  # ---------------------------------------------------------------------------
+  # Todo lo que hay debajo está escrito y probado, pero no se ofrece todavía
+  # porque falta decir la verdad sobre lo que consigue cada exclusión, y
+  # mientras no se pueda decir, ofrecerlo sería dejar que alguien crea que ha
+  # dejado de respaldar algo que se sigue respaldando.
+  #
+  # Lo verificado en la fuente 1.10.4 el 2026-09-24, que es lo que obliga a
+  # esperar:
+  #   - El respaldo incremental copia /home/<cuenta> ENTERO, sin exclusiones.
+  #   - Lo que las exclusiones gobiernan es solo lo que se PREPARA dentro de
+  #     /home/<cuenta>/backup/.
+  #   - Los archivos de un sitio web viven en /home/<cuenta>/web/<dominio>/,
+  #     así que excluir WEB no impide que acaben en la copia incremental: solo
+  #     evita que se preparen su configuración y sus certificados.
+  #   - DB es distinto: el volcado de una base NO existe en el disco hasta que
+  #     ese paso lo genera, así que excluirla sí la deja fuera de verdad.
+  #   - De MAIL no se sabe: falta confirmar dónde viven los buzones.
+  #
+  # Para terminarlo hace falta: confirmar lo de MAIL, y que cada sección diga
+  # qué efecto REAL tiene excluirla en cada uno de los dos respaldos.
+  bc_err "cambiar exclusiones todavía no está disponible."
+  bc_log  "Leer y mostrar sí, y es lo que acabas de ver. Escribir no, porque"
+  bc_log  "antes hay que poder decirte qué consigue de verdad cada exclusión:"
+  bc_log  "en el respaldo incremental, excluir una web NO impide que sus"
+  bc_log  "archivos acaben en la copia, y excluir una base de datos SÍ."
+  bc_log  "Decirlo al revés sería dejarte creer que has dejado de respaldar"
+  bc_log  "algo que se sigue respaldando."
+  BC_DELIBERATE_EXIT=1
+  return 1
+
   bc_confirm "¿Escribirlo en el servidor?" n || { bc_log "Cancelado."; return 0; }
 
   bc_hestia_escribir_exclusiones "$u" "$texto" "$nuevo" "$clave" "$valor"
@@ -1964,11 +1996,16 @@ bc_hestia_escribir_datos() {
 # antepone texto y un grupo de llaves detrás de sudo es un error de sintaxis.
 bc_hestia_leer_texto() {
   local orden="${1:-}" guion salida
-  guion="{ $orden; } 2>/dev/null; printf 'BC_FIN\n'"
+  # El centinela va DELANTE, no detrás. Detrás se pega al contenido cuando el
+  # archivo no termina en salto de línea —que es lo normal en un archivo
+  # escrito con printf— y entonces quitar «la última línea» se lleva por
+  # delante el valor entero: la lectura devolvía vacío y el paso concluía que
+  # lo escrito no estaba. Delante no puede pasar: lo emite el propio
+  # envoltorio antes de ejecutar nada.
+  guion="printf 'BC_INI\n'; { $orden; } 2>/dev/null"
   salida="$( { bc_hestia_root "bash -c $(printf '%q' "$guion")" 2>/dev/null || true; } | tr -d '\r' )"
-  [[ "$salida" == *BC_FIN* ]] || return 1
-  # La última línea es el centinela; lo que quede por encima es el valor.
-  printf '%s' "$(sed '$d' <<<"$salida")"
+  [[ "$salida" == BC_INI* ]] || return 1
+  printf '%s' "$(sed '1d' <<<"$salida")"
   return 0
 }
 

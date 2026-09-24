@@ -79,8 +79,8 @@ case "$llana" in
       valor="$(cat "$BANCO_TMP/conf-$cuenta")"
     fi
     [[ "$valor" == "@ilegible" ]] && exit 1
+    printf 'BC_INI\n'
     cat "$BANCO_TMP/$valor" 2>/dev/null || printf '%s\n' "$valor"
-    printf 'BC_FIN\n'
     exit 0 ;;
 esac
 echo "falso ssh: ninguna respuesta prevista para: $llana" >&2
