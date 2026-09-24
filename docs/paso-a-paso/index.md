@@ -8,36 +8,23 @@ Seis recorridos completos. Cada operación viene en dos versiones: **ensayo**
     exactamente qué pasaría y detectar problemas de configuración, permisos o
     conectividad **antes** de que importen.
 
-<div class="grid cards" markdown>
+### Instalar
 
--   :material-download: **Instalar**
+Poner el ecosistema en un VPS con HestiaCP.
 
-    ---
+→ [1. Ensayo](instalar-ensayo.md) · [2. En serio](instalar.md)
 
-    Poner el ecosistema en un VPS con HestiaCP.
+### Restaurar
 
-    [:octicons-arrow-right-24: 1. Ensayo](instalar-ensayo.md)
-    · [2. En serio](instalar.md)
+Recuperar una base de datos desde un respaldo.
 
--   :material-backup-restore: **Restaurar**
+→ [3. Ensayo](restaurar-ensayo.md) · [4. En serio](restaurar.md)
 
-    ---
+### Migrar
 
-    Recuperar una base de datos desde un respaldo.
+Llevar las bases de datos a otro servidor.
 
-    [:octicons-arrow-right-24: 3. Ensayo](restaurar-ensayo.md)
-    · [4. En serio](restaurar.md)
-
--   :material-server-network: **Migrar**
-
-    ---
-
-    Llevar las bases de datos a otro servidor.
-
-    [:octicons-arrow-right-24: 5. Ensayo](migrar-ensayo.md)
-    · [6. En serio](migrar.md)
-
-</div>
+→ [5. Ensayo](migrar-ensayo.md) · [6. En serio](migrar.md)
 
 ## Qué escribe cada orden
 

@@ -65,28 +65,28 @@ graph LR
     S -->|backupctl pull| R
 ```
 
-=== "SUBIR — `deploy`"
+### SUBIR — `deploy`
 
-    ```bash
-    backupctl -p MiVPS deploy root@servidor
-    ```
+```bash
+backupctl -p MiVPS deploy root@servidor
+```
 
-    Lleva `bin/`, `lib/` y el `env.sh` de ese perfil al servidor. Es lo que
-    haces cuando cambias algo en el repo y quieres que llegue a la máquina.
+Lleva `bin/`, `lib/` y el `env.sh` de ese perfil al servidor. Es lo que
+haces cuando cambias algo en el repo y quieres que llegue a la máquina.
 
-    Los respaldos y logs del servidor **no se tocan**.
+Los respaldos y logs del servidor **no se tocan**.
 
-=== "DESCARGAR — `pull`"
+### DESCARGAR — `pull`
 
-    ```bash
-    backupctl -p MiVPS pull root@servidor
-    ```
+```bash
+backupctl -p MiVPS pull root@servidor
+```
 
-    Trae al repositorio lo que hay realmente allí: compara el `env.sh` del
-    servidor con el tuyo y te avisa si difieren, y escribe `ESTADO.md` con la
-    versión instalada, el crontab, los respaldos y el diagnóstico.
+Trae al repositorio lo que hay realmente allí: compara el `env.sh` del
+servidor con el tuyo y te avisa si difieren, y escribe `ESTADO.md` con la
+versión instalada, el crontab, los respaldos y el diagnóstico.
 
-    Es lo que hace que el repositorio **recuerde** cada despliegue.
+Es lo que hace que el repositorio **recuerde** cada despliegue.
 
 ## Qué acaba en el servidor
 

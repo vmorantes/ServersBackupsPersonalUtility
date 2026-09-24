@@ -5,7 +5,7 @@ en producción sin pensarlo.
 
 ---
 
-## :material-shield-check: Seguro — no escribe nada
+## Seguro — no escribe nada
 
 Ejecuta lo que quieras de aquí. Solo lee.
 
@@ -93,7 +93,7 @@ backupctl restic-list                   # repositorios Restic detectados
 
 ---
 
-## :material-eye-check: Ensayos — enseñan qué harían, sin hacerlo
+## Ensayos — enseñan qué harían, sin hacerlo
 
 También seguros. Es la forma de mirar antes de saltar.
 
@@ -113,7 +113,7 @@ backupctl migrate --to usuario@servidor --dry-run   # qué migraría
 
 ---
 
-## :material-alert: Escriben en disco
+## Escriben en disco
 
 ```bash
 backupctl backup                        # crea un .zip y aplica retención
@@ -134,7 +134,7 @@ sudo backupctl cron --remove            # desprograma
 
 ---
 
-## :material-alert-octagon: Escriben en la base de datos o borran
+## Escriben en la base de datos o borran
 
 **Ensáyalas primero.**
 

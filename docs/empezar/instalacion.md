@@ -59,33 +59,33 @@ Solo tres cosas. El resto lo crea `deploy`.
 
 ## Instalar en un servidor
 
-=== "Desde otra máquina (recomendado)"
+### Desde otra máquina (recomendado)
 
-    Si ya tienes el repositorio en tu equipo, despliega por SSH:
+Si ya tienes el repositorio en tu equipo, despliega por SSH:
 
-    ```bash
-    backupctl -p MiVPS deploy root@servidor.example
-    ```
+```bash
+backupctl -p MiVPS deploy root@servidor.example
+```
 
-    Copia `bin/` y `lib/`, sube el `env.sh` del perfil y ejecuta el diagnóstico
-    en el destino. Ver [Desplegar](../migracion/desplegar.md).
+Copia `bin/` y `lib/`, sube el `env.sh` del perfil y ejecuta el diagnóstico
+en el destino. Ver [Desplegar](../migracion/desplegar.md).
 
-=== "A mano"
+### A mano
 
-    ```bash
-    # 1. Copiar el tooling
-    scp -r bin lib root@servidor:/home/admin/scripts/
+```bash
+# 1. Copiar el tooling
+scp -r bin lib root@servidor:/home/admin/scripts/
 
-    # 2. Configuración
-    scp config/env.sh.example root@servidor:/home/admin/scripts/env.sh
+# 2. Configuración
+scp config/env.sh.example root@servidor:/home/admin/scripts/env.sh
 
-    # 3. En el servidor
-    ssh root@servidor
-    cd /home/admin/scripts
-    mkdir -p logs output
-    chmod +x bin/backupctl
-    ${EDITOR:-nano} env.sh          # completar MYSQL_USER y MYSQL_PASS
-    ```
+# 3. En el servidor
+ssh root@servidor
+cd /home/admin/scripts
+mkdir -p logs output
+chmod +x bin/backupctl
+${EDITOR:-nano} env.sh          # completar MYSQL_USER y MYSQL_PASS
+```
 
 ## Configurar
 
