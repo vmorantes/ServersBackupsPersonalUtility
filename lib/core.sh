@@ -219,6 +219,36 @@ bc_require_cmd() {
 
 bc_has_cmd() { command -v "$1" >/dev/null 2>&1; }
 
+# -----------------------------------------------------------------------------
+# Validadores de lo que llega por la línea de órdenes
+# -----------------------------------------------------------------------------
+# Puros: devuelven 0/1 y no imprimen nada. Son el mismo criterio que la web
+# (web/server.py, _v_destino y _v_usuarios) para que la CLI no sea la puerta
+# trasera: estos valores acaban en órdenes que el servidor ejecuta como root o
+# en la línea de ssh de esta máquina. El primer carácter nunca puede ser un
+# guion: ssh tomaría "-oProxyCommand=…" por una opción, no por un destino.
+BC_RE_USUARIO='[A-Za-z0-9._][A-Za-z0-9._-]{0,31}'
+
+bc_valido_destino() {
+  local re="^(${BC_RE_USUARIO}@)?[A-Za-z0-9._][A-Za-z0-9._-]{0,252}\$"
+  [[ "${1:-}" =~ $re ]]
+}
+
+bc_valido_usuario() {
+  local re="^${BC_RE_USUARIO}\$"
+  [[ "${1:-}" =~ $re ]]
+}
+
+# Lista separada por comas, sin elementos vacíos (ni "a,,b" ni ",a" ni "a,").
+bc_valido_usuarios() {
+  local re="^${BC_RE_USUARIO}(,${BC_RE_USUARIO})*\$"
+  [[ "${1:-}" =~ $re ]]
+}
+
+bc_valido_cuantas() {
+  [[ "${1:-}" =~ ^[1-9][0-9]{0,2}$ ]]
+}
+
 # Confirmación. En modo desatendido (--yes o sin terminal) devuelve el valor por
 # defecto sin bloquearse, que es lo que permite usar los mismos módulos desde
 # cron y desde la TUI.

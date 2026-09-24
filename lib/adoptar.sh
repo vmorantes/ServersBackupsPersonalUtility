@@ -103,7 +103,9 @@ bc_ad_restaurar_conf() {
 # preguntar" y aborta ANTES de tocar nada.
 bc_ad_leer_conf_destino() {
   local remoto="/usr/local/hestia/conf/restic.conf" respuesta
-  respuesta="$(bc_ssh_sudo "if test -e '$remoto'; then echo SI; else echo NO; fi" < /dev/null 2>/dev/null)"
+  # El `tr -d '\r'` no es cosmético: un destino que responda con retorno de
+  # carro daría "SI\r", que no casa con "SI" y abortaría sin necesidad.
+  respuesta="$(bc_ssh_sudo "if test -e '$remoto'; then echo SI; else echo NO; fi" < /dev/null 2>/dev/null | tr -d '\r')"
   case "$respuesta" in
     SI)
       BC_AD_CONF_EXISTIA=1
@@ -1545,6 +1547,11 @@ bc_adoptar_registrar() {
 
   [[ -n "$destino" ]] || bc_die "indica el servidor: --to root@servidor"
   [[ -n "$uh"      ]] || bc_die "indica bajo qué cuenta de HestiaCP registrarlas: --usuario-hestia <cuenta>"
+  # Defensa en profundidad: bin/backupctl ya valida --usuario-hestia al leerlo,
+  # pero aquí se puede llegar sin pasar por ahí (la TUI, o un entorno que traiga
+  # BC_OPT_HESTIA_USER ya puesto), y $uh acaba dentro de órdenes que el destino
+  # ejecuta como root.
+  bc_valido_usuario "$uh" || bc_die "cuenta de HestiaCP no válida: '$uh'."
 
   bc_section "Registrar en el panel las bases que HestiaCP no conoce"
   bc_log "No se crea ni se borra ninguna base: solo se hacen visibles y"
@@ -1553,11 +1560,14 @@ bc_adoptar_registrar() {
   bc_require_cmd ssh
   bc_ssh_init "$destino" || bc_die "no se pudo conectar a $destino."
   trap 'bc_ssh_close' RETURN
-  bc_ssh_sudo "test -d /usr/local/hestia/data/users/$uh" >/dev/null 2>&1 \
+  # La ruta va escapada aunque $uh ya esté validado: esta orden se ejecuta como
+  # root en el destino, y el escapado no depende de que la validación de arriba
+  # siga estando mañana.
+  bc_ssh_sudo "test -d $(printf '%q' "/usr/local/hestia/data/users/$uh")" >/dev/null 2>&1 \
     || bc_die "en $destino no existe la cuenta de HestiaCP '$uh'."
 
   local desconocidas
-  desconocidas="$(bc_ssh_sudo "bash -s '$uh'" < /dev/null <<'REMOTO' 2>/dev/null || true
+  desconocidas="$(bc_ssh_sudo "bash -s $(printf '%q' "$uh")" < /dev/null <<'REMOTO' 2>/dev/null || true
 H=/usr/local/hestia
 conocidas="$(cat $H/data/users/*/db.conf 2>/dev/null | grep -oP "^DB='\K[^']+" | sort -u)"
 # roundcube es la base del webmail y phpmyadmin la del gestor: son del

@@ -99,6 +99,39 @@ bc_cleanup_all() {
 }
 
 # =============================================================================
+# Validación de las opciones al leerlas
+# =============================================================================
+# Se comprueba EN EL MOMENTO de leer cada opción, no cuando se usa: así un
+# valor con un ';', una comilla o un guion inicial muere aquí y nunca llega a
+# una orden que el servidor ejecuta como root ni a la línea de ssh de esta
+# máquina. Mismo criterio que los validadores de la web (web/server.py).
+# Un valor VACÍO se deja pasar: cada orden ya decide más adelante si le hace
+# falta o no (varias tienen su propio valor por defecto).
+bc_exigir_destino() {
+  [[ -z "${1:-}" ]] && return 0
+  bc_valido_destino "$1" \
+    || bc_die "destino no válido: '$1'. Se espera usuario@servidor o servidor (letras, números, '.', '_' y '-'; sin empezar por guion)."
+}
+
+bc_exigir_usuario() {
+  [[ -z "${1:-}" ]] && return 0
+  bc_valido_usuario "$1" \
+    || bc_die "cuenta de HestiaCP no válida: '$1'. Se esperan letras, números, '.', '_' y '-' (hasta 32, sin empezar por guion)."
+}
+
+bc_exigir_usuarios() {
+  [[ -z "${1:-}" ]] && return 0
+  bc_valido_usuarios "$1" \
+    || bc_die "lista de cuentas no válida: '$1'. Se espera 'cuenta' o 'cuenta1,cuenta2', sin elementos vacíos."
+}
+
+bc_exigir_cuantas() {
+  [[ -z "${1:-}" ]] && return 0
+  bc_valido_cuantas "$1" \
+    || bc_die "--cuantas no válido: '$1'. Se espera un número entre 1 y 999."
+}
+
+# =============================================================================
 # Ayuda
 # =============================================================================
 bc_usage() {
@@ -459,7 +492,7 @@ case "$BC_CMD" in
   remote)
     while (( $# > 0 )); do
       case "$1" in
-        --to)   BC_OPT_TO="${2:-}"; shift 2 ;;
+        --to)   BC_OPT_TO="${2:-}"; bc_exigir_destino "$BC_OPT_TO"; shift 2 ;;
         --path) BC_OPT_REMOTE_PATH="${2:-}"; shift 2 ;;
         *) break ;;
       esac
@@ -470,7 +503,7 @@ case "$BC_CMD" in
   migrate)
     while (( $# > 0 )); do
       case "$1" in
-        --to)        BC_OPT_TO="${2:-}"; shift 2 ;;
+        --to)        BC_OPT_TO="${2:-}"; bc_exigir_destino "$BC_OPT_TO"; shift 2 ;;
         --from)      BC_OPT_FROM="${2:-}"; shift 2 ;;
         --databases) BC_OPT_DATABASES="${2:-}"; shift 2 ;;
         --prefix)    BC_OPT_PREFIX="${2:-}"; shift 2 ;;
@@ -526,12 +559,12 @@ case "$BC_CMD" in
     # almacenamiento remoto y de las claves rescatadas.
     while [[ $# -gt 0 ]]; do
       case "$1" in
-        --to)        BC_OPT_TO="${2:-}"; shift 2 ;;
-        --usuarios)  BC_OPT_USERS="${2:-}"; shift 2 ;;
+        --to)        BC_OPT_TO="${2:-}"; bc_exigir_destino "$BC_OPT_TO"; shift 2 ;;
+        --usuarios)  BC_OPT_USERS="${2:-}"; bc_exigir_usuarios "$BC_OPT_USERS"; shift 2 ;;
         --snapshot)  BC_OPT_SNAPSHOT="${2:-}"; shift 2 ;;
         --como)      BC_OPT_COMO="${2:-}"; shift 2 ;;
         --historial) BC_OPT_HISTORIAL=1; shift ;;
-        --cuantas)   BC_OPT_CUANTAS="${2:-}"; shift 2 ;;
+        --cuantas)   BC_OPT_CUANTAS="${2:-}"; bc_exigir_cuantas "$BC_OPT_CUANTAS"; shift 2 ;;
         --inventario|--que-hay) BC_OPT_INVENTARIO=1; shift ;;
         --dry-run|-n) BC_OPT_DRY=1; shift ;;
         *) bc_die "opción desconocida para 'adoptar': $1" ;;
@@ -562,8 +595,8 @@ case "$BC_CMD" in
     # ni renombrarlas.
     while [[ $# -gt 0 ]]; do
       case "$1" in
-        --to)             BC_OPT_TO="${2:-}"; shift 2 ;;
-        --usuario-hestia) BC_OPT_HESTIA_USER="${2:-}"; shift 2 ;;
+        --to)             BC_OPT_TO="${2:-}"; bc_exigir_destino "$BC_OPT_TO"; shift 2 ;;
+        --usuario-hestia) BC_OPT_HESTIA_USER="${2:-}"; bc_exigir_usuario "$BC_OPT_HESTIA_USER"; shift 2 ;;
         --bases)          BC_OPT_DBS="${2:-}"; shift 2 ;;
         --dry-run|-n)     BC_OPT_DRY=1; shift ;;
         *) bc_die "opción desconocida para 'adoptar-registrar': $1" ;;
@@ -576,7 +609,7 @@ case "$BC_CMD" in
     # Las bases que HestiaCP no conoce viven solo en el zip de backupctl.
     while [[ $# -gt 0 ]]; do
       case "$1" in
-        --to)       BC_OPT_TO="${2:-}"; shift 2 ;;
+        --to)       BC_OPT_TO="${2:-}"; bc_exigir_destino "$BC_OPT_TO"; shift 2 ;;
         --zip)      BC_OPT_ZIP="${2:-}"; shift 2 ;;
         --bases)    BC_OPT_DBS="${2:-}"; shift 2 ;;
         --prefijo)  BC_OPT_PREFIJO="${2:-}"; shift 2 ;;
