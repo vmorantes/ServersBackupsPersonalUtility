@@ -290,7 +290,10 @@ bc_hestia_diag_instantanea() {
 
   local epoch
   if ! epoch="$(date -d "$fecha" +%s 2>/dev/null)" || [[ -z "$epoch" ]]; then
-    bc_hestia_veredicto AVISO "no se pudo leer la fecha de la última copia ('$fecha'): no es lo mismo que no tenerla"
+    # Ceguera, no aviso: lo que hay que responder no es «¿falló la lectura?»
+    # sino «¿puedo afirmar que esta cuenta se respalda?». Sin saber cuándo fue
+    # la última copia, no puedo — da igual que la lectura llegara a ocurrir.
+    bc_hestia_veredicto CIEGO "no se pudo leer la fecha de la última copia ('$fecha'): no es lo mismo que no tenerla"
     return 0
   fi
 
@@ -651,25 +654,28 @@ bc_hestia_diagnosticar() {
       ciegos=$(( ciegos + 1 ))
     else
       bc_hestia_pintar_veredicto "  última copia" \
-        "$(bc_hestia_diag_instantanea "$fecha" "$ahora" "$cada_h")" fallos avisos
+        "$(bc_hestia_diag_instantanea "$fecha" "$ahora" "$cada_h")" fallos avisos ciegos
     fi
   done <<<"$usuarios"
 
   bc_hestia_resumen_diag "$fallos" "$avisos" "$ciegos"
-  bc_hestia_codigo_diag "$fallos" "$avisos" "$ciegos"
+  bc_hestia_codigo_diag "$fallos" "$ciegos"
 }
 
-# Código de salida del diagnóstico a partir de sus tres contadores. Pura, y
-# aparte, para que el banco la pruebe sin montar un servidor.
-# $1 fallos   $2 avisos   $3 datos que no se pudieron leer
+# Código de salida del diagnóstico. Pura, y aparte, para que el banco la pruebe
+# sin montar un servidor.
+# $1 fallos   $2 datos que no se pudieron leer
 #
-# Un AVISO no cambia el código: una cuenta que a propósito no entra en los
-# respaldos no es un problema. Lo cambian un FALLO y una CEGUERA, porque las
-# dos «requieren atención», que es lo que el 1 significa en este proyecto
-# (docs/referencia/codigos.md). Un diagnóstico ciego saliendo con 0 sería un
-# éxito sin comprobación (40-salvaguardas.md §5).
+# Los avisos NO son parámetro: no cambian el código, y una firma que los pida
+# para no usarlos es un contrato falso que alguien leerá como verdadero. Si
+# algún día cuentan, se añaden entonces; las llamadas son dos.
+#
+# Lo cambian un FALLO y una CEGUERA, porque las dos «requieren atención», que
+# es lo que el 1 significa en este proyecto (docs/referencia/codigos.md). Un
+# diagnóstico ciego saliendo con 0 sería un éxito sin comprobación
+# (40-salvaguardas.md §5).
 bc_hestia_codigo_diag() {
-  local fallos="${1:-0}" avisos="${2:-0}" ciegos="${3:-0}"
+  local fallos="${1:-0}" ciegos="${2:-0}"
   (( fallos > 0 || ciegos > 0 )) && return 1
   return 0
 }
@@ -712,13 +718,19 @@ bc_hestia_ultima_instantanea() {
 # Pinta un veredicto "NIVEL<TAB>mensaje" y suma al contador que corresponda.
 # $3 y $4 son NOMBRES de variable (se actualizan por referencia).
 bc_hestia_pintar_veredicto() {
-  local etiqueta="$1" veredicto="$2" n_fallos="$3" n_avisos="$4"
+  local etiqueta="$1" veredicto="$2" n_fallos="$3" n_avisos="$4" n_ciegos="${5:-}"
   local nivel mensaje
   nivel="${veredicto%%$'\t'*}"
   mensaje="${veredicto#*$'\t'}"
   case "$nivel" in
     FALLO) bc_err  "$etiqueta: $mensaje"; printf -v "$n_fallos" '%s' "$(( ${!n_fallos} + 1 ))" ;;
     AVISO) bc_warn "$etiqueta: $mensaje"; printf -v "$n_avisos" '%s' "$(( ${!n_avisos} + 1 ))" ;;
+    # CIEGO se pinta como un aviso pero NO se cuenta como tal: no es algo que
+    # se miró y no gusta, es algo que no se pudo saber. Sin contador propio
+    # pasado, se cuenta como aviso, que es lo de antes.
+    CIEGO) bc_warn "$etiqueta: $mensaje"
+           if [[ -n "$n_ciegos" ]]; then printf -v "$n_ciegos" '%s' "$(( ${!n_ciegos} + 1 ))"
+           else printf -v "$n_avisos" '%s' "$(( ${!n_avisos} + 1 ))"; fi ;;
     *)     bc_ok   "$etiqueta: $mensaje" ;;
   esac
 }

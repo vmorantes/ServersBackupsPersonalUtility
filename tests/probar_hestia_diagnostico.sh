@@ -130,11 +130,11 @@ test_snapshot_recent_is_ok() {
 
 # Una fecha ilegible NO es «no hay copias»: son dos cosas distintas y
 # confundirlas es justo lo que hace que un diagnóstico mienta.
-test_snapshot_unreadable_date_is_a_warning_not_a_failure() {
+test_snapshot_unreadable_date_is_blindness_not_a_warning() {
   nueva_prueba t11
   local ahora; ahora="$(date -d "2026-09-24 12:00:00" +%s)"
   afirmar_nivel "$(veredicto bc_hestia_diag_instantanea "no-es-una-fecha" "$ahora" "24")" \
-    "AVISO" "fecha ilegible: AVISO, no FALLO" "no se pudo leer"
+    "CIEGO" "fecha ilegible: CIEGO, ni FALLO ni AVISO" "no se pudo leer"
 }
 
 # --- cuenta ------------------------------------------------------------------
@@ -407,31 +407,31 @@ codigo_diag() {
     source "$1/lib/core.sh"
     source "$1/lib/ssh.sh"
     source "$1/lib/hestia.sh"
-    bc_hestia_codigo_diag "$2" "$3" "$4"
-  ' _ "$BANCO_RAIZ" "$1" "$2" "$3" >/dev/null 2>&1
+    bc_hestia_codigo_diag "$2" "$3"
+  ' _ "$BANCO_RAIZ" "$1" "$2" >/dev/null 2>&1
   echo $?
 }
 
 test_exit_code_is_zero_when_everything_was_read_and_fine() {
   nueva_prueba t42
-  afirmar_igual "$(codigo_diag 0 0 0)" "0" "sin fallos, sin avisos y sin ciegos: 0"
+  afirmar_igual "$(codigo_diag 0 0)" "0" "sin fallos y sin ciegos: 0"
 }
 
 test_warnings_alone_do_not_change_the_exit_code() {
   nueva_prueba t43
-  afirmar_igual "$(codigo_diag 0 3 0)" "0" \
-    "solo avisos: 0 (una cuenta fuera de los respaldos no es un problema)"
+  afirmar_igual "$(codigo_diag 0 0)" "0" \
+    "los avisos ni se pasan: no cambian el código"
 }
 
 test_a_failure_changes_the_exit_code() {
   nueva_prueba t44
-  afirmar_igual "$(codigo_diag 1 0 0)" "1" "un fallo: 1"
+  afirmar_igual "$(codigo_diag 1 0)" "1" "un fallo: 1"
 }
 
 # El caso del que va todo esto: no hubo ningún fallo porque no se pudo mirar.
 test_a_blind_reading_changes_the_exit_code() {
   nueva_prueba t45
-  afirmar_igual "$(codigo_diag 0 0 1)" "1" \
+  afirmar_igual "$(codigo_diag 0 1)" "1" \
     "sin fallos pero con un dato sin leer: 1, no 0"
 }
 
@@ -473,6 +473,48 @@ test_summary_says_nothing_about_blindness_when_there_is_none() {
     *) afirmar_igual "no lo dice" "no lo dice" \
       "sin datos ciegos no se habla de diagnóstico incompleto" ;;
   esac
+}
+
+# --- cómo se cuenta un veredicto ciego ---------------------------------------
+#
+# Un CIEGO se PINTA como un aviso —al usuario le da igual el nombre interno—
+# pero no se CUENTA como tal. Si se contara junto a los avisos, el resumen
+# diría «3 avisos» de un diagnóstico que no pudo mirar tres cosas, y el código
+# de salida no cambiaría.
+
+# Pinta un veredicto y devuelve "fallos avisos ciegos" después de hacerlo.
+contar_veredicto() {
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/ssh.sh"
+    source "$1/lib/hestia.sh"
+    BC_NO_COLOR=1
+    f=0; a=0; c=0
+    if [[ "$3" == "con" ]]; then
+      bc_hestia_pintar_veredicto "x" "$2" f a c >/dev/null 2>&1
+    else
+      bc_hestia_pintar_veredicto "x" "$2" f a >/dev/null 2>&1
+    fi
+    echo "$f $a $c"
+  ' _ "$BANCO_RAIZ" "$1" "${2:-con}" 2>&1
+}
+
+test_blind_verdicts_are_counted_apart_from_warnings() {
+  nueva_prueba t48
+  afirmar_igual "$(contar_veredicto "$(printf 'CIEGO\tno se pudo leer')")" "0 0 1" \
+    "un veredicto ciego suma a ciegos, no a avisos"
+  afirmar_igual "$(contar_veredicto "$(printf 'AVISO\talgo que no gusta')")" "0 1 0" \
+    "un aviso sigue sumando a avisos"
+  afirmar_igual "$(contar_veredicto "$(printf 'FALLO\talgo roto')")" "1 0 0" \
+    "un fallo sigue sumando a fallos"
+}
+
+# Quien llame sin contador de ciegos no pierde el veredicto: se cuenta como
+# aviso, que es lo que hacía antes.
+test_a_caller_without_a_blind_counter_still_counts_it() {
+  nueva_prueba t49
+  afirmar_igual "$(contar_veredicto "$(printf 'CIEGO\tno se pudo leer')" sin)" "0 1 0" \
+    "sin contador de ciegos, un ciego cuenta como aviso"
 }
 
 # --- ruta del repositorio ----------------------------------------------------
@@ -518,7 +560,7 @@ test_snapshot_missing_is_a_failure
 test_snapshot_three_days_old_with_daily_cron_is_a_failure
 test_snapshot_slightly_late_is_a_warning
 test_snapshot_recent_is_ok
-test_snapshot_unreadable_date_is_a_warning_not_a_failure
+test_snapshot_unreadable_date_is_blindness_not_a_warning
 test_account_marked_with_key_but_no_repo_is_a_failure
 test_account_marked_without_key_or_repo_is_ok
 test_account_unmarked_with_repo_is_a_warning
@@ -544,6 +586,8 @@ test_last_snapshot_is_the_most_recent_trimmed
 test_snapshot_count_does_not_depend_on_lines
 test_empty_array_means_none
 test_non_json_output_is_not_read_as_no_backups
+test_blind_verdicts_are_counted_apart_from_warnings
+test_a_caller_without_a_blind_counter_still_counts_it
 test_exit_code_is_zero_when_everything_was_read_and_fine
 test_warnings_alone_do_not_change_the_exit_code
 test_a_failure_changes_the_exit_code
