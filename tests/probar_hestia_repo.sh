@@ -211,6 +211,38 @@ test_empty_type_still_means_not_applicable() {
   afirmar_no_contiene "$BANCO_TMP/t20/salida.log" "AVISO" "y sin aviso: no hay tipo que leer"
 }
 
+# --- qué se pasa cuando la consulta del tipo no devuelve nada ----------------
+#
+# Los dos sitios que consultan el tipo del remoto pasan por bc_hestia_tipo_leido.
+# La regla que vigila: un ensayo NO avisa de algo que no se intentó leer.
+
+ejecutar_tipo_leido() {
+  bash -c '
+    source "$1/lib/core.sh"
+    source "$1/lib/hestia.sh"
+    printf "[%s]" "$(bc_hestia_tipo_leido "$2" "$3")"
+  ' _ "$BANCO_RAIZ" "$1" "$2" 2>&1
+}
+
+test_a_type_that_was_read_is_passed_through() {
+  nueva_prueba t21
+  afirmar_igual "$(ejecutar_tipo_leido "alias" 0)" "[alias]" "el tipo leído se pasa tal cual"
+}
+
+test_a_failed_read_becomes_a_question_mark() {
+  nueva_prueba t22
+  afirmar_igual "$(ejecutar_tipo_leido "" 0)" "[?]" \
+    "consulta hecha y sin respuesta: '?', no vacío"
+}
+
+# En --dry-run no se consultó nada. Un '?' aquí haría avisar de algo que nadie
+# intentó mirar: ruido en una simulación que a propósito no toca el servidor.
+test_a_dry_run_does_not_claim_a_failed_read() {
+  nueva_prueba t23
+  afirmar_igual "$(ejecutar_tipo_leido "" 1)" "[]" \
+    "ensayo: vacío, porque no se intentó leerlo"
+}
+
 test_single_quote_is_rejected
 test_shell_metacharacters_are_rejected
 test_rclone_repo_without_second_colon_is_rejected
@@ -231,5 +263,8 @@ test_other_scheme_s3_with_dotdot_is_rejected
 test_unreadable_type_with_absolute_path_does_not_pass_in_silence
 test_unreadable_type_with_relative_path_is_still_rejected
 test_empty_type_still_means_not_applicable
+test_a_type_that_was_read_is_passed_through
+test_a_failed_read_becomes_a_question_mark
+test_a_dry_run_does_not_claim_a_failed_read
 
 fin_de_suite
