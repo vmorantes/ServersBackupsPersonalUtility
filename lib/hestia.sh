@@ -132,6 +132,163 @@ bc_hestia_root_stdin() {
 bc_hestia_v() { bc_hestia_root "$HESTIA_DIR/bin/$*"; }
 
 # =============================================================================
+# El juicio: funciones PURAS
+# =============================================================================
+# No conectan a nada, no leen archivos, no escriben: reciben texto e imprimen
+# UNA línea «NIVEL<TAB>mensaje», con NIVEL en OK / AVISO / FALLO, y devuelven 0
+# siempre. Quien las llama decide cómo pintarlas.
+#
+# Viven aparte a propósito (ADR 0017): el juicio sobre si los respaldos
+# funcionan es justo lo que hay que poder probar sin un servidor delante. Lo
+# que necesita el servidor es la LECTURA; la conclusión, no.
+#
+# La regla que las gobierna a todas: HestiaCP puede registrar éxito con el
+# respaldo fallado (v-backup-user-restic usa una constante E_BACKUP que no
+# existe, 1.10.4), así que la única prueba de que un respaldo se hizo es una
+# instantánea con fecha.
+
+bc_hestia_veredicto() { printf '%s\t%s\n' "$1" "$2"; }
+
+# Interpreta la línea de cron que encontró bc_hestia_cron_donde.
+# $1 la línea (vacía si no hay ninguna)   $2 el archivo donde vive
+#
+# Los campos de minuto y hora solo se comprueban cuando son un número pelado:
+# con "*", "*/2" o "1,15" no se puede decidir el rango sin implementar la
+# sintaxis entera de cron, y una comprobación a medias daría falsos fallos.
+bc_hestia_diag_cron() {
+  local linea="${1:-}" archivo="${2:-}"
+
+  if [[ -z "$linea" ]]; then
+    bc_hestia_veredicto FALLO "no hay ningún respaldo programado: está configurado, pero no se ejecuta nunca. Actívalo con: backupctl hestia cron"
+    return 0
+  fi
+
+  # La línea puede venir como "archivo:contenido" (grep -H) o suelta.
+  local cuerpo="$linea"
+  [[ -z "$archivo" && "$linea" == /*:* ]] && { archivo="${linea%%:*}"; cuerpo="${linea#*:}"; }
+
+  local minuto hora resto
+  read -r minuto hora resto <<<"$cuerpo"
+
+  local malos=""
+  [[ "$minuto" =~ ^[0-9]+$ ]] && (( 10#$minuto > 59 )) && malos+="minuto $minuto"
+  [[ "$hora"   =~ ^[0-9]+$ ]] && (( 10#$hora   > 23 )) && malos+="${malos:+ y }hora $hora"
+  if [[ -n "$malos" ]]; then
+    bc_hestia_veredicto FALLO "la programación tiene un valor imposible ($malos). El cron de Debian/Ubuntu puede rechazar el archivo ENTERO, no solo esa línea: puede que no se ejecute NADA de lo que hay en $archivo"
+    return 0
+  fi
+
+  if [[ "$cuerpo" != */usr/local/hestia/bin/* ]]; then
+    bc_hestia_veredicto FALLO "la orden del cron no lleva ruta absoluta (/usr/local/hestia/bin/...). El PATH de cron no incluye ese directorio: probablemente no se ejecuta nunca"
+    return 0
+  fi
+
+  if [[ "$archivo" != */crontabs/hestiaweb ]]; then
+    bc_hestia_veredicto AVISO "el respaldo está programado en $archivo, no en el crontab de hestiaweb: ahí puede quedarse sin sudo ni PATH, y un v-rebuild-cron-jobs puede borrarlo"
+    return 0
+  fi
+
+  if [[ "$hora" =~ ^[0-9]+$ && "$minuto" =~ ^[0-9]+$ ]]; then
+    # El 10# va DENTRO de la aritmética, no en printf: un "08" sin él se leería
+    # como octal, y printf no entiende ese prefijo.
+    bc_hestia_veredicto OK "$(printf 'respaldo programado a las %02d:%02d' "$(( 10#$hora ))" "$(( 10#$minuto ))")"
+  else
+    bc_hestia_veredicto OK "respaldo programado (minuto '$minuto', hora '$hora')"
+  fi
+}
+
+# ¿La última instantánea es lo bastante reciente para la periodicidad del cron?
+# $1 fecha ISO de la última (vacía si no hay)  $2 ahora en epoch  $3 cada cuántas horas
+#
+# Este es el diagnóstico que ningún log del servidor da: con el cron cada
+# noche y una instantánea de hace tres días, las últimas ejecuciones no
+# hicieron nada — y HestiaCP las registró como correctas.
+bc_hestia_diag_instantanea() {
+  local fecha="${1:-}" ahora="${2:-0}" cada_h="${3:-24}"
+
+  if [[ -z "$fecha" ]]; then
+    bc_hestia_veredicto FALLO "esta cuenta no tiene ninguna copia"
+    return 0
+  fi
+
+  local epoch
+  if ! epoch="$(date -d "$fecha" +%s 2>/dev/null)" || [[ -z "$epoch" ]]; then
+    bc_hestia_veredicto AVISO "no se pudo leer la fecha de la última copia ('$fecha'): no es lo mismo que no tenerla"
+    return 0
+  fi
+
+  local edad=$(( ahora - epoch ))
+  (( edad < 0 )) && edad=0
+  local limite=$(( cada_h * 3600 ))
+
+  if (( edad > limite * 2 )); then
+    bc_hestia_veredicto FALLO "la última copia es de hace $(bc_hestia_edad_llana "$edad") y el respaldo corre cada ${cada_h}h: las últimas ejecuciones no hicieron nada. HestiaCP puede haberlas registrado como correctas igualmente"
+  elif (( edad > limite )); then
+    bc_hestia_veredicto AVISO "la última copia es de hace $(bc_hestia_edad_llana "$edad"), más de lo que tarda el cron (${cada_h}h)"
+  else
+    bc_hestia_veredicto OK "última copia de hace $(bc_hestia_edad_llana "$edad")"
+  fi
+}
+
+# Segundos -> lenguaje llano. Pura, auxiliar de la de arriba.
+bc_hestia_edad_llana() {
+  local s="${1:-0}"
+  if   (( s < 3600   )); then echo "menos de una hora"
+  elif (( s < 172800 )); then echo "$(( s / 3600 )) horas"
+  else                        echo "$(( s / 86400 )) días"
+  fi
+}
+
+# Cruza los tres datos de una cuenta: ¿tiene contraseña de repositorio?, ¿existe
+# el repositorio?, ¿está marcada con BACKUPS_INCREMENTAL?
+# $1 clave 0|1   $2 repo 0|1   $3 marcada 0|1
+bc_hestia_diag_cuenta() {
+  local clave="${1:-0}" repo="${2:-0}" marcada="${3:-0}"
+
+  if (( marcada && clave && ! repo )); then
+    # El estado exacto del incidente del 2026-09-23: HestiaCP solo crea el
+    # repositorio si NO existe la contraseña, así que con la contraseña puesta
+    # y el repositorio ausente no lo creará nunca más por su cuenta.
+    bc_hestia_veredicto FALLO "tiene contraseña de repositorio pero el repositorio NO existe: HestiaCP ya no lo creará solo. Salida: apartar esa contraseña para que la vuelva a crear, o crear el repositorio con ella"
+  elif (( marcada && ! clave && ! repo )); then
+    bc_hestia_veredicto OK "marcada para respaldo incremental; todavía no ha respaldado nunca, el primer respaldo creará su repositorio"
+  elif (( ! marcada && repo )); then
+    bc_hestia_veredicto AVISO "tiene copias pero YA NO se respalda: no está marcada para respaldo incremental"
+  elif (( ! marcada && ! repo )); then
+    bc_hestia_veredicto AVISO "esta cuenta no entra en los respaldos incrementales"
+  else
+    bc_hestia_veredicto OK "marcada y con repositorio"
+  fi
+}
+
+# ¿La ruta que hay registrada HOY en el servidor es una ruta sensata?
+# $1 repositorio registrado   $2 tipo del remoto de rclone (o vacío)
+#
+# No duplica la lógica: llama a bc_hestia_validar_repo y traduce. La llamada va
+# dentro de $( ), que es una subshell: así ni sus mensajes ni los contadores
+# BC_ERR_COUNT/BC_WARN_COUNT que toca salen de aquí, y esta función sigue
+# imprimiendo una sola línea. Sin tocar su contrato.
+bc_hestia_diag_ruta_repo() {
+  local repo="${1:-}" tipo="${2:-}" salida rc=0
+
+  if [[ -z "$repo" ]]; then
+    bc_hestia_veredicto FALLO "no hay ningún repositorio registrado en el servidor"
+    return 0
+  fi
+
+  salida="$(bc_hestia_validar_repo "$repo" "$tipo" 2>&1)" || rc=$?
+
+  if (( rc != 0 )); then
+    # Se queda con la primera línea: es la que dice QUÉ está mal.
+    bc_hestia_veredicto FALLO "la ruta registrada no es segura: $(sed -n '1p' <<<"$salida" | sed 's/.*\[ERROR\] *//')"
+  elif [[ -n "$salida" ]]; then
+    bc_hestia_veredicto AVISO "$(sed -n '1p' <<<"$salida" | sed 's/.*\[AVISO\] *//')"
+  else
+    bc_hestia_veredicto OK "la ruta registrada ('$repo') no cae dentro de ninguna web ni depende del directorio de trabajo"
+  fi
+}
+
+# =============================================================================
 # Estado
 # =============================================================================
 bc_hestia_status() {
@@ -192,6 +349,12 @@ bc_hestia_status() {
     bc_log "Usuarios de HestiaCP: $(tr '\n' ' ' <<<"$usuarios")"
   fi
 
+  # --- Diagnóstico: ¿esto respalda de verdad? --------------------------------
+  # Lo que sigue no describe la configuración: dice si funciona. El juicio vive
+  # en las funciones puras de arriba; aquí solo se LEE del servidor y se pinta.
+  bc_hestia_diagnosticar "$conf" "$donde" "$usuarios"
+  local fallos_diag=$?
+
   # --- Claves rescatadas -----------------------------------------------------
   local restic_local rclone_local
   local dir_claves; dir_claves="$(bc_hestia_salida)"
@@ -202,7 +365,166 @@ bc_hestia_status() {
   if (( rclone_local > 0 )); then bc_ok "rclone.conf rescatado: $rclone_local archivo(s)."
   else bc_err "el rclone.conf NO está rescatado. Sin él no se puede LLEGAR al repositorio."; fi
   (( restic_local == 0 || rclone_local == 0 )) && bc_log "Rescátalas con:  sudo backupctl hestia keys"
+
+  # Código de salida 1 si el diagnóstico encontró algún FALLO: así esta orden
+  # sirve para encadenar en una comprobación automática, igual que `status`.
+  (( fallos_diag > 0 )) && { BC_DELIBERATE_EXIT=1; return 1; }
   return 0
+}
+
+# -----------------------------------------------------------------------------
+# El diagnóstico: solo LEE del servidor y delega el juicio
+# -----------------------------------------------------------------------------
+# $1 el contenido de conf/restic.conf   $2 la salida de bc_hestia_cron_donde
+# $3 la lista de cuentas del panel
+# Devuelve cuántos FALLO ha encontrado.
+#
+# Ninguna lectura que falla se muestra como vacío ni como cero: se dice «no se
+# pudo leer» (40-salvaguardas.md §5). De la contraseña de una cuenta solo se
+# dice si está o no: nunca su contenido.
+bc_hestia_diagnosticar() {
+  local conf="${1:-}" donde="${2:-}" usuarios="${3:-}"
+  local fallos=0 avisos=0
+
+  echo
+  bc_step "¿Los respaldos funcionan de verdad?"
+
+  # --- La ruta registrada ----------------------------------------------------
+  local repo tipo_remoto="" rem
+  repo="$(sed -n "s/^REPO='\(.*\)'$/\1/p" <<<"$conf")"
+  if [[ "$repo" == rclone:* ]]; then
+    rem="${repo#rclone:}"; rem="${rem%%:*}"
+    tipo_remoto="$( { bc_hestia_root "rclone config show $(printf '%q' "$rem") 2>/dev/null \
+        | awk '/^type[[:space:]]*=/{sub(/^type[[:space:]]*=[[:space:]]*/,\"\"); print; exit}'" \
+        || true; } | tr -d '\r' )"
+  fi
+  bc_hestia_pintar_veredicto "Ruta del repositorio" "$(bc_hestia_diag_ruta_repo "$repo" "$tipo_remoto")" \
+    fallos avisos
+
+  # --- El cron ---------------------------------------------------------------
+  # bc_hestia_cron_donde devuelve "archivo:contenido" (grep -H). Se coge la
+  # primera línea: si hubiera varias, la de más arriba es la que manda para el
+  # diagnóstico y las demás ya se listaron más arriba.
+  local linea_cron="" archivo_cron=""
+  if [[ -n "$donde" ]]; then
+    linea_cron="$(sed -n '1p' <<<"$donde")"
+    if [[ "$linea_cron" == /*:* ]]; then
+      archivo_cron="${linea_cron%%:*}"
+      linea_cron="${linea_cron#*:}"
+    fi
+  fi
+  bc_hestia_pintar_veredicto "Programación" "$(bc_hestia_diag_cron "$linea_cron" "$archivo_cron")" \
+    fallos avisos
+
+  # Cada cuántas horas corre, para poder juzgar si una instantánea es vieja.
+  # Sin una línea legible se asume a diario, que es lo que instala esta misma
+  # herramienta; se dice, para que nadie lo tome por un dato leído.
+  local cada_h=24
+  if [[ -n "$linea_cron" ]]; then
+    local c_min c_hora c_resto
+    read -r c_min c_hora c_resto <<<"$linea_cron"
+    if [[ "$c_hora" == "*" ]]; then cada_h=1
+    elif [[ "$c_hora" =~ ^\*/([0-9]+)$ ]]; then cada_h="${BASH_REMATCH[1]}"
+    elif [[ "$c_hora" == *,* ]]; then cada_h=$(( 24 / $(tr ',' '\n' <<<"$c_hora" | grep -c .) ))
+    fi
+  else
+    bc_log "No hay línea de cron legible: para juzgar la antigüedad se asume una vez al día."
+  fi
+  (( cada_h < 1 )) && cada_h=1
+
+  # --- Cuenta por cuenta -----------------------------------------------------
+  if [[ -z "$usuarios" ]]; then
+    bc_warn "No se pudo leer la lista de cuentas del panel: el diagnóstico por cuenta se omite."
+    echo
+    bc_log "Resumen del diagnóstico: $fallos fallo(s), $avisos aviso(s)."
+    return "$fallos"
+  fi
+
+  local ahora; ahora="$(date +%s)"
+  local u clave repo_existe marcada fecha
+  while IFS= read -r u; do
+    [[ -n "$u" ]] || continue
+    echo
+    bc_log "Cuenta '$u':"
+
+    # ¿Tiene contraseña de repositorio? Solo SI o NO; el contenido no se lee.
+    clave=0
+    bc_hestia_root "test -f $(printf '%q' "$HESTIA_DIR/data/users/$u/restic.conf")" \
+      >/dev/null 2>&1 && clave=1
+
+    # ¿Está marcada? BACKUPS_INCREMENTAL, con S, en el user.conf de la cuenta.
+    # Con `grep -q` y su código de salida, no contando coincidencias: contar
+    # aquí no aporta nada, y contar con un cero por defecto detrás acaba
+    # imprimiendo ese cero dos veces (el propio contador ya escribe "0" antes
+    # de salir con 1). Es el patrón que vigila tests/probar_patrones.sh.
+    marcada=0
+    bc_hestia_root "grep -q \"^BACKUPS_INCREMENTAL='yes'\" $(printf '%q' "$HESTIA_DIR/data/users/$u/user.conf")" \
+      >/dev/null 2>&1 && marcada=1
+
+    # ¿Existe el repositorio de esta cuenta? Un repositorio de restic siempre
+    # tiene un archivo "config" en su raíz: se pregunta por él. Es solo lectura
+    # y no necesita la contraseña.
+    repo_existe=0
+    local ruta_cuenta
+    if [[ "$repo" == rclone:* ]]; then
+      ruta_cuenta="${repo#rclone:}"
+      bc_hestia_root "rclone lsf $(printf '%q' "${ruta_cuenta%/}/$u/config") 2>/dev/null | grep -q ." \
+        >/dev/null 2>&1 && repo_existe=1
+    fi
+    bc_hestia_pintar_veredicto "  estado" "$(bc_hestia_diag_cuenta "$clave" "$repo_existe" "$marcada")" \
+      fallos avisos
+
+    # La última instantánea, SIEMPRE con json explícito: con un formato que no
+    # reconoce, v-list-user-backups-restic devuelve vacío y código 0, que se
+    # leería como «no tiene copias» (ADR 0017).
+    fecha="$(bc_hestia_ultima_instantanea "$u")"
+    if [[ "$fecha" == "__ILEGIBLE__" ]]; then
+      bc_warn "  última copia: no se pudo leer la lista de instantáneas."
+      avisos=$(( avisos + 1 ))
+    else
+      bc_hestia_pintar_veredicto "  última copia" \
+        "$(bc_hestia_diag_instantanea "$fecha" "$ahora" "$cada_h")" fallos avisos
+    fi
+  done <<<"$usuarios"
+
+  echo
+  bc_log "Resumen del diagnóstico: $fallos fallo(s), $avisos aviso(s)."
+  return "$fallos"
+}
+
+# Fecha ISO de la última instantánea de una cuenta, o vacío si no tiene
+# ninguna, o __ILEGIBLE__ si no se pudo saber.
+#
+# Se llama con `json` EXPLÍCITO: el formato no se valida en HestiaCP y uno
+# desconocido devuelve vacío con código 0. Y una salida vacía NO se toma por
+# «no hay copias» sin más: solo se afirma eso si la orden respondió algo que
+# parece JSON. En cualquier otro caso, __ILEGIBLE__.
+bc_hestia_ultima_instantanea() {
+  local u="$1" salida
+  salida="$(bc_hestia_read "$HESTIA_DIR/bin/v-list-user-backups-restic $(printf '%q' "$u") json" 2>/dev/null || true)"
+  [[ -n "$salida" ]] || { echo "__ILEGIBLE__"; return 0; }
+  [[ "$salida" == *"{"* || "$salida" == *"["* ]] || { echo "__ILEGIBLE__"; return 0; }
+
+  # La fecha de cada instantánea viene como "time": "2026-09-24T03:00:00...".
+  # Se coge la mayor, que es la más reciente, sin depender del orden.
+  local fecha
+  fecha="$(grep -oE '"time"[[:space:]]*:[[:space:]]*"[^"]+"' <<<"$salida" \
+           | sed 's/.*"\([^"]*\)"$/\1/' | sort | tail -1)"
+  echo "$fecha"
+}
+
+# Pinta un veredicto "NIVEL<TAB>mensaje" y suma al contador que corresponda.
+# $3 y $4 son NOMBRES de variable (se actualizan por referencia).
+bc_hestia_pintar_veredicto() {
+  local etiqueta="$1" veredicto="$2" n_fallos="$3" n_avisos="$4"
+  local nivel mensaje
+  nivel="${veredicto%%$'\t'*}"
+  mensaje="${veredicto#*$'\t'}"
+  case "$nivel" in
+    FALLO) bc_err  "$etiqueta: $mensaje"; printf -v "$n_fallos" '%s' "$(( ${!n_fallos} + 1 ))" ;;
+    AVISO) bc_warn "$etiqueta: $mensaje"; printf -v "$n_avisos" '%s' "$(( ${!n_avisos} + 1 ))" ;;
+    *)     bc_ok   "$etiqueta: $mensaje" ;;
+  esac
 }
 
 # =============================================================================
