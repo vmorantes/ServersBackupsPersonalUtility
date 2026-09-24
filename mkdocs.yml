@@ -5,41 +5,28 @@ docs_dir: docs
 site_dir: site
 use_directory_urls: true
 
+# Tema incorporado de MkDocs: no añade dependencias y no depende de ningún
+# paquete de terceros que pueda quedarse sin mantenimiento.
+# `highlightjs: false` es obligatorio: el resaltado lo hace Pygments al
+# construir (pymdownx.highlight), y dejar activo highlight.js encima lo rompe.
 theme:
-  name: material
-  language: es
-  icon:
-    logo: material/database-sync
-    repo: fontawesome/brands/github
-  features:
-    - navigation.instant
-    - navigation.tracking
-    - navigation.tabs
-    - navigation.sections
-    - navigation.top
-    - navigation.indexes
-    - toc.follow
-    - search.suggest
-    - search.highlight
-    - search.share
-    - content.code.copy
-    - content.code.annotate
-    - content.tooltips
-  palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: teal
-      accent: deep orange
-      toggle:
-        icon: material/weather-night
-        name: Cambiar a modo oscuro
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: teal
-      accent: deep orange
-      toggle:
-        icon: material/weather-sunny
-        name: Cambiar a modo claro
+  name: readthedocs
+  locale: es
+  highlightjs: false
+  navigation_depth: 3
+  collapse_navigation: false
+  sticky_navigation: true
+  titles_only: false
+  prev_next_buttons_location: both
+  include_homepage_in_sidebar: true
+
+# Lo que el tema no trae y añadimos nosotros, sin plugins ni dependencias.
+extra_css:
+  - estilos/pygments.css
+  - estilos/extra.css
+
+extra_javascript:
+  - estilos/copiar.js
 
 markdown_extensions:
   - abbr
@@ -59,8 +46,6 @@ markdown_extensions:
       line_spans: __span
   - pymdownx.inlinehilite
   - pymdownx.snippets
-  - pymdownx.tabbed:
-      alternate_style: true
   - pymdownx.tasklist:
       custom_checkbox: true
   - pymdownx.keys

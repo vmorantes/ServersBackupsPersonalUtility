@@ -1,0 +1,47 @@
+/* docs/estilos/extra.css — lo mínimo que el tema readthedocs no trae:
+   el botón de copiar y que las tablas anchas no desborden. Nada de modo
+   oscuro, tipografías externas, ni tocar los colores del tema. */
+
+/* Botón de copiar: el bloque de código es el contenedor de referencia para
+   colocarlo arriba a la derecha, sin mover el propio <pre>. */
+.bc-bloque-codigo {
+  position: relative;
+}
+
+.bc-boton-copiar {
+  position: absolute;
+  top: 0.4em;
+  right: 0.4em;
+  padding: 0.2em 0.6em;
+  font-size: 0.75em;
+  line-height: 1.4;
+  color: #333;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  cursor: pointer;
+  /* Discreto por defecto: solo se nota al pasar el ratón por el bloque o al
+     recibir foco de teclado (regla de abajo), no todo el tiempo. */
+  opacity: 0.35;
+}
+
+.bc-bloque-codigo:hover .bc-boton-copiar,
+.bc-boton-copiar:focus {
+  opacity: 1;
+}
+
+/* En un documento impreso el botón no sirve de nada. */
+@media print {
+  .bc-boton-copiar {
+    display: none;
+  }
+}
+
+/* Tablas anchas: que se desplacen en horizontal en vez de desbordar la
+   página en pantallas pequeñas. Selector amplio (".rst-content table", no
+   una clase concreta de tabla): no hay forma de comprobar aquí, sin
+   construir el sitio, qué clase exacta pone el tema en cada <table>. */
+.rst-content table {
+  display: block;
+  overflow-x: auto;
+}

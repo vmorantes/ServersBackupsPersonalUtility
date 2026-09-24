@@ -50,9 +50,12 @@ while read -r f; do
 done < <(listar '*.py')
 echo "scripts Python revisados: $n"
 
-paso "Sintaxis JavaScript de la web"
+paso "Sintaxis JavaScript (web y documentación)"
 if command -v node >/dev/null; then
-    node --check web/app.js && echo "web/app.js correcto" || fallo "node --check web/app.js"
+    for js in web/app.js docs/estilos/*.js; do
+        [[ -e "$js" ]] || continue
+        node --check "$js" && echo "$js correcto" || fallo "node --check $js"
+    done
 else
     echo "NO COMPROBADO: node no está instalado (instalarlo es decisión del PO)"
 fi
