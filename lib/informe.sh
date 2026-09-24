@@ -88,8 +88,25 @@ bc_informe_registro() {
   printf '%s\n' "${linea%$BC_INFORME_SEP}" >> "$BC_INFORME_TMP"
 }
 
-# Un valor a registrar no puede llevar saltos de línea: partirían el registro.
-bc_informe_llano() { printf '%s' "${1//$'\n'/ }"; }
+# Un salto de línea dentro de un valor partiría el registro en dos. Pero
+# aplanarlo a un espacio pierde lo que más falta hace: la salida de una orden
+# que fue mal se lee en varias líneas o no se lee. Se CODIFICA con el separador
+# de registro (0x1E) y se restaura al componer el Markdown.
+BC_INFORME_NL=$'\x1e'
+
+bc_informe_llano() {
+  local v="${1:-}"
+  v="${v//$BC_INFORME_NL/ }"
+  printf '%s' "${v//$'\n'/$BC_INFORME_NL}"
+}
+
+# Con sus saltos de línea de vuelta: para un bloque de código, donde caben.
+bc_informe_con_saltos() { printf '%s' "${1//$BC_INFORME_NL/$'\n'}"; }
+
+# Sin ellos: en una celda de tabla NO caben —una tabla de Markdown es una fila
+# por línea— así que ahí se ven como espacios. Perder el formato en una celda
+# es el precio de que la tabla siga siendo una tabla.
+bc_informe_sin_saltos() { printf '%s' "${1//$BC_INFORME_NL/ }"; }
 
 # Marca un valor como secreto: se tacha en TODO el informe al cerrar, lo
 # escriba quien lo escriba y con la etiqueta que sea.
@@ -212,11 +229,11 @@ bc_informe_componer() {
   local pasos="" datos="" ordenes="" copias="" deshacer=""
   while IFS="$BC_INFORME_SEP" read -r tipo a b c; do
     case "$tipo" in
-      paso)     pasos+="| ${a} | ${b} | ${c} |"$'\n' ;;
-      dato)     datos+="| ${a} | ${b} | ${c} |"$'\n' ;;
-      orden)    ordenes+="${a}"$'\n' ;;
-      copia)    copias+="| ${a} | ${b} |"$'\n' ;;
-      deshacer) deshacer+="${a}"$'\n' ;;
+      paso)     pasos+="| $(bc_informe_sin_saltos "$a") | $(bc_informe_sin_saltos "$b") | $(bc_informe_sin_saltos "$c") |"$'\n' ;;
+      dato)     datos+="| $(bc_informe_sin_saltos "$a") | $(bc_informe_sin_saltos "$b") | $(bc_informe_sin_saltos "$c") |"$'\n' ;;
+      orden)    ordenes+="$(bc_informe_con_saltos "$a")"$'\n' ;;
+      copia)    copias+="| $(bc_informe_sin_saltos "$a") | $(bc_informe_sin_saltos "$b") |"$'\n' ;;
+      deshacer) deshacer+="$(bc_informe_con_saltos "$a")"$'\n' ;;
     esac
   done < "$BC_INFORME_TMP"
 

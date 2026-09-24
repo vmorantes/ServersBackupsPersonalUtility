@@ -91,6 +91,39 @@ test_an_empty_before_does_not_shift_the_columns() {
 
 # LA PRUEBA QUE IMPORTA. Se le pasa una contraseña a bc_informe_dato y el
 # archivo NO puede contenerla.
+# La salida de una orden que fue mal se lee en varias líneas o no se lee. Si el
+# informe la aplana, el apartado que existe para enseñar lo que devolvió el
+# servidor queda ilegible justo cuando más falta hace.
+test_a_multiline_output_keeps_its_lines() {
+  nueva_prueba t8
+  local perfil="$BANCO_TMP/t8/perfil"
+  mkdir -p "$perfil"
+  local ruta
+  ruta="$(con_informe "$perfil" '
+    bc_informe_abrir "Alta" "servidor.example.org"
+    bc_informe_orden "$(printf "primera linea\nsegunda linea\ntercera linea")"
+    bc_informe_cerrar FALLO
+  ')"
+  afirmar_igual "$(grep -c "^\(primera\|segunda\|tercera\) linea$" "$ruta")" "3" \
+    "las tres líneas salen en tres líneas, no en una"
+}
+
+# En una celda de tabla NO caben: una tabla de Markdown es una fila por línea.
+# Ahí se ven como espacios, y la tabla sigue siendo una tabla.
+test_a_multiline_value_does_not_break_a_table() {
+  nueva_prueba t9
+  local perfil="$BANCO_TMP/t9/perfil"
+  mkdir -p "$perfil"
+  local ruta
+  ruta="$(con_informe "$perfil" '
+    bc_informe_abrir "Alta" "servidor.example.org"
+    bc_informe_paso "Registrar" FALLO "$(printf "no se pudo\nmira el log")"
+    bc_informe_cerrar FALLO
+  ')"
+  afirmar_contiene "$ruta" "\| Registrar \| FALLO \| no se pudo mira el log \|" \
+    "el detalle multilínea cabe en una sola fila"
+}
+
 test_a_password_never_reaches_the_file() {
   nueva_prueba t3
   local perfil="$BANCO_TMP/t3/perfil"
@@ -194,6 +227,8 @@ test_primitives_are_silent_without_an_open_report() {
 
 test_a_full_report_contains_every_element
 test_an_empty_before_does_not_shift_the_columns
+test_a_multiline_output_keeps_its_lines
+test_a_multiline_value_does_not_break_a_table
 test_a_password_never_reaches_the_file
 test_a_registered_secret_is_scrubbed_everywhere
 test_an_unwritable_destination_does_not_fail_the_operation

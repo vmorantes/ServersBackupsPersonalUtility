@@ -805,19 +805,26 @@ bc_hestia_leer_diagnostico() {
 # desplazaría todos los campos siguientes.
 BC_HESTIA_SEP=$'\x1f'
 
+# Un salto de línea dentro de un valor partiría el registro en dos, y quien lee
+# no podría distinguir esa mitad de un registro nuevo. Pero APLANARLO a un
+# espacio pierde información justo cuando más se necesita: la salida de una
+# orden que fue mal se lee en varias líneas o no se lee. Así que se CODIFICA
+# con el separador de registro (0x1E) y se restaura al presentarla.
+BC_HESTIA_NL=$'\x1e'
+
 bc_hestia_registro() {
   local campo valor salida=""
   for campo in "$@"; do
-    # Un salto de línea dentro de un valor partiría el registro en dos, y el
-    # que lee no tiene forma de distinguir esa mitad de un registro nuevo. Se
-    # aplanan a espacios: lo que sale de aquí son DATOS para informar, no el
-    # contenido original. Quien necesite el texto tal cual (el juez de
-    # bc_hestia_escribir_y_confirmar) lo recibe antes de pasar por aquí.
     valor="${campo//$BC_HESTIA_SEP/ }"
-    salida+="${valor//$'\n'/ }$BC_HESTIA_SEP"
+    valor="${valor//$BC_HESTIA_NL/ }"
+    salida+="${valor//$'\n'/$BC_HESTIA_NL}$BC_HESTIA_SEP"
   done
   printf '%s\n' "${salida%$BC_HESTIA_SEP}"
 }
+
+# Devuelve un valor con sus saltos de línea de vuelta. Lo usa quien PRESENTA
+# los datos (el informe, la pantalla), nunca quien los transporta.
+bc_hestia_restaurar_saltos() { printf '%s' "${1//$BC_HESTIA_NL/$'\n'}"; }
 
 # -----------------------------------------------------------------------------
 # La parte que PINTA y CUENTA
