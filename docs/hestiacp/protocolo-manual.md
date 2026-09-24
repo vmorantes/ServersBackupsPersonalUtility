@@ -49,7 +49,13 @@ estable y permite cambiar de destino sin tocar HestiaCP.
 rclone config
 ```
 
-### S3 / Mega S4
+!!! question "Elige UNA de las dos opciones"
+    **A)** Si las copias van a un bucket en la nube (S3, Mega S4, Backblaze).
+    **B)** Si van a un disco o un NAS montado en el propio servidor.
+
+    No se hacen las dos: cada una crea un remoto distinto.
+
+### Opción A · S3 / Mega S4
 
 ```
 n                          nuevo remoto
@@ -73,7 +79,7 @@ q
     compatible con S3 pero **no es AWS**: sin endpoint, rclone dirige las
     peticiones a Amazon, donde tus credenciales no valen nada.
 
-### Disco local o NAS montado
+### Opción B · Disco local o NAS montado
 
 ```
 n

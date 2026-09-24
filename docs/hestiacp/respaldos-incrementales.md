@@ -66,7 +66,9 @@ Devuelve código `1` si hay fallos, así que sirve en una comprobación automát
 
 ## Montarlo desde cero
 
-### Todo de una vez
+Tres formas de hacer exactamente lo mismo. **Elige una**, no las encadenes.
+
+### Opción 1 · Todo de una vez
 
 ```bash
 backupctl hestia setup
@@ -74,7 +76,7 @@ backupctl hestia setup
 
 Encadena los cuatro pasos preguntando lo necesario.
 
-### Desde la interfaz web
+### Opción 2 · Desde la interfaz web
 
 ```bash
 backupctl web --open
@@ -83,7 +85,7 @@ backupctl web --open
 Pestaña **Blindaje**: los cuatro pasos con sus formularios, y el informe
 arriba del todo.
 
-### Paso a paso
+### Opción 3 · Paso a paso
 
 ```bash
 backupctl hestia rclone     # 1 · dónde se guarda

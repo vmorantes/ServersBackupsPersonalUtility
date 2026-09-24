@@ -59,7 +59,9 @@ Solo tres cosas. El resto lo crea `deploy`.
 
 ## Instalar en un servidor
 
-### Desde otra máquina (recomendado)
+Dos caminos para lo mismo. **Haz solo uno.**
+
+### Opción A · Desde otra máquina (recomendado)
 
 Si ya tienes el repositorio en tu equipo, despliega por SSH:
 
@@ -70,7 +72,7 @@ backupctl -p MiVPS deploy root@servidor.example
 Copia `bin/` y `lib/`, sube el `env.sh` del perfil y ejecuta el diagnóstico
 en el destino. Ver [Desplegar](../migracion/desplegar.md).
 
-### A mano
+### Opción B · A mano
 
 ```bash
 # 1. Copiar el tooling

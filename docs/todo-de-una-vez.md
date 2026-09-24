@@ -146,7 +146,7 @@ Y el botón **¿Dónde están mis claves?** te responde con rutas concretas.
 
 La pregunta importa, y tiene dos respuestas según el caso:
 
-### Mismo destino S3
+### Caso A · Mismo destino S3
 
 Si el servidor nuevo va a guardar en el **mismo** Mega S4 que ya usas, no
 hay que teclear nada. Botón **Reusar las claves guardadas**: instala allí el
@@ -158,7 +158,7 @@ Remotos que contiene:
         mi-almacenamiento
 ```
 
-### Destino nuevo
+### Caso B · Destino nuevo
 
 Si va a otro sitio, las claves salen del **panel de tu proveedor**
 (Mega → sección S4) y se introducen una vez en el formulario.
