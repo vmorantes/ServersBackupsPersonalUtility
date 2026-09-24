@@ -179,6 +179,76 @@ test_account_marked_with_repo_but_no_key_is_a_failure() {
     "marcada, con repositorio y sin contraseña: FALLO" "no abriría las copias que ya hay"
 }
 
+# El caso que ninguna prueba cubría: la cuenta no entra en los respaldos, pero
+# arrastra una contraseña de repositorio. Es la PRECONDICIÓN del incidente del
+# 2026-09-23: marcarla sin apartar esa contraseña no crea ningún repositorio.
+test_orphan_key_on_an_unmarked_account_is_named() {
+  nueva_prueba t35
+  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "1" "0" "0")" "AVISO" \
+    "sin marcar pero con contraseña guardada: AVISO" "NO lo creará"
+}
+
+# Lo mismo cuando ni siquiera hay un repositorio registrado en el servidor.
+test_orphan_key_without_a_registered_repo_is_named() {
+  nueva_prueba t36
+  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "1" "-" "0")" "AVISO" \
+    "sin marcar, con contraseña y sin repositorio registrado: AVISO" "NO lo creará"
+}
+
+# --- sin repositorio registrado ('-') ----------------------------------------
+#
+# La línea «Ruta del repositorio» ya dijo que no hay ninguno. El veredicto de
+# cada cuenta habla solo de lo que sí se sabe, y NO repite «no se pudo
+# comprobar si su repositorio existe» una vez por cuenta.
+
+test_no_registered_repo_does_not_repeat_the_unknown() {
+  nueva_prueba t37
+  local linea; linea="$(veredicto bc_hestia_diag_cuenta "1" "-" "1")"
+  afirmar_nivel "$linea" "AVISO" "marcada y con contraseña, sin repositorio registrado: AVISO"
+  case "${linea#*$'\t'}" in
+    *"su repositorio existe"*) afirmar_igual "repite" "no repite" \
+      "no repite lo que ya dijo la línea de la ruta" ;;
+    *) afirmar_igual "no repite" "no repite" \
+      "no repite lo que ya dijo la línea de la ruta" ;;
+  esac
+}
+
+test_no_registered_repo_and_unmarked_says_only_that() {
+  nueva_prueba t38
+  afirmar_nivel "$(veredicto bc_hestia_diag_cuenta "0" "-" "0")" "AVISO" \
+    "sin marcar y sin repositorio registrado: AVISO" "no entra en los respaldos"
+}
+
+# --- la doble sonda del repositorio ------------------------------------------
+#
+# bc_hestia_juzgar_repo recibe las dos respuestas y decide. Es pura: no sondea
+# nada. Lo que vigila es el desastre concreto de una sonda sola: si el
+# almacenamiento no responde y eso se lee como «el repositorio no existe», el
+# diagnóstico acaba recomendando apartar una contraseña que sí abre copias
+# reales.
+
+test_repo_probe_account_answers_means_it_exists() {
+  nueva_prueba t39
+  afirmar_igual "$(veredicto bc_hestia_juzgar_repo "1" "?")" "1" \
+    "la cuenta responde: existe, sin preguntar al padre"
+}
+
+test_repo_probe_parent_answers_and_account_does_not_means_it_is_gone() {
+  nueva_prueba t40
+  afirmar_igual "$(veredicto bc_hestia_juzgar_repo "0" "1")" "0" \
+    "el padre responde y la cuenta no: de verdad no existe"
+}
+
+test_repo_probe_neither_answers_is_unknown() {
+  nueva_prueba t41
+  afirmar_igual "$(veredicto bc_hestia_juzgar_repo "0" "0")" "?" \
+    "ni el padre ni la cuenta responden: no se afirma nada"
+  afirmar_igual "$(veredicto bc_hestia_juzgar_repo "?" "?")" "?" \
+    "las dos sondas fallan: no se afirma nada"
+  afirmar_igual "$(veredicto bc_hestia_juzgar_repo "0" "?")" "?" \
+    "la cuenta dice que no y el padre no contesta: no se afirma nada"
+}
+
 # --- lo que no se pudo leer ('?') --------------------------------------------
 #
 # Un '?' es «no se pudo preguntar», no «no». Las tres pruebas siguientes
@@ -374,6 +444,13 @@ test_account_unmarked_with_repo_is_a_warning
 test_account_unmarked_without_repo_is_a_warning
 test_account_marked_with_repo_is_ok
 test_account_marked_with_repo_but_no_key_is_a_failure
+test_orphan_key_on_an_unmarked_account_is_named
+test_orphan_key_without_a_registered_repo_is_named
+test_no_registered_repo_does_not_repeat_the_unknown
+test_no_registered_repo_and_unmarked_says_only_that
+test_repo_probe_account_answers_means_it_exists
+test_repo_probe_parent_answers_and_account_does_not_means_it_is_gone
+test_repo_probe_neither_answers_is_unknown
 test_account_with_unreadable_key_is_a_warning
 test_account_with_unreadable_repo_is_a_warning
 test_account_with_unreadable_mark_is_a_warning

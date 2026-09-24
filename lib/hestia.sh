@@ -143,6 +143,41 @@ bc_hestia_sondear_orden() {
   printf 'bash -c %s' "$(printf '%q' "$guion")"
 }
 
+# Sondea el repositorio de una cuenta y devuelve 0, 1 o '?'. Pregunta dos
+# veces cuando hace falta; el juicio está separado, en bc_hestia_juzgar_repo,
+# para que el banco lo pruebe sin servidor.
+#
+# Hay TRES caminos porque el REPO registrado tiene tres formas distintas, las
+# mismas que distingue bc_hestia_validar_repo (verificado en la fuente de
+# HestiaCP 1.10.4 el 2026-09-23):
+#   rclone:<remoto>:<ruta>  se sondea listando, que no necesita la contraseña
+#                           del repositorio.
+#   /ruta/absoluta          es el sistema de archivos del propio servidor.
+#   otro esquema (sftp:, s3:, b2:, rest:…)  se hablaría el protocolo, pero
+#                           abrir el repositorio para mirar dentro exige su
+#                           contraseña, y aquí no se usan contraseñas. No se
+#                           puede sondear: '?'.
+# Un repositorio siempre tiene un archivo "config" en su raíz: se pregunta por
+# él.
+bc_hestia_sondear_repo() {
+  local repo="${1:-}" u="${2:-}" cuenta padre='?' base
+  if [[ "$repo" == rclone:* ]]; then
+    base="${repo#rclone:}"; base="${base%/}"
+    cuenta="$(bc_hestia_sondear "rclone lsf $(printf '%q' "$base/$u/config") 2>/dev/null | grep -q .")"
+    [[ "$cuenta" == 1 ]] \
+      || padre="$(bc_hestia_sondear "rclone lsf $(printf '%q' "$base/") 2>/dev/null | grep -q .")"
+  elif [[ "$repo" == /* ]]; then
+    base="${repo%/}"
+    cuenta="$(bc_hestia_sondear "test -f $(printf '%q' "$base/$u/config")")"
+    [[ "$cuenta" == 1 ]] \
+      || padre="$(bc_hestia_sondear "test -d $(printf '%q' "$base")")"
+  else
+    echo '?'
+    return 0
+  fi
+  bc_hestia_juzgar_repo "$cuenta" "$padre"
+}
+
 bc_hestia_sondear() {
   local salida
   salida="$( { bc_hestia_root "$(bc_hestia_sondear_orden "$@")" 2>/dev/null || true; } | tr -d '\r' )"
@@ -277,13 +312,18 @@ bc_hestia_edad_llana() {
 
 # Cruza los tres datos de una cuenta: ¿tiene contraseña de repositorio?, ¿existe
 # el repositorio?, ¿está marcada con BACKUPS_INCREMENTAL?
-# $1 clave 0|1|?   $2 repo 0|1|?   $3 marcada 0|1|?
+# $1 clave 0|1|?   $2 repo 0|1|?|-   $3 marcada 0|1|?
 #
 # Tres estados, no dos. El '?' significa «no se pudo leer», y NO es lo mismo
 # que «no»: si una conexión se cae o un permiso falta, tratar eso como un 0
 # fabrica un diagnóstico que suena a dato leído. Por eso las comparaciones son
 # de CADENA (==) y no aritméticas: en aritmética un '?' no vale, y el 0 por
 # defecto volvería a colarse. Un '?' nunca produce OK.
+#
+# El repositorio admite además '-': no hay NINGUNO registrado en el servidor.
+# No es «no se pudo leer», es una pregunta que no tiene sentido hacer, y la
+# línea «Ruta del repositorio» ya la contestó una vez. Repetirla por cada
+# cuenta llena el informe de ruido que el usuario aprende a saltarse.
 bc_hestia_diag_cuenta() {
   local clave="${1:-?}" repo="${2:-?}" marcada="${3:-?}"
 
@@ -295,6 +335,29 @@ bc_hestia_diag_cuenta() {
     [[ "$clave"   == "?" ]] && faltan+=", si tiene contraseña de repositorio"
     [[ "$repo"    == "?" ]] && faltan+=", si su repositorio existe"
     bc_hestia_veredicto AVISO "no se pudo comprobar${faltan#,}. Sin ese dato no se puede decir si esta cuenta se respalda: compruébalo en el servidor"
+    return 0
+  fi
+
+  # Contraseña huérfana. Va antes que las reglas generales porque es más
+  # específica que todas ellas, y porque es la PRECONDICIÓN del incidente del
+  # 2026-09-23: HestiaCP solo crea el repositorio de una cuenta cuando NO
+  # existe su contraseña. Con la contraseña ya guardada, marcar la cuenta no
+  # crea nada, y el primer respaldo «correcto» no respalda nada.
+  if [[ "$marcada" == 0 && "$clave" == 1 && "$repo" != 1 ]]; then
+    bc_hestia_veredicto AVISO "no entra en los respaldos incrementales, pero tiene una contraseña de repositorio guardada. Si la marcas sin más, HestiaCP dará por hecho que su repositorio ya existe y NO lo creará: aparta esa contraseña antes de marcarla"
+    return 0
+  fi
+
+  # Sin repositorio registrado en el servidor, de esta cuenta solo se sabe si
+  # está marcada y si tiene contraseña. Se dice eso y nada más.
+  if [[ "$repo" == "-" ]]; then
+    if [[ "$marcada" == 1 && "$clave" == 1 ]]; then
+      bc_hestia_veredicto AVISO "marcada para respaldo incremental y con contraseña de repositorio guardada"
+    elif [[ "$marcada" == 1 ]]; then
+      bc_hestia_veredicto AVISO "marcada para respaldo incremental; todavía no tiene contraseña de repositorio"
+    else
+      bc_hestia_veredicto AVISO "esta cuenta no entra en los respaldos incrementales"
+    fi
     return 0
   fi
 
@@ -316,6 +379,32 @@ bc_hestia_diag_cuenta() {
     bc_hestia_veredicto AVISO "esta cuenta no entra en los respaldos incrementales"
   else
     bc_hestia_veredicto OK "marcada y con repositorio"
+  fi
+}
+
+# Decide si el repositorio de una cuenta existe, a partir de DOS sondas.
+# $1 respuesta de la sonda de la cuenta (0|1|?)   $2 la del padre (0|1|?)
+#
+# POR QUÉ SE PREGUNTA DOS VECES
+# Una sola sonda no distingue «ese repositorio no está» de «no pude mirar».
+# Y esa confusión tiene un desastre concreto detrás: con la cuenta marcada y
+# su contraseña guardada, un «no está» hace que el diagnóstico recomiende
+# APARTAR la contraseña para que HestiaCP vuelva a crear el repositorio. Si lo
+# que falló fue el almacenamiento —el remoto no responde, las credenciales
+# caducaron, la red se cayó— el repositorio sí estaba, con copias dentro, y
+# apartar la contraseña las deja ilegibles para siempre.
+# La segunda sonda pregunta por el PADRE, el repositorio global. Si el padre
+# responde, el camino hasta el almacenamiento funciona: que no esté el de la
+# cuenta significa de verdad que no existe. Si el padre tampoco responde, no
+# estamos en condiciones de afirmar nada.
+# No se miran códigos de salida concretos del almacenamiento: no se pueden
+# verificar contra la versión que corre en cada servidor. Se mira si el padre
+# contesta.
+bc_hestia_juzgar_repo() {
+  local cuenta="${1:-?}" padre="${2:-?}"
+  if [[ "$cuenta" == 1 ]]; then echo 1
+  elif [[ "$padre" == 1 ]]; then echo 0
+  else echo '?'
   fi
 }
 
@@ -525,31 +614,13 @@ bc_hestia_diagnosticar() {
     # de salir con 1). Es el patrón que vigila tests/probar_patrones.sh.
     marcada="$(bc_hestia_sondear "grep -q \"^BACKUPS_INCREMENTAL='yes'\" $(printf '%q' "$HESTIA_DIR/data/users/$u/user.conf")")"
 
-    # ¿Existe el repositorio de esta cuenta? Un repositorio de restic siempre
-    # tiene un archivo "config" en su raíz: se pregunta por él. Es solo lectura
-    # y no necesita la contraseña.
-    #
-    # Hay TRES caminos porque el REPO registrado tiene tres formas distintas,
-    # las mismas que distingue bc_hestia_validar_repo (verificado en la fuente
-    # de HestiaCP 1.10.4 el 2026-09-24):
-    #   rclone:<remoto>:<ruta>  se sondea con `rclone lsf`, que no necesita la
-    #                           contraseña del repositorio.
-    #   /ruta/absoluta          es el sistema de archivos del propio servidor:
-    #                           basta `test -e`.
-    #   otro esquema (sftp:, s3:, b2:, rest:…)  restic hablaría el protocolo,
-    #                           pero abrir el repositorio para mirar dentro
-    #                           exige su contraseña, y aquí no se usan
-    #                           contraseñas. No se puede sondear: '?'.
-    # Un '?' aquí es más honrado que un 0: decir «no existe» de un repositorio
-    # que sí existe llevaría a recrearlo y a perder las copias.
-    local ruta_cuenta
-    if [[ "$repo" == rclone:* ]]; then
-      ruta_cuenta="${repo#rclone:}"
-      repo_existe="$(bc_hestia_sondear "rclone lsf $(printf '%q' "${ruta_cuenta%/}/$u/config") 2>/dev/null | grep -q .")"
-    elif [[ "$repo" == /* ]]; then
-      repo_existe="$(bc_hestia_sondear "test -e $(printf '%q' "${repo%/}/$u/config")")"
+    # ¿Existe el repositorio de esta cuenta? Doble sonda; el porqué está en
+    # bc_hestia_juzgar_repo. Si no hay ninguno registrado en el servidor, no
+    # se pregunta: la línea «Ruta del repositorio» ya lo dijo una vez.
+    if [[ -z "$repo" ]]; then
+      repo_existe='-'
     else
-      repo_existe='?'
+      repo_existe="$(bc_hestia_sondear_repo "$repo" "$u")"
     fi
     bc_hestia_pintar_veredicto "  estado" "$(bc_hestia_diag_cuenta "$clave" "$repo_existe" "$marcada")" \
       fallos avisos
