@@ -158,6 +158,7 @@ ${BC_BLD}BLINDAJE (HestiaCP)${BC_RST}
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia restic${BC_RST}          registrar el host de respaldo y su retención
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia cron${BC_RST}            activar el cron de Restic
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia cuentas${BC_RST}         marcar las cuentas para respaldo incremental
+  ${BC_RED}!${BC_RST} ${BC_CYA}hestia copia --usuarios <c>${BC_RST}  lanzar una copia y COMPROBAR que se hizo
   ${BC_GRN}·${BC_RST} ${BC_CYA}hestia verify${BC_RST}          instantáneas, integridad y espacio real
   ${BC_YEL}~${BC_RST} ${BC_CYA}hestia keys${BC_RST}            rescatar restic.conf Y rclone.conf
   ${BC_GRN}·${BC_RST} ${BC_CYA}hestia dbs${BC_RST}             qué bases conoce HestiaCP y cuáles no (clave al migrar)
@@ -551,9 +552,10 @@ case "$BC_CMD" in
       restic) bc_hestia_restic ;;
       cron)   bc_hestia_cron ;;
       cuentas) bc_hestia_cuentas ;;
+      copia)  bc_hestia_copia ;;
       verify) bc_hestia_verify ;;
       keys)   bc_hestia_keys ;;
-      *) bc_die "subórdenes de 'hestia': status setup rclone restic cron cuentas verify keys donde users dbs" ;;
+      *) bc_die "subórdenes de 'hestia': status setup rclone restic cron cuentas copia verify keys donde users dbs" ;;
     esac
     ;;
 

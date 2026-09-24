@@ -406,6 +406,94 @@ bc_hestia_fecha_mas_reciente() {
   printf '%s' "$mejor"
 }
 
+# -----------------------------------------------------------------------------
+# La diferencia entre dos listas de instantáneas
+# -----------------------------------------------------------------------------
+# Puras. Son el corazón del paso que comprueba una copia: la ÚNICA prueba de
+# que un respaldo se hizo es una instantánea nueva con fecha (ADR 0017). Ni el
+# código de salida de la orden ni lo que registre el panel valen, porque un
+# respaldo que falla puede terminar registrando éxito.
+
+# Una línea por instantánea: "fecha<TAB>identificador".
+#
+# El troceado se ancla en la clave de la fecha, no en las llaves del json: el
+# formato lo decide la versión de la herramienta de respaldo instalada en cada
+# servidor, y un objeto anidado dentro de cada instantánea rompería cualquier
+# corte por llaves. Lo único que se asume es que cada instantánea trae su fecha
+# y que su identificador viene después.
+bc_hestia_instantaneas_de() {
+  awk '
+    {
+      n = split($0, trozos, /"time"[[:space:]]*:[[:space:]]*"/)
+      for (i = 2; i <= n; i++) {
+        t = trozos[i]; sub(/".*/, "", t)
+        id = ""
+        if (match(trozos[i], /"short_id"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
+          id = substr(trozos[i], RSTART, RLENGTH)
+          sub(/.*"short_id"[[:space:]]*:[[:space:]]*"/, "", id)
+          sub(/".*/, "", id)
+        }
+        print t "\t" id
+      }
+    }' <<<"${1:-}"
+}
+
+# Solo las fechas de esa lista.
+bc_hestia_fechas_de() { cut -f1 <<<"${1:-}" | sed '/^$/d'; }
+
+# ¿Hay alguna instantánea en el DESPUÉS más reciente que todas las del ANTES?
+# Imprime "fecha<TAB>identificador" de la más nueva, o nada si no hay ninguna.
+#
+# Se compara por INSTANTE. Una fecha sin huso no dice a qué instante
+# corresponde, así que no puede demostrar nada: se ignora para esto, y quien
+# llame se encontrará con que no hay prueba — que es la verdad.
+bc_hestia_instantanea_nueva() {
+  local antes="${1:-}" despues="${2:-}"
+  local corte=0 linea f e mejor="" mejor_e=0
+
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    e="$(bc_hestia_fecha_epoch "$f")" || continue
+    (( e > corte )) && corte="$e"
+  done <<<"$(bc_hestia_fechas_de "$antes")"
+
+  while IFS= read -r linea; do
+    f="${linea%%$'\t'*}"
+    [[ -n "$f" ]] || continue
+    e="$(bc_hestia_fecha_epoch "$f")" || continue
+    if (( e > corte )) && (( e > mejor_e )); then mejor="$linea"; mejor_e="$e"; fi
+  done <<<"$despues"
+
+  printf '%s' "$mejor"
+}
+
+# Cuántas instantáneas hay en una lista ya troceada.
+bc_hestia_cuantas_de() { grep -c . <<<"${1:-}" || true; }
+
+# Lo que la lista diga que ocupó lo añadido, si lo dice. Vacío si no.
+# No todas las versiones lo traen, y un dato inventado es peor que ninguno.
+bc_hestia_tamano_anadido() {
+  local json="${1:-}" bytes
+  bytes="$(grep -oE '"data_added"[[:space:]]*:[[:space:]]*[0-9]+' <<<"$json" \
+           | sed 's/.*[[:space:]]//' | sort -n | tail -1)"
+  [[ -n "$bytes" ]] || return 0
+  awk -v b="$bytes" 'BEGIN{
+    if (b < 1024) { printf "%d B", b }
+    else if (b < 1048576) { printf "%.1f KiB", b/1024 }
+    else if (b < 1073741824) { printf "%.1f MiB", b/1048576 }
+    else { printf "%.2f GiB", b/1073741824 }
+  }'
+}
+
+# Segundos -> "1 m 12 s". Para decir cuánto tardó.
+bc_hestia_duracion_llana() {
+  local s="${1:-0}"
+  if (( s < 60 )); then printf '%d s' "$s"
+  elif (( s < 3600 )); then printf '%d m %d s' $(( s / 60 )) $(( s % 60 ))
+  else printf '%d h %d m' $(( s / 3600 )) $(( (s % 3600) / 60 ))
+  fi
+}
+
 # Segundos -> lenguaje llano. Pura, auxiliar de la de arriba.
 bc_hestia_edad_llana() {
   local s="${1:-0}"
@@ -561,6 +649,182 @@ bc_hestia_diag_ruta_repo() {
   else
     bc_hestia_veredicto OK "la ruta registrada ('$repo') no cae dentro de ninguna web ni depende del directorio de trabajo"
   fi
+}
+
+# =============================================================================
+# La primera copia, COMPROBADA
+# =============================================================================
+# El paso que cierra el ciclo, y el único que demuestra que todo lo anterior
+# sirvió de algo. Es el ADR 0017 en su forma más pura:
+#
+#   - v-backup-user-restic usa una constante de error que NO existe, así que un
+#     respaldo que falla termina registrando ÉXITO. Su código de salida no vale
+#     como prueba de nada.
+#   - El respaldo incremental no escribe en ningún log de archivo.
+#   - La ÚNICA prueba de que un respaldo se hizo es una instantánea nueva con
+#     fecha.
+#
+# De ahí la forma del paso: se lee la lista ANTES, se lanza, se vuelve a leer,
+# y el veredicto sale de la DIFERENCIA. Si no se puede leer el antes no se
+# lanza nada: sin el antes no se puede demostrar nada, y lanzarlo sería gastar
+# el tiempo del servidor para no saber el resultado.
+#
+# Aquí NO hay copia fechada que hacer: no se sobrescribe ninguna configuración,
+# se añade una copia. Lo que este paso hace no se deshace, y no hace falta.
+bc_hestia_copia() {
+  bc_hestia_conectar
+  trap 'bc_hestia_cerrar' RETURN
+
+  bc_section "Primera copia, comprobada"
+
+  # Por defecto NO todas: un respaldo completo de todas las cuentas de un panel
+  # puede tardar mucho y cargar el servidor. Eso no se lanza por descuido.
+  local pedidas="${BC_OPT_USERS:-}"
+  if [[ -z "$pedidas" ]]; then
+    bc_err "hace falta decir de qué cuenta se quiere la copia."
+    bc_log  "Esto lanza un respaldo DE VERDAD, que puede tardar y cargar el servidor,"
+    bc_log  "así que no se hace de todas por descuido. Elige una o varias:"
+    bc_log  "    backupctl -p $BC_PROFILE hestia copia --usuarios cliente07"
+    bc_log  "Para ver qué cuentas hay:  backupctl -p $BC_PROFILE hestia users"
+    BC_DELIBERATE_EXIT=1
+    return 1
+  fi
+
+  local cuentas=() u
+  while IFS= read -r u; do
+    [[ -n "$u" ]] && cuentas+=("$u")
+  done <<<"$(tr ',' '\n' <<<"$pedidas")"
+
+  if [[ "${BC_OPT_DRY:-0}" == "1" ]]; then
+    bc_step "Simulación (--dry-run): esto es lo que PASARÍA, no lo que ha pasado."
+    for u in "${cuentas[@]}"; do
+      local antes_json
+      if ! antes_json="$(bc_hestia_lista_instantaneas "$u")"; then
+        bc_warn "  $u: no se puede leer su lista de copias, así que NO se lanzaría nada."
+        continue
+      fi
+      local n; n="$(bc_hestia_cuantas_de "$(bc_hestia_instantaneas_de "$antes_json")")"
+      bc_log "  $u: tiene $n copia(s) ahora. Se lanzaría un respaldo y se comprobaría"
+      bc_log "      que aparece una NUEVA, más reciente que todas las de ahora."
+    done
+    bc_ok "No se ha tocado nada, y no se ha guardado ningún informe."
+    return 0
+  fi
+
+  bc_warn "Esto lanza un respaldo DE VERDAD. Puede tardar y cargar el servidor."
+  bc_confirm "¿Lanzar la copia de ${#cuentas[@]} cuenta(s)?" y \
+    || { bc_log "Cancelado."; return 0; }
+
+  bc_informe_abrir "Primera copia comprobada" "${DEPLOY_HOST:-este servidor}"
+  bc_informe_deshacer "Nada que deshacer: este paso AÑADE una copia, no sobrescribe nada."
+
+  local rc=0 hechas=0 fallidas=0
+  for u in "${cuentas[@]}"; do
+    echo
+    bc_log "Cuenta '$u':"
+    if bc_hestia_copia_de_cuenta "$u"; then
+      hechas=$(( hechas + 1 ))
+    else
+      fallidas=$(( fallidas + 1 )); rc=1
+    fi
+  done
+
+  echo
+  bc_log "Resumen: $hechas copia(s) comprobada(s), $fallidas sin comprobar."
+  bc_informe_paso "Primera copia" "$([[ $fallidas -eq 0 ]] && echo HECHO || echo FALLO)" \
+    "$hechas comprobada(s), $fallidas sin comprobar"
+  local ruta; ruta="$(bc_informe_cerrar "$([[ $fallidas -eq 0 ]] && echo HECHO || echo FALLO)")"
+  [[ -n "$ruta" ]] && bc_log "Informe de lo hecho: $ruta"
+  (( rc != 0 )) && BC_DELIBERATE_EXIT=1
+  return "$rc"
+}
+
+# La lista de instantáneas de una cuenta, en crudo. Devuelve 1 si no se pudo
+# leer — que no es lo mismo que «no tiene copias», y por eso no se confunden.
+bc_hestia_lista_instantaneas() {
+  local u="${1:-}" salida
+  salida="$(bc_hestia_read "$HESTIA_DIR/bin/v-list-user-backups-restic $(printf '%q' "$u") json" 2>/dev/null || true)"
+  [[ -n "$salida" ]] || return 1
+  [[ "$salida" == *"{"* || "$salida" == *"["* ]] || return 1
+  printf '%s' "$salida"
+}
+
+# Una cuenta. Devuelve 0 solo si apareció una instantánea nueva.
+bc_hestia_copia_de_cuenta() {
+  local u="${1:-}"
+
+  # 1. El ANTES. Sin él no se puede demostrar nada, así que no se lanza nada.
+  local antes_json antes
+  if ! antes_json="$(bc_hestia_lista_instantaneas "$u")"; then
+    bc_err "  no se pudo leer su lista de copias: NO se ha lanzado ningún respaldo."
+    bc_log  "  Sin saber qué había antes, un respaldo no demostraría nada."
+    bc_informe_paso "Copia de $u" CIEGO "no se pudo leer la lista previa; no se lanzó nada"
+    return 1
+  fi
+  antes="$(bc_hestia_instantaneas_de "$antes_json")"
+  local n_antes; n_antes="$(bc_hestia_cuantas_de "$antes")"
+  bc_log "  Antes: $n_antes copia(s)."
+
+  # 2. Lanzar. Se cronometra: es el dato que se querrá saber.
+  bc_log "  Lanzando el respaldo... (puede tardar)"
+  local t0 t1 segundos salida rc=0
+  t0="$(date +%s)"
+  salida="$(bc_hestia_root "$HESTIA_DIR/bin/v-backup-user-restic $(printf '%q' "$u")" 2>&1)" || rc=$?
+  t1="$(date +%s)"
+  segundos=$(( t1 - t0 ))
+
+  # 3. El DESPUÉS.
+  local despues_json despues
+  if ! despues_json="$(bc_hestia_lista_instantaneas "$u")"; then
+    bc_err "  SE LANZÓ el respaldo y no se pudo volver a leer la lista de copias."
+    bc_log  "  No sabemos si se hizo. Compruébalo en el panel."
+    bc_informe_dato "Cuenta $u — duración" "" "$(bc_hestia_duracion_llana "$segundos")"
+    bc_informe_paso "Copia de $u" ESCRITO_SIN_COMPROBAR "se lanzó y no se pudo leer el resultado"
+    return 1
+  fi
+  despues="$(bc_hestia_instantaneas_de "$despues_json")"
+
+  # 4. El veredicto sale de la DIFERENCIA, y solo de ahí.
+  local nueva fecha id
+  nueva="$(bc_hestia_instantanea_nueva "$antes" "$despues")"
+  fecha="${nueva%%$'\t'*}"; id="${nueva#*$'\t'}"
+
+  local tam; tam="$(bc_hestia_tamano_anadido "$despues_json")"
+  bc_informe_dato "Cuenta $u — copias" "$n_antes" "$(bc_hestia_cuantas_de "$despues")"
+  bc_informe_dato "Cuenta $u — duración" "" "$(bc_hestia_duracion_llana "$segundos")"
+  [[ -n "$tam" ]] && bc_informe_dato "Cuenta $u — datos añadidos" "" "$tam"
+  # El código de la orden es un DATO, nunca una prueba.
+  bc_informe_dato "Cuenta $u — código de la orden (dato, no prueba)" "" "$rc"
+
+  if [[ -n "$nueva" ]]; then
+    bc_ok "  Copia HECHA y comprobada: hay una instantánea nueva."
+    bc_log "    Identificador: ${id:-<no lo dice la lista>}"
+    bc_log "    Fecha:         $(bc_hestia_fecha_legible "$fecha")"
+    bc_log "    Tardó:         $(bc_hestia_duracion_llana "$segundos")${tam:+ · añadió $tam}"
+    (( rc != 0 )) && bc_warn "  (la orden salió con código $rc, pero la copia está: manda el servidor)"
+    bc_informe_dato "Cuenta $u — instantánea nueva" "" \
+      "${id:-sin identificador} · $(bc_hestia_fecha_legible "$fecha")"
+    bc_informe_paso "Copia de $u" HECHO "instantánea nueva ${id:-sin identificador}"
+    return 0
+  fi
+
+  if (( rc == 0 )); then
+    bc_err "  La orden dijo que el respaldo fue BIEN, y NO hay ninguna copia nueva."
+    bc_log  "  Esto es exactamente lo que este paso existe para detectar: HestiaCP"
+    bc_log  "  PUEDE DECIR QUE UN RESPALDO SALIÓ BIEN CUANDO HA FALLADO, y acaba de"
+    bc_log  "  pasar. No lo arregles repitiendo la orden: mira el destino del"
+    bc_log  "  repositorio, que responda, y que la cuenta tenga su contraseña."
+    bc_log  "  Sigue habiendo $n_antes copia(s), las mismas que antes."
+    [[ -n "$salida" ]] && { bc_log "  Lo que respondió:"; sed 's/^/        /' <<<"$salida"; }
+    bc_informe_paso "Copia de $u" SIN_CONFIRMAR \
+      "la orden salió con 0 y no apareció ninguna instantánea nueva"
+    return 1
+  fi
+
+  bc_err "  El respaldo falló (código $rc) y no hay ninguna copia nueva."
+  [[ -n "$salida" ]] && { bc_log "  Lo que respondió:"; sed 's/^/        /' <<<"$salida"; }
+  bc_informe_paso "Copia de $u" FALLO "la orden falló con $rc y no apareció ninguna instantánea"
+  return 1
 }
 
 # =============================================================================
