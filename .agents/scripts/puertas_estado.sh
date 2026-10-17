@@ -24,6 +24,13 @@ MAX_TRAMOS=10
 fallos=0
 fallo() { printf 'FALLO: %s\n' "$1"; fallos=$((fallos + 1)); }
 
+# Los números de mensaje se escriben con tres dígitos en todo el proyecto, así
+# que un «#97» impreso donde el repositorio escribe «#097» rompe una búsqueda.
+# El relleno es SOLO de impresión, y siempre sobre el número ya sin ceros a la
+# izquierda: en aritmética bash leería «097» como octal. Más de tres dígitos se
+# imprimen enteros: el relleno es un mínimo, no un recorte.
+num3() { printf '%03d' "$1"; }
+
 # --- Puerta 0: el archivo existe -------------------------------------------
 # Sin él no hay estado, y las demás puertas no significarían nada.
 if [ ! -f "$AHORA" ]; then
@@ -100,11 +107,11 @@ else
     : "${declarado_n:=0}"
 
     if [ -z "$mayor" ]; then
-        echo "ok: AHORA.md declara #$declarado; no hay ningún #NNN en los tramos con el que contrastarlo"
+        echo "ok: AHORA.md declara #$(num3 "$declarado_n"); no hay ningún #NNN en los tramos con el que contrastarlo"
     elif [ "$mayor" -gt "$declarado_n" ]; then
-        fallo "el contador se quedó atrás: estado/AHORA.md declara #$declarado como último usado, pero $(basename "$mayor_archivo") registra #$mayor. Una sesión nueva seguirá por #$((declarado_n + 1)) y reutilizará números ya usados: a partir de ahí, citar «el mensaje #NNN» deja de identificar un mensaje. Corrige AHORA.md, no el tramo"
+        fallo "el contador se quedó atrás: estado/AHORA.md declara #$(num3 "$declarado_n") como último usado, pero $(basename "$mayor_archivo") registra #$(num3 "$mayor"). Una sesión nueva seguirá por #$(num3 "$((declarado_n + 1))") y reutilizará números ya usados: a partir de ahí, citar «el mensaje #NNN» deja de identificar un mensaje. Corrige AHORA.md, no el tramo"
     else
-        echo "ok: el contador no se quedó atrás (AHORA.md #$declarado, mayor en los tramos #$mayor)"
+        echo "ok: el contador no se quedó atrás (AHORA.md #$(num3 "$declarado_n"), mayor en los tramos #$(num3 "$mayor"))"
     fi
 fi
 
