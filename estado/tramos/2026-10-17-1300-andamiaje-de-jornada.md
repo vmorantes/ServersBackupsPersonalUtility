@@ -18,7 +18,8 @@
 | #107→#108 | Documentación, el archivo de este tramo, y los números a tres dígitos | completado; **el coder separó dos defectos de la guarda que se contaban como uno** | `5427423` `dac630b` `0bf1291` |
 | #109→#110 | Cierre: bitácora 0003 y el estado al día | completado; **el coder encontró que los tres documentos daban tres recuentos distintos de los bloqueos de la guarda** | `3d4203b` `4fdc632` |
 | #111→#112 | Corregir los recuentos, con auditoría de los cinco bloqueos | completado | `86cf1ae` |
-| #113→#114 | Dejar `AHORA.md` verdadero al cerrar | completado | — |
+| #113→#114 | Dejar `AHORA.md` verdadero al cerrar | completado; **el coder encontró una cifra rancia en «Espera al PO»** | `71a0f9f` |
+| #115→#116 | Quitar esa cifra y dejar en su lugar cómo medirla | completado | — |
 
 ## Hallazgos
 
@@ -57,6 +58,11 @@
    **Ninguna se esquivó**: se reportaron y se usó otra herramienta. Un arreglo que solo cubra
    A deja B vivo.
 
+   **El cinco es un suelo auditado, no un total.** El defecto A siguió disparándose durante el
+   propio cierre, al escribir en este archivo textos que citaban órdenes. Se deja de perseguir
+   la cifra a propósito: lo que decide si el arreglo vale la pena es que ocurra varias veces
+   al día, no el número exacto.
+
 4. **El límite de la puerta nueva, dicho por el coder y que conviene no olvidar:** compara
    contra los tramos, así que **una ronda que no se anota no delata nada**. Protege al que
    escribe el tramo, no al que lo olvida.
@@ -83,6 +89,25 @@
    que cuando el coder la commitea, lo escrito es verdad. Es lo mismo que ya se hacía con los
    contadores, aplicado también a la sección «En vuelo». Sin eso, `AHORA.md` termina siempre
    el día diciendo que hay una ronda en vuelo que ya terminó.
+
+9. **Segunda cifra rancia del día, del mismo tipo que el contador.** «Espera al PO» decía
+   «68 commits sin subir» desde hacía semanas. No coincide con ninguna medición posible: la
+   rama lleva 118 commits sobre `master`, y 20 que este clon cree sin subir. Lo encontró el
+   coder leyendo `AHORA.md` **en frío**, como una sesión nueva, que es justo lo que se le
+   pidió.
+
+   Y el arquitecto la había propagado al PO esa misma tarde, sumándole los commits del día:
+   «82». Una cifra falsa operada aritméticamente sigue siendo falsa, y suena más fiable.
+
+   **Decisión: en `estado/` no se escriben cifras que envejecen; se escribe cómo medirlas.**
+   Con su salvedad, porque aquí `fetch` está prohibido: `origin/<rama>` es una referencia
+   local, y lo que falta por subir de verdad solo lo sabe el PO.
+
+10. **Lo que encontró el coder salió de leer, no de ejecutar.** Sus tres hallazgos del día
+    —el desfase del contador, los recuentos contradictorios y esta cifra— vinieron de un
+    resumen de compactación que la regla obliga a enviar, de una lectura de contraste pedida
+    expresamente, y de mandarle leer el archivo entero en frío. Ninguno habría aparecido
+    ejecutando pasos. **Pedir lectura, y no solo ejecución, es lo que lo hizo rentable hoy.**
 
 ## Decisiones
 

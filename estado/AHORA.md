@@ -17,7 +17,21 @@
 
 ## Espera al PO
 
-1. **`git push` de `release/2.1`.** Son 68 commits sin subir. Solo lo hace él.
+1. **`git push` de `release/2.1`.** Hay commits sin subir; **no se escribe aquí cuántos**.
+   Una cifra escrita una vez envejece y se lee como medida: este archivo dijo «68» durante
+   semanas y no coincidía con ninguna medición posible. Lo que sí se puede medir sin tocar el
+   remoto, y que quien lea esto debe **repetir en vez de creer**:
+
+   ```
+   git rev-list --count master..release/2.1
+   git rev-list --count origin/release/2.1..release/2.1
+   ```
+
+   **La segunda cifra no es una verdad del servidor**: `origin/release/2.1` es una referencia
+   local, de la última vez que alguien sincronizó. No se refresca desde aquí —`fetch` y
+   `ls-remote` usan la URL del remoto, que lleva credencial (`40-salvaguardas.md` §3)—. Lo que
+   falta por subir de verdad solo lo sabe el PO.
+
 2. **La migración de sus servidores del 2026-10-02**: las tareas pendientes están en
    `migraciones/PENDIENTES.md`, fuera de git porque llevan datos reales. Fases A y B antes de
    apagar el servidor viejo.
@@ -45,13 +59,14 @@ verificable del repositorio antes de la primera instrucción.
 ## 2. En vuelo
 
 **Nada en vuelo.** El tramo del andamiaje de jornada se cerró el 2026-10-17 con el reporte
-`#114`. No hay instrucción enviada sin reporte.
+`#116`. No hay instrucción enviada sin reporte.
 
 Rondas del día: **#103→#104** (identificación del coder y su resumen de compactación; **él
 encontró el desfase del contador**), **#105→#106** (la puerta del contador y su prueba de
 rechazo), **#107→#108** (documentación, el tramo, los números a tres dígitos), **#109→#110**
 (bitácora y cierre), **#111→#112** (cuadrar los recuentos de la guarda, **hallazgo suyo**) y
-**#113→#114** (dejar este archivo verdadero). El detalle, en
+**#113→#114** (dejar este archivo verdadero) y **#115→#116** (quitar una cifra rancia de
+«Espera al PO», **hallazgo suyo también**). El detalle, en
 `estado/tramos/2026-10-17-1300-andamiaje-de-jornada.md`.
 
 
@@ -62,9 +77,9 @@ rechazo), **#107→#108** (documentación, el tramo, los números a tres dígito
 
 Son **dos**, y los dos avanzan por separado (regla `30`):
 
-- **`#NNN`, cadena con el coder.** Último usado: **#114**. El próximo: **#115**.
-- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-010**. El próximo:
-  **A-011**.
+- **`#NNN`, cadena con el coder.** Último usado: **#116**. El próximo: **#117**.
+- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-011**. El próximo:
+  **A-012**.
 
 **Reparado el 2026-10-17, y vale la pena saber por qué.** Este archivo declaraba «último usado
 #081» desde el 2026-09-24. Era **falso**: el archivo del tramo de ese mismo día registra
