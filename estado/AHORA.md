@@ -43,12 +43,14 @@ verificable del repositorio antes de la primera instrucción.
 
 ## 2. En vuelo
 
-**En vuelo: la instrucción #105**, enviada al coder el 2026-10-17. Le pide implementar la
-puerta del contador (§6.5) y commitear lo que el arquitecto dejó escrito en `estado/`.
+**En vuelo: la instrucción #107**, enviada al coder el 2026-10-17. Le pide commitear la
+documentación y el estado que dejó escritos el arquitecto, y un arreglo cosmético de formato.
 
-El coder **se identificó y entregó su resumen de compactación** (reportes `#104`): misma
-sesión con continuidad desde la fase 2, sin ronda en vuelo, árbol intacto, y el hallazgo del
-contador que está resuelto arriba.
+Cerradas hoy: la ronda **#103→#104** (identificación del coder y su resumen de compactación;
+**él encontró el desfase del contador**) y la **#105→#106** (la puerta del contador contra los
+tramos, con su prueba de rechazo: 12 afirmaciones, y la puerta vista fallar contra una copia
+del repositorio real). El detalle entero, en
+`estado/tramos/2026-10-17-1300-andamiaje-de-jornada.md`.
 
 **El coder existe y está abierto**: `ServersBackupsPersonalUtility-Coder-Main`, renombrada por
 el PO el 2026-10-17 a las 13:29 y compactada después.
@@ -81,9 +83,9 @@ hace falta la salida completa, no la impresión.
 
 Son **dos**, y los dos avanzan por separado (regla `30`):
 
-- **`#NNN`, cadena con el coder.** Último usado: **#104**. El próximo: **#105**.
-- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-005**. El próximo:
-  **A-006**.
+- **`#NNN`, cadena con el coder.** Último usado: **#107**. El próximo: **#108**.
+- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-006**. El próximo:
+  **A-007**.
 
 **Reparado el 2026-10-17, y vale la pena saber por qué.** Este archivo declaraba «último usado
 #081» desde el 2026-09-24. Era **falso**: el archivo del tramo de ese mismo día registra
@@ -135,18 +137,17 @@ servidores del 2026-10-02 y, el 2026-10-17, el andamiaje de jornada.
 
 ### Para cerrar el andamiaje de jornada
 
-Las puertas del estado ya corren por máquina en `verificar.sh`
-(`.agents/scripts/puertas_estado.sh`, con su prueba de rechazo). Queda:
+Las **seis** puertas del estado corren por máquina en `verificar.sh`
+(`.agents/scripts/puertas_estado.sh`, con su prueba de rechazo: 12 afirmaciones). Queda:
 
-5. **La puerta del contador, sin implementar.** Las puertas comprueban que el contador esté
-   **declarado**, no que **cuadre**. El desfase de casi un mes lo demuestra: `AHORA.md` decía
-   `#081` y el archivo del tramo decía `#097`, y ninguna puerta se enteró. Falta comparar el
-   número declarado aquí con el mayor `#NNN` que aparezca en `estado/tramos/`: si el tramo va
-   por delante, este archivo miente. Con su prueba de rechazo.
-6. **La guarda confunde el contenido de un documento con una orden.** El 2026-10-17 bloqueó
-   escribir un documento porque el texto citaba órdenes `v-*`. Es el mismo error que ya se
-   arregló con los mensajes de commit (H13): falta la misma distinción para los heredocs que
-   escriben documentación. **Es lo único que queda abierto del andamiaje.**
+5. **La guarda confunde el contenido de un archivo con una orden.** El 2026-10-17 pasó
+   **tres veces, de tres formas distintas**: al arquitecto, escribiendo un documento que
+   citaba órdenes `v-*`; al coder, escribiendo un script que contenía su propio borrado
+   recursivo de un temporal con la ruta en variable; y otra vez al arquitecto, escribiendo en
+   este archivo esa misma frase. Ninguno de los dos la esquivó: se reportó y se usó la
+   herramienta de escritura de archivos. Es el mismo error que ya se arregló con los mensajes
+   de commit (H13), y el arreglo tiene que cubrir las tres formas. **Es lo único que queda
+   abierto del andamiaje**, y ya ha costado tiempo tres veces en un día.
 
 ## 7. Decidido y sin implementar
 
