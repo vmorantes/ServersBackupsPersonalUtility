@@ -51,7 +51,8 @@ Súbelo al **origen** y ejecútalo. La primera vez, con `--rapido`: no mide tama
 ni cuenta mensajes, que en un servidor grande puede tardar mucho.
 
 ```bash
-scp tools/migracion-caliente/analizar.paquete.sh root@203.0.113.10:/root/
+cd tools/migracion-caliente
+scp analizar.paquete.sh root@203.0.113.10:/root/
 ssh root@203.0.113.10 'bash /root/analizar.paquete.sh --rapido'
 ```
 
@@ -81,22 +82,27 @@ Si quieres los tamaños y el número de mensajes por buzón, repítelo sin
 ## 2. Revisar cada propuesta
 
 Copia la propuesta de cada cuenta a `tools/migracion-caliente/` (git ignora los
-`migracion-*.sh`, salvo el ejemplo) y revísala. **Así como sale, la herramienta se
-niega a usarla**, a propósito:
+`migracion-*.sh`, salvo el ejemplo) y revísala. Hay dos huecos que **tienes que**
+rellenar tú:
 
-- **`IP_DESTINO="PENDIENTE_IP_DESTINO"`**: pon la IP del servidor nuevo.
+- **`IP_DESTINO`**: la IP del servidor nuevo.
 - **`php=""`** en los dominios cuyo PHP en el origen era `default`: desde los
   archivos no se puede saber qué versión es. Mírala en el panel del origen y
   escribe la plantilla exacta (`PHP-7_4`, `PHP-8_1`…). Nunca `default`: no es la
   misma versión en los dos servidores.
+
+Si se te olvida alguno, la herramienta se niega al lanzar `plan`, antes de tocar
+nada, y dice cuál falta. Pero **lee el plan entero de todos modos**: es la última
+vez que ves todo lo que va a hacer antes de que lo haga.
 
 Y busca cada `REVISAR:`. Los que más importan:
 
 | Aviso | Qué hacer |
 |---|---|
 | Aplicación «no se pudo determinar» | Va como `tipo="ninguno"`: la base se migra, pero **la configuración no se reescribe**. Las credenciales nuevas se escriben a mano tras la fase 1 |
-| CodeIgniter con directorio de entorno | El analizador apunta `ruta_db` al `database.php` del entorno activo (`application/config/production/…`), que es el que manda. Compruébalo |
+| CodeIgniter con directorio de entorno | El analizador apunta `ruta_db` al `database.php` del entorno activo (por ejemplo `public_html/application/config/production/database.php`; la ruta es relativa a la carpeta del dominio), que es el que manda. Compruébalo |
 | `active_group` distinto de `default`, o una clave repetida en `database.php` | La herramienta se negará con ese proyecto. Corrige el archivo en el origen o trátalo a mano |
+| Cron **suspendido** en el origen | Alguien lo apagó a propósito. La herramienta **no lo migra**, y lo dice en el plan. Recréalo a mano solo si de verdad hace falta |
 | Cron que llama a `php` sin ruta | En el servidor nuevo puede ser otra versión. Pon la ruta absoluta |
 | Cron puesto a mano (`crontab -e`) | La migración no lo lleva. Recréalo tú |
 | Base que ninguna aplicación usa | Va como base suelta. Decide si hace falta |
@@ -213,8 +219,23 @@ En el **destino**, el paquete lleva contraseñas:
 rm /tmp/migracion-cuenta.paquete.sh
 ```
 
-La herramienta también deja en el destino un directorio fechado por corrida, con
-volcados de las bases **en claro**. Cuando todo esté comprobado, bórralo.
+La herramienta deja en el destino un directorio por corrida:
+
+```
+/home/<cuenta>/migraciones/<AAAAMMDD_HHMMSS>/
+/home/<cuenta>/migraciones/ultima   → la última corrida
+```
+
+Ahí están los volcados de las bases **en claro**, y también **`deshacer.sh`, la
+marcha atrás** de lo que esa corrida creó. La herramienta te imprime la ruta al
+terminar cada fase.
+
+**No lo borres hasta haber descartado la marcha atrás**: con todo comprobado y
+unos días sin sorpresas. Entonces sí, porque lleva las bases en claro:
+
+```bash
+rm -r /home/cuenta/migraciones
+```
 
 Y no apagues el servidor viejo hasta que hayan pasado unos días sin sorpresas.
 
