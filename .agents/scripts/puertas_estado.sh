@@ -66,7 +66,49 @@ else
     [ "$fallos" -eq "$antes" ] && echo "ok: los dos contadores declarados"
 fi
 
-# --- Puerta 4: los tramos, podados -----------------------------------------
+# --- Puerta 4: el contador no se queda atrás -------------------------------
+# La puerta 3 comprueba que el contador está declarado, no que acierte. Esto
+# compara lo declarado con lo que registran los tramos, que es la única fuente
+# independiente que hay.
+#
+# Por qué existe: AHORA.md declaró «último usado #081» desde el 2026-09-24,
+# mientras estado/tramos/2026-09-23-2300-fases-1-y-2.md registraba rondas hasta
+# el #097. Los dos documentos se contradijeron durante casi un mes y nadie lo
+# vio. Una sesión nueva que se fíe del número bajo reutiliza números ya usados,
+# y entonces «el mensaje #083» deja de identificar un mensaje.
+#
+# Solo se lee de AHORA.md el patrón «Último usado: **#NNN**», no todos sus
+# números: el propio archivo cita números viejos al explicar la reparación.
+declarado=$(grep -oE 'Último usado: \*\*#[0-9]+\*\*' "$AHORA" | head -1 | grep -oE '[0-9]+')
+if [ -z "$declarado" ]; then
+    fallo "estado/AHORA.md no declara cuál fue el último #NNN usado (se busca «Último usado: **#NNN**»): sin ese dato una sesión nueva no sabe por qué número seguir"
+else
+    mayor=""
+    mayor_archivo=""
+    if [ -d "$TRAMOS" ]; then
+        while IFS= read -r archivo; do
+            n=$(grep -ohE '#[0-9]{3,}' "$archivo" | tr -d '#' | sed 's/^0*//' | sort -n | tail -1)
+            [ -n "$n" ] || continue
+            if [ -z "$mayor" ] || [ "$n" -gt "$mayor" ]; then
+                mayor="$n"
+                mayor_archivo="$archivo"
+            fi
+        done < <(find "$TRAMOS" -maxdepth 1 -type f -name '*.md' | sort)
+    fi
+
+    declarado_n=$(printf '%s' "$declarado" | sed 's/^0*//')
+    : "${declarado_n:=0}"
+
+    if [ -z "$mayor" ]; then
+        echo "ok: AHORA.md declara #$declarado; no hay ningún #NNN en los tramos con el que contrastarlo"
+    elif [ "$mayor" -gt "$declarado_n" ]; then
+        fallo "el contador se quedó atrás: estado/AHORA.md declara #$declarado como último usado, pero $(basename "$mayor_archivo") registra #$mayor. Una sesión nueva seguirá por #$((declarado_n + 1)) y reutilizará números ya usados: a partir de ahí, citar «el mensaje #NNN» deja de identificar un mensaje. Corrige AHORA.md, no el tramo"
+    else
+        echo "ok: el contador no se quedó atrás (AHORA.md #$declarado, mayor en los tramos #$mayor)"
+    fi
+fi
+
+# --- Puerta 5: los tramos, podados -----------------------------------------
 # Regla 60: se conservan los 10 más recientes. Documentación muerta la lee un
 # agente como verdad.
 if [ -d "$TRAMOS" ]; then
