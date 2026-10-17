@@ -14,7 +14,11 @@
 | Ronda | Qué | Estado | Commits |
 | --- | --- | --- | --- |
 | #124→#125 | Identificación del coder | completado | — |
-| #126 | Entrada intacta de la herramienta, ejemplo saneado, ADR 0018 y estado | en vuelo | — |
+| #126→#127 | Entrada intacta de la herramienta, ejemplo saneado, ADR 0018 y estado | completado con desviación: los tres ejecutables entraron en 100644 | `e6afa65` `d3461b8` `e98fe28` `a5d74de` `0c93782` |
+| #128→#129 | Restituir los modos; corregir fases, `forzar_ssl` y dos frases falsas del ejemplo | completado; 13/13 modos iguales al origen | `3079010` `76042f6` |
+| #130→#131 | Tipo `codeigniter3` | **bloqueado por su propio gate**: la regla de `active_group` no cabe sin tocar el helper compartido. El coder paró, midió y trajo un prototipo probado | — |
+| #132→#133 | `codeigniter3` con gancho de guardas en los dos helpers, suite y tres mutaciones | completado: 82 afirmaciones; M1, M2 y M3 muerden | `3be710b` `96e7908` |
+| #134 | T1 retirar `TejidoTesting`; T2 falso OK de `plan_dominio_existe`; T3 claves repetidas en CodeIgniter 3 | en vuelo | — |
 
 ## Hallazgos
 
@@ -28,6 +32,61 @@
 3. **La guarda tomó un `grep -r .` en otro repositorio por la raíz de este** (cwd distinto).
    Variante del defecto B: no mira el directorio real. No se esquivó: se buscó sobre archivos
    nombrados.
+
+4. **13 de 13 sumas iguales** al commit de origen. Pero `core.fileMode=false` en esta copia de
+   trabajo dejó el `chmod +x` solo en el disco: los tres ejecutables entraron en 100644. Lo vio el
+   coder y no improvisó un commit fuera del plan. Afecta a todo el repositorio: un bit de
+   ejecución solo llega a git con `git update-index --chmod=+x`.
+5. **El ejemplo del coder se saltaba `sincronizar`** en la secuencia de fases, afirmaba que la
+   herramienta no ejecuta con las contraseñas de marcador (sin verificar) y contaba una anécdota
+   de PHP que no ocurrió. Lo vio el arquitecto leyendo el archivo, no el reporte.
+6. **`forzar_ssl` solo es verdad con el literal `"true"`** (`cfg_si`, `BASE_CONFIG.sh:547`): una
+   errata lo desactiva en silencio. Lo vio el coder.
+7. **Precisiones al ADR 0018**, que no se edita: §3 «byte a byte» es verdad del contenido, y de
+   los modos solo tras `#128`; §5 la ruta de `piecesphp` es `public_html/app/config/…`, relativa
+   a la carpeta del dominio.
+8. **Defecto C de la guarda**, nuevo: `REDIRECCION_AL_SISTEMA` (`guardia.py:89`) bloquea toda
+   redirección a `/var/…`, y el repositorio vive en `/var/www/html/`. Muerde cada ruta absoluta.
+   La línea 90 ya acota a `/var/lib`. Y el defecto A volvió a morder al arquitecto al escribir
+   este mismo tramo. Sin tocar: frente (b), no nombrado.
+
+9. **`sincronizar` borra en el destino lo que no exista en el origen** (`BASE_GENERAL.sh:999-1003`)
+   y solo se puede repetir hasta apuntar el DNS. La cabecera del origen habla de «dos fases» y no
+   la nombra: la secuencia real es de cinco pasos. Lo vio el coder; va a la guía del lunes.
+10. **El tipo nuevo no se fía de `$active_group`**: si el proyecto no usa el grupo `default`, se
+   niega. Y CodeIgniter 3 admite `application/config/<ENTORNO>/database.php`, que manda sobre el
+   general: el analizador tiene que detectarlo.
+
+11. **El helper de escritura no toca el `database.php`**: escribe un archivo aparte y el shell
+    compara, copia y deshace. Y los patrones están **duplicados** entre lectura y escritura con
+    sintaxis distinta: un tipo mal registrado en uno solo falla de forma asimétrica.
+12. **Drupal y PrestaShop no anclan su patrón a un grupo**: con una segunda conexión en el
+    archivo reescribirían la última, no la de `default`. Preexistente, sin tocar.
+13. **Gancho de guardas, decidido por el arquitecto** (`#132`): aditivo, inerte para los tipos
+    existentes (WordPress byte a byte igual con y sin él, prueba B3), y ampliado a la lectura,
+    que el prototipo no cubría: sin eso se migraría la base de otro grupo sin error.
+
+14. **Verificación de HestiaCP 1.10.5 para el analizador** (subagente, 2026-10-17). Las listas del
+    panel no escriben si el objeto existe, pero **escriben en `error.log` si no existe**, y arman el
+    json sin escapar. Los tamaños guardados son viejos. **Decisión: el analizador no llama a ninguna
+    orden del panel**; lee los `.conf` y mide con `du`/`find`. Borrador para `50-hestiacp.md` en el
+    scratchpad del arquitecto, depositado en `50-hestiacp.md` tras `#133`.
+15. **Los buzones viven en `/home/<u>/mail/<dominio>/<cuenta>/` (Maildir).** Cierra el SIN VERIFICAR
+    de MAIL del paso 8: excluir MAIL no impide que el correo entre en la instantánea, como WEB.
+16. **`plan_dominio_existe` da «existe» para un dominio que no existe** (`BASE_PLAN.sh:50`): la
+    salida de error del panel contiene el nombre buscado. Confirmado por lectura del arquitecto. No
+    destruye (la fase 1 crea sin consultarla), pero el `plan` mentiría en un destino nuevo y
+    `verificar` daría un falso OK. Va en la ronda siguiente, con su prueba.
+
+17. **Clave repetida en el grupo `default`: se reescribe la que la aplicación NO usa.** En PHP gana la
+    última; el patrón de array casa una vez por grupo y reescribe la primera. Código 0, parece bien.
+    Lo vio el coder. Se cierra con una segunda guarda.
+18. **La guarda no deja restaurar un archivo concreto con checkout**: no distingue un archivo del
+    árbol entero. Las instrucciones no deben ofrecerlo mientras no se ajuste.
+19. **El PO borró `TejidoTesting/` del disco** a mitad de la ronda `#132`. El coder lo vio, no lo
+    restauró y lo reportó: exactamente lo que dice la regla. Mandato nuevo del PO: las claves de los
+    respaldos fuera del repositorio, obtenidas por él sin pasar por los agentes. **Después del
+    lunes.**
 
 ## Decisiones
 

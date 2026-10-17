@@ -41,6 +41,11 @@
    contra un HestiaCP real y ahora no hay dónde ensayarlo: no se usa en producción. Guía, por si vuelve uno:
    `.agents/docs/guia-pruebas-fase-2.md`. **Lunes 2026-10-19: migra un servidor MUY grande** (Joomla y
    proyectos CodeIgniter 3.1.7). Mandato: ADR 0018.
+6. **El PO borró `TejidoTesting/` del disco (2026-10-17)**: era el único perfil versionado, con su
+   `env.sh` y seis archivos de claves de Restic y rclone. **Sigue en la historia** (4 commits) y
+   probablemente en el remoto. Si el almacenamiento de esos `rclone_*.conf` sigue activo, sus
+   credenciales hay que rotarlas. Borrado sin commitear: lo commitea el coder cuando se le ordene.
+   Mandato nuevo: claves fuera del repositorio y un método para respaldarlas a mano (A-022).
 6. **Decidir qué sigue** (§5).
 
 ## 1. Sesiones
@@ -62,17 +67,17 @@ verificable del repositorio antes de la primera instrucción.
 **Tramo «migración caliente» (ADR 0018)**, abierto el 2026-10-17. Rama `feat/migracion-caliente`,
 creada desde `release/2.1`. Coder identificado en `#124→#125`.
 
-**En vuelo: `#126`**, entrada intacta de la herramienta en `tools/migracion-caliente/`. Sin
-reporte todavía. Detalle: `estado/tramos/2026-10-17-1700-migracion-caliente.md`.
+`#126→#129` hecho: copia intacta, 13/13 sumas y modos, ejemplo corregido. `#130→#133` hecho: tipo CodeIgniter 3 con guardas, 82 afirmaciones. **En vuelo: `#134`** (retirar el perfil, el falso OK de `verificar`, claves repetidas). En paralelo,
+el subagente `hestia-verifier` verifica las órdenes de listado que usará el analizador. Detalle: `estado/tramos/2026-10-17-1700-migracion-caliente.md`.
 
 ## 3. Contadores
 
 Son **dos**, y los dos avanzan por separado (regla `30`):
 
-- **`#NNN`, cadena con el coder.** Último usado: **#126**. El próximo: **#127**.
+- **`#NNN`, cadena con el coder.** Último usado: **#134**. El próximo: **#135**.
   El `#123` se emitió y el canal lo descartó: **consume número igual** (tramo, hallazgo 19).
-- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-018**. El próximo:
-  **A-019**.
+- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-022**. El próximo:
+  **A-023**.
 
 **Reparado el 2026-10-17, y vale la pena saber por qué.** Este archivo declaraba «último usado
 #081» desde el 2026-09-24. Era **falso**: el archivo del tramo de ese mismo día registra
@@ -100,9 +105,9 @@ La fase 2 de la 2.1 queda **aparcada**, sin servidor de pruebas donde ensayarla.
 
 ### Para el lunes (ADR 0018, «Orden»)
 
-1. Entrada intacta: sumas iguales al commit `1474e4c` de origen, ejemplo saneado. **`#126`**.
+1. Entrada intacta: hecha (`#127`, `#129`).
 2. Analizador de solo lectura, con pruebas sintéticas.
-3. Tipo CodeIgniter 3, con pruebas sintéticas.
+3. Tipo CodeIgniter 3: hecho (`3be710b`). Falta la guarda de claves duplicadas.
 4. Guía del lunes y documentación de las dos vías (las escribe el arquitecto).
 
 ### Para cerrar la fase 2
