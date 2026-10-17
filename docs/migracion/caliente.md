@@ -23,6 +23,48 @@ Esta página es la vía rápida.
     La primera vez que corran en un servidor será en el tuyo. Lee lo que digan
     antes de seguir, y si algo no cuadra, para.
 
+## Qué se migra y qué no
+
+| | ¿Se migra? | Detalle |
+|---|---|---|
+| Web | Sí | Dominios, alias, versión de PHP, archivos, y la configuración de la aplicación reescrita. El alias `www` se puede quitar con `alias_www` (en subdominios, por defecto) |
+| Certificados | No se copian | Se emiten nuevos en la fase 2, cuando el DNS ya apunta al servidor nuevo |
+| Bases de datos | Sí | Con contraseña nueva, y comparando el número de tablas entre origen y destino |
+| Correo | Sí | Cuentas, contraseñas sin cambiarlas, alias, reenvíos, cuotas y buzones enteros. **La clave DKIM es nueva**: hay que publicarla en el DNS |
+| Cron | Sí, salvo dos casos | Los suspendidos en el origen no se migran; los puestos a mano con `crontab -e` no los ve |
+| Cuentas FTP | **No** | Solo se informan |
+| **Zonas DNS** | **No** | Ni una zona ni un registro. Ver abajo |
+
+La herramienta **no cambia nada tuyo en el servidor viejo**: solo lee de él. Lo que haya
+que cambiar allí lo haces tú. La única excepción: si el acceso a MySQL del origen va con
+usuario y contraseña (`MYSQL_ORIGEN_AUTH="user"`; por defecto es `socket`), deja en su
+`/tmp` un archivo temporal con esa contraseña mientras trabaja, y lo borra al salir. Si la
+conexión se corta de golpe, puede quedarse allí: búscalo y bórralo.
+
+!!! danger "El DNS no se migra"
+    La herramienta no copia ningún registro DNS. Pero al crear cada dominio en el
+    servidor nuevo, HestiaCP **sí le crea una zona**, desde la plantilla DNS del paquete
+    de la cuenta. Con la plantilla `default` trae sus propios `@ A`, `www`, `mail`,
+    `@ MX 0 mail.<dominio>`, un SPF, `_dmarc` y registros de correo. **No es tu zona.**
+
+    Si el servidor viejo **sirve** el DNS de tus dominios, antes de cambiar los NS hacia
+    el nuevo cada zona tiene que estar en el nuevo **como en el viejo**, con la IP nueva.
+
+    **No añadas tus registros encima de esa zona.** HestiaCP no detecta duplicados: te
+    quedarían dos `@ A`, dos SPF y **dos MX**, y el correo se repartiría entre los dos
+    destinos. Hay que **reemplazar** los registros de la zona por los tuyos, no sumarlos.
+    El informe del analizador te dice qué cuentas tienen zonas y cuántos registros tiene
+    cada una.
+
+!!! danger "Dominios con el correo fuera (por ejemplo, Microsoft 365)"
+    La migración les crea igualmente un dominio de correo local en el servidor nuevo
+    (`eliminar_mail` vale `false` por defecto). Con ese dominio de correo, el servidor
+    trata el dominio como **local**: el correo que él mismo envíe a ese dominio
+    (formularios, avisos de la aplicación, cron) **no se manda al MX, y no llega a
+    Microsoft 365**. Comprobado en la configuración de correo de HestiaCP 1.10.5.
+
+    Para esos dominios, en la propuesta: `eliminar_mail="true"` y `correo="false"`.
+
 ## Antes de empezar
 
 - El servidor de **destino** con HestiaCP instalado, idealmente en la misma
@@ -102,7 +144,7 @@ Y busca cada `REVISAR:`. Los que más importan:
 | Aplicación «no se pudo determinar» | Va como `tipo="ninguno"`: la base se migra, pero **la configuración no se reescribe**. Las credenciales nuevas se escriben a mano tras la fase 1 |
 | CodeIgniter con directorio de entorno | El analizador apunta `ruta_db` al `database.php` del entorno activo (por ejemplo `public_html/application/config/production/database.php`; la ruta es relativa a la carpeta del dominio), que es el que manda. Compruébalo |
 | `active_group` distinto de `default`, o una clave repetida en `database.php` | La herramienta se negará con ese proyecto. Corrige el archivo en el origen o trátalo a mano |
-| Cron **suspendido** en el origen | Alguien lo apagó a propósito. La herramienta **no lo migra**, y lo dice en el plan. Recréalo a mano solo si de verdad hace falta |
+| Cron **suspendido** en el origen | Alguien lo apagó a propósito. La herramienta **no lo migra**. El plan no lo dice: lo ves marcado en el informe del analizador, y la fase 1 lo anuncia al llegar a él («NO MIGRADO (estaba suspendido en el origen)») y lo deja anotado para recrearlo. Recréalo a mano solo si de verdad hace falta |
 | Cron que llama a `php` sin ruta | En el servidor nuevo puede ser otra versión. Pon la ruta absoluta |
 | Cron puesto a mano (`crontab -e`) | La migración no lo lleva. Recréalo tú |
 | Base que ninguna aplicación usa | Va como base suelta. Decide si hace falta |
@@ -228,7 +270,8 @@ La herramienta deja en el destino un directorio por corrida:
 
 Ahí están los volcados de las bases **en claro**, y también **`deshacer.sh`, la
 marcha atrás** de lo que esa corrida creó. La herramienta te imprime la ruta al
-terminar cada fase.
+empezar cada fase que escribe (`1`, `sincronizar` y `2`), y la fase 1 la repite al
+terminar.
 
 **No lo borres hasta haber descartado la marcha atrás**: con todo comprobado y
 unos días sin sorpresas. Entonces sí, porque lleva las bases en claro:
