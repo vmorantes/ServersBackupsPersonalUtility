@@ -20,7 +20,8 @@
 | #111→#112 | Corregir los recuentos, con auditoría de los cinco bloqueos | completado | `86cf1ae` |
 | #113→#114 | Dejar `AHORA.md` verdadero al cerrar | completado; **el coder encontró una cifra rancia en «Espera al PO»** | `71a0f9f` |
 | #115→#116 | Quitar esa cifra y dejar en su lugar cómo medirla | completado; **el coder encontró que un puntero de «Espera al PO» apuntaba a mensajes perdidos** | `e9b1a09` |
-| #117→#118 | Recuperar la guía de pruebas de la fase 2 en un documento | completado | — |
+| #117→#118 | Recuperar la guía de pruebas de la fase 2 en un documento | completado; **el coder encontró que la guía mandaba ensayar sin decir cómo** | `ae581a9` |
+| #119→#120 | Completar la guía: la bandera de ensayo y los cinco pasos que faltaban | completado | — |
 
 ## Hallazgos
 
@@ -134,6 +135,26 @@
 
     Detalle que sorprende y no es un error: el script tiene **seis** puertas pero imprime
     **cinco** líneas `ok:`. La puerta 0, la de que el archivo existe, solo habla cuando falla.
+
+13. **La guía recuperada mandaba ensayar y no decía cómo.** Decía «el ensayo primero,
+    siempre» sin nombrar `--dry-run` en ninguna de sus tres filas. Y la ayuda del programa
+    agrava el hueco: su sección ENSAYO lista siete órdenes y **ninguna suborden de `hestia`**,
+    así que el PO habría concluido que no hay ensayo, en el paso que la propia guía llama «el
+    delicado».
+
+    Verificado antes de corregir: el bloque `hestia` de `bin/backupctl` **sí** reconoce
+    `--dry-run|-n`, y `lib/hestia.sh` corta antes de escribir. **El código está bien; la ayuda
+    y la guía estaban mal.** Guía corregida; la ayuda queda pendiente.
+
+    Es la tercera vez en el proyecto que un documento correcto en lo que afirma resulta
+    peligroso por lo que **omite**. Las otras dos rompieron servidores del PO.
+
+14. **La guía cubría tres de los ocho pasos.** Ampliada con `hestia rclone` como paso 0,
+    `hestia copia` —que demuestra el respaldo en minutos en vez de esperar al cron del día
+    siguiente, leyendo las instantáneas antes y después— y `hestia keys` + `hestia desactivar`
+    **en ese orden**, porque `desactivar` se niega sin un rescate previo y esa negativa parece
+    un fallo sin serlo. Y una línea diciendo que `exclusiones` está en solo lectura a
+    propósito, para ahorrar un viaje.
 
 ## Decisiones
 

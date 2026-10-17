@@ -6,64 +6,142 @@ las operaciones contra servidores, y ésta es su guía.
 
 **Servidor de PRUEBAS, no el de producción.**
 
-## Por qué existe este archivo
+---
 
-Las guías completas vivían en los reportes `#076`, `#078` y `#080`, que eran mensajes de un
-canal que ya no existe: el PO no puede abrirlos. `estado/AHORA.md` conservaba una tabla
-condensada, y **el arquitecto la borró al reescribir ese archivo el 2026-10-17**, podando algo
-que no estaba recogido en ningún otro sitio. Lo detectó el coder al leer `AHORA.md` en frío.
+## LO PRIMERO: cómo se ensaya, y por qué la ayuda dice otra cosa
 
-Esto es esa tabla recuperada y ampliada. **Lo que no se pudo recuperar está marcado como tal**:
-el detalle completo de los tres reportes originales se perdió, y lo que queda es la forma
-condensada más lo que consta en el archivo del tramo de la fase 2.
+El ensayo se activa con **`--dry-run`** (o `-n`), y **funciona en todas las subórdenes de
+`hestia`**. Verificado el 2026-10-17 leyendo el código: el bloque `hestia` de `bin/backupctl`
+reconoce la bandera, y las tres órdenes de la tabla de abajo salen con `return 0` **antes** de
+escribir nada.
 
-Lección, que vale más que el archivo: **lo que el PO necesita para trabajar no puede vivir solo
-en un mensaje**. Si está en el chat y no en el repositorio, un `/clear` lo borra.
+**Pero `backupctl --help` no lo dice.** Su sección ENSAYO lista
+`backup · restore · retention · restic · deploy · pull · migrate` y **no menciona ninguna
+suborden de `hestia`**. Ese `restic` de la lista es la orden de primer nivel, que es otra cosa
+distinta de `hestia restic`.
 
-## Regla que vale para los tres pasos
+Así que si contrasta esta guía con la ayuda, la ayuda le dirá que no hay ensayo. **La ayuda
+está incompleta; la guía es correcta.** Es un fallo conocido de la ayuda, pendiente de
+arreglar.
 
-1. **El ensayo primero, siempre.** Las tres órdenes tienen modo de ensayo que no escribe nada.
-   Se ejecuta, se lee lo que dice que va a hacer, y solo entonces se repite en serio.
+Lo escribo así de destacado porque el accidente del 2026-09-24 tuvo exactamente esta forma:
+documentación que se sigue al pie de la letra y a la que le falta un dato.
+
+---
+
+## Reglas que valen para todos los pasos
+
+1. **El ensayo primero, siempre.** Se ejecuta con `--dry-run`, se lee lo que dice que va a
+   hacer, y solo entonces se repite sin la bandera.
 2. **La comprobación no la hace la orden.** Cada paso trae su comprobación **por fuera**, y es
-   la única que vale. `40-salvaguardas.md` §5: ningún éxito sin comprobación independiente.
+   la única que vale (`40-salvaguardas.md` §5: ningún éxito sin comprobación independiente).
 3. **Para diagnosticar, la línea de órdenes.** La web no siempre pasa por `backupctl` y puede
    enseñar un estado distinto del mismo servidor. **Si las dos discrepan, manda
    `hestia status`.** Se aborda en la fase 3 (decisión del PO, 2026-09-24).
 
-## Los tres pasos
+---
 
-| Paso | Orden | Qué comprobar POR FUERA |
+## Paso 0 — el almacenamiento
+
+```
+backupctl hestia rclone --dry-run
+backupctl hestia rclone
+```
+
+Es el primero de la cadena: sin remoto configurado, los demás no tienen dónde escribir. **Si
+su servidor de pruebas ya lo tiene configurado, sáltelo**; `hestia status` se lo dirá.
+
+---
+
+## Pasos 1 a 3 — registrar, programar, marcar
+
+| Paso | Orden (ensayo + real) | Qué comprobar POR FUERA |
 | --- | --- | --- |
-| Registrar el repositorio | `hestia restic --repo '<repo>'` | que el panel muestre lo pedido; que el `.bak` conserve lo anterior; que el informe de la orden coincida con lo que enseña el panel |
-| Programar el respaldo | `hestia cron` | `crontab -u hestiaweb -l` enseña la línea con **ruta absoluta**; el crontab queda en modo `600` y propiedad `hestiaweb:hestiaweb` |
-| Marcar las cuentas | `hestia cuentas` | `grep BACKUPS_INCREMENTAL /usr/local/hestia/data/users/*/user.conf`; **y que la cuenta siga igual en todo lo demás**: shell, cuotas, dominios |
+| Registrar el repositorio | `backupctl hestia restic --repo '<repo>' --dry-run`, luego sin `--dry-run` | que el panel muestre lo pedido; que el `.bak` conserve lo anterior; que el informe de la orden coincida con lo que enseña el panel |
+| Programar el respaldo | `backupctl hestia cron --dry-run`, luego sin ella | `crontab -u hestiaweb -l` enseña la línea con **ruta absoluta**; el crontab queda en modo `600` y propiedad `hestiaweb:hestiaweb` |
+| Marcar las cuentas | `backupctl hestia cuentas --usuarios <cuenta> --dry-run`, luego sin ella | `grep BACKUPS_INCREMENTAL /usr/local/hestia/data/users/*/user.conf`; **y que la cuenta siga igual en todo lo demás**: shell, cuotas, dominios |
 
 ### El tercero es el delicado
 
 **Empezar por una sola cuenta** (`--usuarios <cuenta>`) antes de lanzarlo sobre todas. Motivo
 concreto: lo que sabemos de la orden de HestiaCP que hay debajo viene de **leer su código, no
-de ejecutarlo**. En particular, que `v-change-user-config-value` con la clave ya presente no
-toque nada más que esa clave está **SIN VERIFICAR** contra un servidor real.
+de ejecutarlo**. Que `v-change-user-config-value` con la clave ya presente no toque nada más
+que esa clave está **SIN VERIFICAR** contra un servidor real.
 
 Y el aviso que lo hace importante: si esa clave **falta** en el `user.conf`, esa orden de
 HestiaCP dispara un `v-rebuild-user` completo. Por eso se mira la cuenta entera después, no
 solo la clave.
 
-## La prueba que de verdad demuestra algo tarda un día
+**Ojo con la clave que se busca**: la de cada `user.conf` es `BACKUPS_INCREMENTAL`, en plural.
+Existe otra parecida, `BACKUP_INCREMENTAL` en singular, que es la global que pone HestiaCP.
+Son distintas.
 
-Los tres pasos anteriores demuestran que **se escribió** lo que se pedía. No demuestran que el
-respaldo funcione.
+---
+
+## Paso 4 — la copia comprobada, que es la prueba de verdad
+
+```
+backupctl hestia copia --usuarios <cuenta> --dry-run
+backupctl hestia copia --usuarios <cuenta>
+```
+
+**Este paso es el que demuestra que el respaldo funciona, y no hay que esperar al día
+siguiente para tenerlo.** Lee la lista de instantáneas **antes**, lanza la copia, vuelve a
+leerla, y el veredicto sale de la **diferencia**. Si no puede leer el «antes», **no lanza
+nada**: sin ese dato no podría demostrar nada, y prefiere no hacer que mentir.
+
+Hágalo **después** de marcar la cuenta y **antes** de dar nada por bueno.
+
+---
+
+## Paso 5 — las claves, y luego desactivar. En ese orden
+
+```
+backupctl hestia keys --dry-run
+backupctl hestia keys
+
+backupctl hestia desactivar --dry-run
+backupctl hestia desactivar
+```
+
+**No son dos pasos independientes.** `desactivar` **se niega** si no encuentra un rescate
+anterior de las claves. Si prueba `desactivar` sin haber hecho `keys` antes, verá una negativa
+que parece un fallo **y no lo es**: es la protección funcionando.
+
+`desactivar` **no borra** las copias que ya existen. Deja de hacer nuevas.
+
+Y lo de siempre, que vale para su producción igual que para pruebas: **las claves rescatadas
+hay que sacarlas del servidor**. Una clave que solo vive dentro de lo que protege no protege
+nada.
+
+---
+
+## `hestia exclusiones` no necesita prueba
+
+Está en **solo lectura a propósito**, con una negativa explícita antes de escribir. Muestra
+qué queda fuera del respaldo, traducido, y no ofrece cambiarlo. Si lo prueba esperando que
+escriba, verá una negativa **deliberada**, no un fallo. Se completará cuando se cierre el paso
+8 de la fase 2.
+
+---
+
+## Y al día siguiente, el cron
+
+Los pasos anteriores demuestran que se escribió lo que se pedía, y el paso 4 demuestra que una
+copia lanzada a mano funciona. Falta que funcione **sola**.
 
 Al día siguiente, con el cron ya ejecutado:
 
 ```
-hestia status
+backupctl hestia status
 ```
 
 Tiene que enseñar **una instantánea reciente**. Si no la hay, algo de la cadena falló en
 silencio — y hay un motivo conocido para que falle en silencio: en HestiaCP, `E_BACKUP` está
 sin definir, así que **un respaldo incremental fallido registra éxito**. Verificado contra su
-código fuente.
+código fuente (ADR 0017).
+
+---
 
 ## Lo que se va a ver mal, y no es un fallo
 
@@ -72,7 +150,9 @@ nuevas —negarse a desactivar sin claves rescatadas, y negarse a pisar un remot
 dispararán ahí con mensajes escritos para una terminal. **Protegen igual; se verán mal.** Se
 arregla en la fase 3.
 
-## Qué reportar al arquitecto después
+---
+
+## Qué reportar después
 
 Lo que la guía no puede anticipar es lo que más vale:
 
@@ -80,3 +160,16 @@ Lo que la guía no puede anticipar es lo que más vale:
 - Si el panel y la línea de órdenes dijeron cosas distintas, y cuál.
 - Si alguna cuenta cambió en algo que no fuera la clave de respaldo.
 - Si al día siguiente **no** había instantánea.
+
+## Por qué existe este archivo
+
+Las guías completas vivían en los reportes `#076`, `#078` y `#080`: mensajes de un canal que
+ya no existe y que el PO no puede abrir. `estado/AHORA.md` conservaba una tabla condensada, y
+**el arquitecto la borró al reescribir ese archivo el 2026-10-17**, podando algo que no estaba
+recogido en ningún otro sitio. Lo detectó el coder al leer `AHORA.md` en frío, y amplió esta
+guía contrastándola contra el código.
+
+**El detalle completo de aquellos tres reportes se perdió y no se ha inventado.**
+
+Lección, que vale más que el archivo: **lo que el PO necesita para trabajar no puede vivir
+solo en un mensaje.** Si está en el chat y no en el repositorio, un `/clear` lo borra.

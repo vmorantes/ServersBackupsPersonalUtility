@@ -39,8 +39,9 @@
 4. **Bajarse el `.tgz` de las claves** fuera del servidor que protegen.
 5. **Las pruebas de la fase 2**, para su servidor de **PRUEBAS**:
    **`.agents/docs/guia-pruebas-fase-2.md`**. Nada de eso se ha ejecutado nunca contra un
-   HestiaCP real. Ensayo primero, siempre; y en `hestia cuentas`, una sola cuenta antes que
-   todas.
+   HestiaCP real. **El ensayo es `--dry-run`, y la ayuda de `backupctl` NO lo dice de las
+   subórdenes de `hestia`**: la guía lo advierte. Ensayo primero siempre, y en
+   `hestia cuentas`, una sola cuenta antes que todas.
 
 6. **Decidir qué sigue** (§5).
 
@@ -61,7 +62,7 @@ verificable del repositorio antes de la primera instrucción.
 ## 2. En vuelo
 
 **Nada en vuelo.** El tramo del andamiaje de jornada se cerró el 2026-10-17 con el reporte
-`#118`. No hay instrucción enviada sin reporte.
+`#120`. No hay instrucción enviada sin reporte.
 
 Rondas del día: **#103→#104** (identificación del coder y su resumen de compactación; **él
 encontró el desfase del contador**), **#105→#106** (la puerta del contador y su prueba de
@@ -69,7 +70,8 @@ rechazo), **#107→#108** (documentación, el tramo, los números a tres dígito
 (bitácora y cierre), **#111→#112** (cuadrar los recuentos de la guarda, **hallazgo suyo**) y
 **#113→#114** (dejar este archivo verdadero) y **#115→#116** (quitar una cifra rancia de
 «Espera al PO», **hallazgo suyo**) y **#117→#118** (recuperar la guía de pruebas que el
-arquitecto había podado, **hallazgo suyo también**). El detalle, en
+arquitecto había podado) y **#119→#120** (completarla: le faltaba **cómo se ensaya**).
+**Siete hallazgos del coder en el día, cinco de ellos en la documentación del arquitecto.** El detalle, en
 `estado/tramos/2026-10-17-1300-andamiaje-de-jornada.md`.
 
 
@@ -80,9 +82,9 @@ arquitecto había podado, **hallazgo suyo también**). El detalle, en
 
 Son **dos**, y los dos avanzan por separado (regla `30`):
 
-- **`#NNN`, cadena con el coder.** Último usado: **#118**. El próximo: **#119**.
-- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-012**. El próximo:
-  **A-013**.
+- **`#NNN`, cadena con el coder.** Último usado: **#120**. El próximo: **#121**.
+- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-013**. El próximo:
+  **A-014**.
 
 **Reparado el 2026-10-17, y vale la pena saber por qué.** Este archivo declaraba «último usado
 #081» desde el 2026-09-24. Era **falso**: el archivo del tramo de ese mismo día registra
