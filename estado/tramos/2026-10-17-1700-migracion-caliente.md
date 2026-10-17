@@ -18,7 +18,8 @@
 | #128→#129 | Restituir los modos; corregir fases, `forzar_ssl` y dos frases falsas del ejemplo | completado; 13/13 modos iguales al origen | `3079010` `76042f6` |
 | #130→#131 | Tipo `codeigniter3` | **bloqueado por su propio gate**: la regla de `active_group` no cabe sin tocar el helper compartido. El coder paró, midió y trajo un prototipo probado | — |
 | #132→#133 | `codeigniter3` con gancho de guardas en los dos helpers, suite y tres mutaciones | completado: 82 afirmaciones; M1, M2 y M3 muerden | `3be710b` `96e7908` |
-| #134 | T1 retirar `TejidoTesting`; T2 falso OK de `plan_dominio_existe`; T3 claves repetidas en CodeIgniter 3 | en vuelo | — |
+| #134→#135 | T1 retirar `TejidoTesting`; T2 falso OK de `plan_dominio_existe`; T3 claves repetidas en CodeIgniter 3 | completado; 25 suites | `c603d4f` `641733a` `6220a9e` `80e1ccf` `d64dd19` |
+| #136 | El analizador de solo lectura, con su suite | en vuelo | — |
 
 ## Hallazgos
 
@@ -87,6 +88,12 @@
     restauró y lo reportó: exactamente lo que dice la regla. Mandato nuevo del PO: las claves de los
     respaldos fuera del repositorio, obtenidas por él sin pasar por los agentes. **Después del
     lunes.**
+
+20. **El falso positivo tenía una segunda cara**: el punto del dominio actuaba como comodín y la
+    ficha de un subdominio hacía «existir» al dominio padre. Lo encontró el coder al escribir un
+    caso que nadie le pidió. Arreglado con `grep -F` en `641733a`.
+21. **`docs/desarrollo/repositorio.md` decía que versionar las claves era «una decisión
+    deliberada».** Corregido por el arquitecto, con el aviso de rotar lo que se versionó.
 
 ## Decisiones
 

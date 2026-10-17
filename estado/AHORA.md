@@ -67,14 +67,14 @@ verificable del repositorio antes de la primera instrucción.
 **Tramo «migración caliente» (ADR 0018)**, abierto el 2026-10-17. Rama `feat/migracion-caliente`,
 creada desde `release/2.1`. Coder identificado en `#124→#125`.
 
-`#126→#129` hecho: copia intacta, 13/13 sumas y modos, ejemplo corregido. `#130→#133` hecho: tipo CodeIgniter 3 con guardas, 82 afirmaciones. **En vuelo: `#134`** (retirar el perfil, el falso OK de `verificar`, claves repetidas). En paralelo,
+`#126→#129` hecho: copia intacta, 13/13 sumas y modos, ejemplo corregido. `#130→#133` hecho: tipo CodeIgniter 3 con guardas, 82 afirmaciones. `#134→#135` hecho: perfil retirado, falso OK de `verificar` arreglado, claves repetidas rechazadas. **En vuelo: `#136`** (el analizador). En paralelo,
 el subagente `hestia-verifier` verifica las órdenes de listado que usará el analizador. Detalle: `estado/tramos/2026-10-17-1700-migracion-caliente.md`.
 
 ## 3. Contadores
 
 Son **dos**, y los dos avanzan por separado (regla `30`):
 
-- **`#NNN`, cadena con el coder.** Último usado: **#134**. El próximo: **#135**.
+- **`#NNN`, cadena con el coder.** Último usado: **#136**. El próximo: **#137**.
   El `#123` se emitió y el canal lo descartó: **consume número igual** (tramo, hallazgo 19).
 - **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-022**. El próximo:
   **A-023**.
@@ -106,8 +106,8 @@ La fase 2 de la 2.1 queda **aparcada**, sin servidor de pruebas donde ensayarla.
 ### Para el lunes (ADR 0018, «Orden»)
 
 1. Entrada intacta: hecha (`#127`, `#129`).
-2. Analizador de solo lectura, con pruebas sintéticas.
-3. Tipo CodeIgniter 3: hecho (`3be710b`). Falta la guarda de claves duplicadas.
+2. Analizador de solo lectura, con pruebas sintéticas. **`#136`**.
+3. Tipo CodeIgniter 3: hecho (`3be710b`, `6220a9e`). Falso OK de `verificar`: arreglado (`641733a`).
 4. Guía del lunes y documentación de las dos vías (las escribe el arquitecto).
 
 ### Para cerrar la fase 2
