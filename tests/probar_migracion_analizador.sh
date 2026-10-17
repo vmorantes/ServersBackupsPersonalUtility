@@ -131,8 +131,13 @@ MIN='0' HOUR='3' DAY='*' MONTH='*' WDAY='*' CMD='php /home/cuenta1/web/example.o
 MIN='30' HOUR='4' DAY='*' MONTH='*' WDAY='*' CMD='/usr/bin/php8.1 /home/cuenta1/scripts/limpiar.php' JOB='2' SUSPENDED='no'
 FIN
 
+  # Tres zonas a propósito: una normal sin DNSSEC, una con DNSSEC='yes'
+  # (que tiene que avisar), y una que figura en dns.conf pero cuyo .conf no
+  # se puede leer (tiene que decir "no disponible" sin abortar el análisis).
   cat > "$H/data/users/cuenta1/dns.conf" <<'FIN'
-DOMAIN='example.org' IP='203.0.113.10' TPL='default' TTL='14400' EXP='2027-01-01' SOA='ns1.example.org' RECORDS='8' SUSPENDED='no'
+DOMAIN='example.org' IP='203.0.113.10' TPL='default' TTL='14400' EXP='2027-01-01' SOA='ns1.example.org' RECORDS='8' DNSSEC='no' SUSPENDED='no'
+DOMAIN='firmada.example.org' IP='203.0.113.10' TPL='default' TTL='14400' EXP='2027-01-01' SOA='ns1.example.org' RECORDS='3' DNSSEC='yes' SUSPENDED='no'
+DOMAIN='ilegible.example.org' IP='203.0.113.10' TPL='default' TTL='14400' EXP='2027-01-01' SOA='ns1.example.org' RECORDS='3' DNSSEC='no' SUSPENDED='no'
 FIN
 
   cat > "$H/data/users/cuenta1/dns/example.org.conf" <<'FIN'
@@ -140,6 +145,16 @@ ID='1' RECORD='@' TYPE='A' VALUE='203.0.113.10'
 ID='2' RECORD='www' TYPE='A' VALUE='203.0.113.10'
 ID='3' RECORD='mail' TYPE='A' VALUE='203.0.113.10'
 FIN
+
+  cat > "$H/data/users/cuenta1/dns/firmada.example.org.conf" <<'FIN'
+ID='1' RECORD='@' TYPE='A' VALUE='203.0.113.10'
+ID='2' RECORD='mail' TYPE='A' VALUE='203.0.113.10'
+FIN
+
+  # Existe, pero sin permiso de lectura: el caso que no debe abortar nada.
+  printf "ID='1' RECORD='@' TYPE='A' VALUE='203.0.113.10'\n" \
+    > "$H/data/users/cuenta1/dns/ilegible.example.org.conf"
+  chmod 000 "$H/data/users/cuenta1/dns/ilegible.example.org.conf"
 
   # --- cron puesto a mano, que el panel no conoce ---
   printf '# comentario\n0 5 * * * /usr/local/bin/propio.sh\n' > "$raiz/spool/cuenta1"
@@ -936,7 +951,94 @@ test_odd_values_do_not_break_the_report() {
     "P13: y las secciones posteriores al mail.conf raro siguen ahí"
 }
 
+# -----------------------------------------------------------------------------
+# Z1..Z5: las zonas DNS salen copiadas, y el árbol sigue intacto
+# -----------------------------------------------------------------------------
+# Exportar una zona es lo único que hace el analizador con el DNS: COPIA el
+# .conf del origen a su propia salida. La copia tiene que ser byte a byte (una
+# zona reescrita "a su manera" dejaría de servir para recrearla) y el original
+# tiene que quedar igual, con la misma suma de todo el árbol.
+test_dns_zones_are_exported_byte_for_byte() {
+  nueva_prueba anz
+  local d="$BANCO_TMP/anz"
+  local raiz="$d/arbol"
+  sembrar_arbol "$raiz"
+
+  local registro="$d/registro.txt"
+  local ruta_path
+  ruta_path="$(montar_falsos "$d/bin" "$registro")"
+
+  local antes
+  antes="$(suma_del_arbol "$raiz")"
+
+  correr_analizador "$raiz" "$PAQUETE" "$ruta_path" "$d/stdout.txt" "$d/stderr.txt"
+  afirmar_codigo 0 "$?" "Z1: el analizador termina bien con zonas que exportar"
+
+  local sal
+  sal="$(dir_de_salida "$raiz")"
+  local zonas="$sal/zonas/cuenta1"
+
+  # --- Z1: la copia, byte a byte ---
+  afirmar_existe "$zonas/example.org.conf" "Z1: la zona se exportó"
+  afirmar_intacto "$zonas/example.org.conf" \
+    "$raiz/hestia/data/users/cuenta1/dns/example.org.conf" \
+    "Z1: la zona exportada es byte a byte la del origen"
+  afirmar_intacto "$zonas/firmada.example.org.conf" \
+    "$raiz/hestia/data/users/cuenta1/dns/firmada.example.org.conf" \
+    "Z1: la segunda zona también"
+
+  afirmar_igual "$(stat -c '%a' "$sal/zonas" 2>/dev/null)" "700" \
+    "Z1: zonas/ es 700"
+  afirmar_igual "$(stat -c '%a' "$zonas" 2>/dev/null)" "700" \
+    "Z1: zonas/<cuenta>/ es 700"
+  afirmar_igual "$(stat -c '%a' "$zonas/example.org.conf" 2>/dev/null)" "600" \
+    "Z1: la zona exportada es 600"
+
+  # --- Z2: el origen no se tocó ---
+  # El directorio de salida vive dentro del árbol falso (SALIDA_BASE), así que
+  # se aparta antes de volver a sumar: lo que se mide es el servidor, no lo
+  # que el analizador escribió en su propia salida.
+  local despues
+  despues="$(mv "$sal" "$d/salida-apartada" && suma_del_arbol "$raiz")"
+  afirmar_igual "$despues" "$antes" \
+    "Z2: el árbol de origen sigue con la misma suma sha256"
+  sal="$d/salida-apartada"
+  zonas="$sal/zonas/cuenta1"
+  afirmar_igual "$(wc -c < "$registro" | tr -d ' ')" "0" \
+    "Z2: exportar zonas no invocó ninguna orden prohibida"
+
+  # --- Z3: la zona ilegible ---
+  afirmar_igual "$(test -e "$zonas/ilegible.example.org.conf" && echo si || echo no)" "no" \
+    "Z3: de una zona ilegible NO se escribe un archivo a medias"
+  afirmar_contiene "$sal/informe.txt" "ilegible.example.org: no disponible registros" \
+    "Z3: el informe dice que la zona ilegible no está disponible"
+  afirmar_contiene "$sal/informe.txt" "no disponible \(la zona no se puede leer\)" \
+    "Z3: y por qué no se exportó"
+
+  # --- Z4: el informe dice dónde quedó cada zona y cómo usarlas ---
+  afirmar_contiene "$sal/informe.txt" "exportada a zonas/cuenta1/example.org.conf" \
+    "Z4: el informe nombra la ruta de cada zona exportada"
+  afirmar_contiene "$sal/informe.txt" "recrear-zonas.sh --cuenta" \
+    "Z4: y cómo recrearlas en el destino"
+  afirmar_contiene "$sal/informe.txt" "SIN --aplicar" \
+    "Z4: diciendo que primero se corre sin aplicar nada"
+  afirmar_contiene "$d/stdout.txt" "Zonas DNS          : .*/zonas/<cuenta>/" \
+    "Z4: y el resumen en pantalla señala el directorio"
+
+  # --- Z5: DNSSEC ---
+  afirmar_contiene "$sal/informe.txt" \
+    "la zona firmada.example.org usa DNSSEC en el origen" \
+    "Z5: DNSSEC='yes' produce su aviso"
+  afirmar_contiene "$sal/informe.txt" "DS del registrador dejará de coincidir" \
+    "Z5: y el aviso dice qué se rompe"
+  afirmar_no_contiene "$sal/informe.txt" "la zona example.org usa DNSSEC" \
+    "Z5: DNSSEC='no' no produce aviso"
+  afirmar_no_contiene "$sal/informe.txt" "la zona ilegible.example.org usa DNSSEC" \
+    "Z5: ni una zona sin DNSSEC activo"
+}
+
 test_the_package_builds_and_embeds_the_reader
+test_dns_zones_are_exported_byte_for_byte
 test_full_run_is_read_only_quiet_and_secret_free
 test_application_types_are_detected_with_evidence
 test_codeigniter_environment_and_guards

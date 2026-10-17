@@ -81,6 +81,10 @@ USUARIOS_PEDIDOS=();
 
 AVISOS=();
 
+# "si" en cuanto se copia la primera zona DNS a la salida: el
+# informe solo explica cómo recrearlas si hay alguna.
+ZONAS_EXPORTADAS="no";
+
 
 # ------------------------------------------------------------
 # El sello del paquete: de qué versión del repositorio salió.
@@ -1378,6 +1382,7 @@ do
   else
 
     hay_zonas="no";
+    hay_zonas_exportadas="no";
 
     while IFS= read -r linea
     do
@@ -1387,13 +1392,52 @@ do
 
       hay_zonas="si";
 
-      if [ -r "$dir_cuenta/dns/$z_dom.conf" ]; then
-        z_regs="$(grep -c "RECORD=" "$dir_cuenta/dns/$z_dom.conf" 2>/dev/null)";
+      z_origen="$dir_cuenta/dns/$z_dom.conf";
+
+      if [ -r "$z_origen" ]; then
+        z_regs="$(grep -c "RECORD=" "$z_origen" 2>/dev/null)";
       else
         z_regs="no disponible";
       fi;
 
       echo "  $z_dom: $z_regs registros" >> "$CUERPO";
+
+      # La zona, copiada tal cual para poder recrearla en el
+      # servidor nuevo. Es una COPIA: el original no se toca.
+      # Sin zona legible no se copia nada y el informe lo dice:
+      # un archivo vacío parecería una zona sin registros.
+      if [ -r "$z_origen" ]; then
+
+        z_destino_dir="$SALIDA/zonas/$cuenta";
+
+        if mkdir -p "$z_destino_dir" 2>/dev/null; then
+
+          chmod 700 "$SALIDA/zonas" "$z_destino_dir" 2>/dev/null;
+
+          if cp "$z_origen" "$z_destino_dir/$z_dom.conf" 2>/dev/null; then
+            chmod 600 "$z_destino_dir/$z_dom.conf" 2>/dev/null;
+            echo "    exportada a zonas/$cuenta/$z_dom.conf" >> "$CUERPO";
+            hay_zonas_exportadas="si";
+          else
+            echo "    no disponible (no se pudo copiar la zona)" >> "$CUERPO";
+          fi;
+
+        else
+          echo "    no disponible (no se pudo crear zonas/$cuenta)" >> "$CUERPO";
+        fi;
+
+      else
+        echo "    no disponible (la zona no se puede leer)" >> "$CUERPO";
+      fi;
+
+      # DNSSEC del origen. Si falta la clave no se dice nada:
+      # ausente y 'no' no son lo mismo, pero tampoco hay base
+      # para avisar de algo que no consta.
+      z_dnssec="$(conf_valor "$linea" DNSSEC)";
+
+      if [ "$z_dnssec" = "yes" ]; then
+        avisos_cuenta+=("la zona $z_dom usa DNSSEC en el origen: el destino genera claves nuevas y el DS del registrador dejará de coincidir; quítalo en el registrador antes del cambio de NS");
+      fi;
 
     done < "$conf_dns"
 
@@ -1401,6 +1445,10 @@ do
 
     if [ "$hay_zonas" = "si" ]; then
       avisos_cuenta+=("esta cuenta tiene zonas DNS en este servidor. Si el servidor también SIRVE el DNS, apagarlo deja las zonas sin responder: comprueba quién es el DNS autoritativo antes del corte");
+    fi;
+
+    if [ "$hay_zonas_exportadas" = "si" ]; then
+      ZONAS_EXPORTADAS="si";
     fi;
 
   fi;
@@ -1585,6 +1633,26 @@ done
   echo;
   echo "  Cuentas analizadas: ${#CUENTAS[@]}";
   echo;
+
+  if [ "$ZONAS_EXPORTADAS" = "si" ]; then
+    echo "============================================================";
+    echo "ZONAS DNS EXPORTADAS";
+    echo "============================================================";
+    echo;
+    echo "  Las zonas del origen están copiadas en zonas/<cuenta>/.";
+    echo "  Para recrearlas en el servidor NUEVO, lleva ese directorio";
+    echo "  allí y ejecuta, como root, primero SIN --aplicar:";
+    echo;
+    echo "    bash recrear-zonas.sh --cuenta <cuenta> \\";
+    echo "      --zonas <ruta>/zonas/<cuenta> \\";
+    echo "      --ip-origen <IP del viejo> --ip-destino <IP del nuevo>";
+    echo;
+    echo "  Eso solo imprime el diff. Cuando el diff convenza, se repite";
+    echo "  con --aplicar. Las zonas tienen que existir ya en el destino";
+    echo "  (las crea la fase 1 de la migración).";
+    echo;
+  fi;
+
   echo;
 
   cat "$CUERPO";
@@ -1606,6 +1674,11 @@ echo "  Cuentas analizadas : ${#CUENTAS[@]}";
 echo "  Avisos             : ${#AVISOS[@]}";
 echo "  Informe            : $INFORME";
 echo "  Propuestas         : $SALIDA/migracion-<cuenta>.sh";
+
+if [ "$ZONAS_EXPORTADAS" = "si" ]; then
+  echo "  Zonas DNS          : $SALIDA/zonas/<cuenta>/";
+fi;
+
 echo;
 echo "Los archivos migracion-*.sh llevan contraseñas NUEVAS para las bases";
 echo "del destino. Cópialos a tu equipo y borra este directorio:";
