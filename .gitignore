@@ -14,3 +14,9 @@ site/
 
 # Copias que deja `backupctl pull` al traer un env.sh del servidor
 *.anterior
+
+# Migraciones de servidores: archivos de descripción y paquetes generados.
+# Llevan contraseñas de bases de datos de clientes y, los paquetes, el
+# contenido entero de la herramienta. Solo se versiona el README.
+migraciones/*
+!migraciones/README.md
