@@ -1,0 +1,224 @@
+#!/bin/bash
+
+# ============================================================
+# LECTURA DE CONFIGURACIÓN DE APLICACIONES
+# ============================================================
+#
+# Define funciones para leer, SIN modificar nada, las
+# credenciales que tiene escritas una aplicación.
+#
+# Lo usan:
+#
+#   BASE_GENERAL.sh    para leer el servidor ORIGEN y armar
+#                       las equivalencias
+#
+#   BASE_VERIFICAR.sh  para leer el servidor DESTINO y
+#                       comprobar el resultado
+#
+#
+# ============================================================
+#
+# FUNCIONES
+#
+#   leer_config_local ARCHIVO TIPO
+#   leer_config_origen ARCHIVO TIPO
+#
+# Ambas imprimen tres líneas:
+#
+#   DB=...
+#   USER=...
+#   HOST=...
+#
+# La contraseña NUNCA se lee ni se imprime. No hace falta
+# para nada: las credenciales nuevas ya las conocemos y las
+# viejas no se usan.
+#
+# ============================================================
+
+
+
+LEER_TMP="$(mktemp -d)";
+
+LEER_PHP="$LEER_TMP/leer_config.php";
+
+
+cat > "$LEER_PHP" <<'PHP'
+<?php
+
+/*
+ * Uso: leer_config.php ARCHIVO FORMATO
+ *
+ * Se queda con la ÚLTIMA aparición de cada campo, que es la
+ * configuración de producción cuando el archivo tiene varias.
+ */
+
+if ($argc !== 3) {
+    fwrite(STDERR, "Uso: leer_config.php ARCHIVO FORMATO\n");
+    exit(1);
+}
+
+$file = $argv[1];
+$format = $argv[2];
+
+if (!is_file($file)) {
+    fwrite(STDERR, "No existe: {$file}\n");
+    exit(1);
+}
+
+$content = file_get_contents($file);
+
+
+$php = function (string $field): string {
+    return
+        '~\$config\s*\[\s*[\'"]database[\'"]\s*\]'
+        . '\s*\[\s*[\'"]default[\'"]\s*\]'
+        . '\s*\[\s*[\'"]' . preg_quote($field, '~') . '[\'"]\s*\]'
+        . '\s*=\s*[\'"](.*?)[\'"]\s*;~';
+};
+
+$def = function (string $constant): string {
+    return
+        '~define\s*\(\s*[\'"]' . preg_quote($constant, '~') . '[\'"]'
+        . '\s*,\s*[\'"](.*?)[\'"]\s*\)\s*;~';
+};
+
+$prop = function (string $property): string {
+    return
+        '~(?:public|var)\s+\$' . preg_quote($property, '~')
+        . '\s*=\s*[\'"](.*?)[\'"]\s*;~';
+};
+
+$arr = function (string $key): string {
+    return '~[\'"]' . preg_quote($key, '~') . '[\'"]\s*=>\s*[\'"](.*?)[\'"]~';
+};
+
+$env = function (string $key): string {
+    return '~^[ \t]*' . preg_quote($key, '~') . '[ \t]*=[ \t]*"?([^"\r\n]*)"?[ \t]*$~m';
+};
+
+
+$formats = [
+    'piecesphp'    => ['db' => $php('db'),            'user' => $php('user'),            'host' => $php('host')],
+    'wordpress'    => ['db' => $def('DB_NAME'),       'user' => $def('DB_USER'),         'host' => $def('DB_HOST')],
+    'joomla'       => ['db' => $prop('db'),           'user' => $prop('user'),           'host' => $prop('host')],
+    'prestashop'   => ['db' => $arr('database_name'), 'user' => $arr('database_user'),   'host' => $arr('database_host')],
+    'prestashop16' => ['db' => $def('_DB_NAME_'),     'user' => $def('_DB_USER_'),       'host' => $def('_DB_SERVER_')],
+    'laravel'      => ['db' => $env('DB_DATABASE'),   'user' => $env('DB_USERNAME'),     'host' => $env('DB_HOST')],
+    'drupal'       => ['db' => $arr('database'),      'user' => $arr('username'),       'host' => $arr('host')],
+];
+
+
+if (!isset($formats[$format])) {
+    fwrite(STDERR, "Formato desconocido: {$format}\n");
+    exit(1);
+}
+
+
+foreach (['db', 'user', 'host'] as $campo) {
+
+    $encontrado = '';
+
+    if (preg_match_all($formats[$format][$campo], $content, $m)) {
+        $encontrado = end($m[1]);
+    }
+
+    echo strtoupper($campo) . "={$encontrado}\n";
+}
+PHP
+
+
+chmod 700 "$LEER_PHP";
+
+
+
+# ------------------------------------------------------------
+# Lee un archivo de configuración de ESTE servidor.
+# ------------------------------------------------------------
+
+leer_config_local() {
+
+  local archivo="$1";
+  local tipo="$2";
+
+  if [ ! -f "$archivo" ]; then
+    return 1;
+  fi;
+
+  php "$LEER_PHP" "$archivo" "$tipo" 2>/dev/null;
+
+}
+
+
+# ------------------------------------------------------------
+# Lee un archivo de configuración del servidor ORIGEN.
+#
+# Se trae una copia temporal y se lee aquí, para no exigir
+# que el origen tenga PHP disponible.
+#
+# La copia se borra de inmediato.
+# ------------------------------------------------------------
+
+leer_config_origen() {
+
+  local archivo="$1";
+  local tipo="$2";
+
+  local copia="$LEER_TMP/origen_$$_$RANDOM";
+
+
+  if ! origen_exec "cat $(printf '%q' "$archivo")" "" \
+       </dev/null > "$copia" 2>/dev/null; then
+
+    rm -f "$copia";
+
+    return 1;
+
+  fi;
+
+
+  if [ ! -s "$copia" ]; then
+
+    rm -f "$copia";
+
+    return 1;
+
+  fi;
+
+
+  chmod 600 "$copia";
+
+
+  php "$LEER_PHP" "$copia" "$tipo" 2>/dev/null;
+
+  local resultado=$?;
+
+
+  rm -f "$copia";
+
+
+  return "$resultado";
+
+}
+
+
+# ------------------------------------------------------------
+# Extrae un campo del resultado de las funciones anteriores.
+#
+#   valor_de "$LEIDO" DB
+# ------------------------------------------------------------
+
+valor_de() {
+
+  echo "$1" | grep "^$2=" | cut -d= -f2-;
+
+}
+
+
+leer_config_cleanup() {
+
+  if [ -n "$LEER_TMP" ]; then
+    rm -rf "$LEER_TMP";
+    LEER_TMP="";
+  fi;
+
+}
