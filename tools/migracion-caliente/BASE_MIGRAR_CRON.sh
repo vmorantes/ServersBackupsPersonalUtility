@@ -291,6 +291,7 @@ chmod 700 "$CRON_PENDIENTES";
 CRON_MIGRADOS=0;
 CRON_SALTADOS=0;
 CRON_ERRORES=0;
+CRON_SUSPENDIDOS=0;
 
 CRON_INDICE=0;
 
@@ -354,6 +355,49 @@ do
     if [ "$SUSPENDIDO" = "yes" ]; then
       echo;
       echo "  AVISO: está SUSPENDIDO en el servidor viejo.";
+    fi;
+
+
+    # --------------------------------------------------------
+    # Un trabajo suspendido en el origen NO se migra.
+    #
+    # v-add-cron-job lo crearía ACTIVO, y esta herramienta no
+    # suspende nada después: un trabajo que alguien apagó a
+    # propósito en el servidor viejo se despertaría en el nuevo.
+    # Los que más duelen son justo esos: los que facturan, los
+    # que envían correo, los que llaman a una API.
+    #
+    # Omitirlo es lo único que no puede despertar nada. Queda
+    # anotado, con su orden, en el archivo de pendientes de la
+    # corrida: si hace falta, se descomenta de ahí.
+    #
+    # Vale para los tres modos, y en "preguntar" ni se pregunta:
+    # preguntar por un trabajo que estaba apagado invita a
+    # contestar que sí.
+    # --------------------------------------------------------
+
+    if [ "$SUSPENDIDO" = "yes" ]; then
+
+      echo;
+      echo "  NO MIGRADO (estaba suspendido en el origen): $MIN $HOUR $DAY $MONTH $WDAY $CMD_NUEVO";
+
+      CRON_SUSPENDIDOS=$((CRON_SUSPENDIDOS + 1));
+
+      {
+        echo "[$CRON_INDICE] NO MIGRADO (estaba suspendido en el origen)";
+        echo "    $MIN $HOUR $DAY $MONTH $WDAY";
+        echo "    $CMD_NUEVO";
+        echo;
+      } >> "$CRON_LOG";
+
+      {
+        echo "# [$CRON_INDICE] usuario $usuario, SUSPENDIDO en el origen: no se migró";
+        echo "# $HESTIA_BIN/v-add-cron-job$(printf ' %q' "$USER_DESTINO" "$MIN" "$HOUR" "$DAY" "$MONTH" "$WDAY" "$CMD_NUEVO")";
+        echo;
+      } >> "$CRON_PENDIENTES";
+
+      continue;
+
     fi;
 
 
@@ -490,6 +534,7 @@ done;
   echo "  aceptados : $CRON_MIGRADOS";
   echo "  rechazados: $CRON_SALTADOS";
   echo "  errores   : $CRON_ERRORES";
+  echo "  suspendidos en el origen, no migrados: $CRON_SUSPENDIDOS";
 } >> "$CRON_LOG";
 
 
@@ -511,6 +556,18 @@ if [ "$CRON_SALTADOS" -gt 0 ] || [ "$CRON_ERRORES" -gt 0 ]; then
   echo "Los rechazados quedan como comandos comentados en ese";
   echo "archivo. Si alguno hiciera falta, se descomenta y se";
   echo "ejecuta, sin volver al servidor viejo.";
+fi;
+
+
+if [ "$CRON_SUSPENDIDOS" -gt 0 ]; then
+
+  echo;
+  echo "$CRON_SUSPENDIDOS trabajo(s) suspendido(s) en el origen no se migraron:";
+  echo "recréalos a mano solo si hacen falta.";
+  echo;
+  echo "Quedan anotados, con su orden, en:";
+  echo "  $CRON_PENDIENTES";
+
 fi;
 
 
