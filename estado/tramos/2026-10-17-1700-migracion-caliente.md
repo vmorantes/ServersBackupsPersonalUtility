@@ -20,7 +20,8 @@
 | #132→#133 | `codeigniter3` con gancho de guardas en los dos helpers, suite y tres mutaciones | completado: 82 afirmaciones; M1, M2 y M3 muerden | `3be710b` `96e7908` |
 | #134→#135 | T1 retirar `TejidoTesting`; T2 falso OK de `plan_dominio_existe`; T3 claves repetidas en CodeIgniter 3 | completado; 25 suites | `c603d4f` `641733a` `6220a9e` `80e1ccf` `d64dd19` |
 | #136→#137 | El analizador de solo lectura, con su suite | completado: 79 afirmaciones; M1-M3 muerden; el coder encontró y arregló dos defectos propios leyendo un informe real | `9285e58` `0c3c85f` `dd414c2` `7fc5cd2` |
-| #138 | Sello de versión en el paquete del analizador; commitear guía y README | en vuelo | — |
+| #138→#139 | Sello de versión en el paquete del analizador; commitear guía y README | completado; la lectura en frío de la guía encontró cuatro cosas | `51e0b2a` `e7513d1` `cf0e16d` |
+| #140 | `IP_DESTINO` vacía en las propuestas; cron suspendido no se migra; correcciones de la guía | en vuelo | — |
 
 ## Hallazgos
 
@@ -104,6 +105,15 @@
     La guía lo dice. Comprobado por el arquitecto al escribirla.
 24. **Un paquete viejo miente y no se nota**: el coder leyó un informe de un paquete construido
     antes de su propio arreglo. Se sella el paquete con la versión de la que sale (`#138`).
+
+25. **Un cron SUSPENDIDO en el origen se crea ACTIVO en el destino** (`BASE_MIGRAR_CRON.sh:410-428`):
+    la herramienta solo lo anota. Lo vio el coder leyendo la guía contra el código. Decisión del
+    arquitecto para el lunes: **no migrarlo** y decirlo en el plan, sin añadir ninguna orden del
+    panel nueva. Suspender en vez de omitir, después del lunes y verificado.
+26. **`IP_DESTINO` solo se valida como no vacía**: el centinela de texto habría pasado. Las propuestas
+    la dejan vacía, como `php`.
+27. **La guía mandaba borrar el directorio de la corrida sin decir dónde está ni que guarda
+    `deshacer.sh`.** Está en `/home/<cuenta>/migraciones/<fecha>/`. Corregido.
 
 ## Decisiones
 

@@ -71,17 +71,17 @@ verificable del repositorio antes de la primera instrucción.
 **Tramo «migración caliente» (ADR 0018)**, abierto el 2026-10-17. Rama `feat/migracion-caliente`,
 creada desde `release/2.1`. Coder identificado en `#124→#125`.
 
-`#126→#129` hecho: copia intacta, 13/13 sumas y modos, ejemplo corregido. `#130→#133` hecho: tipo CodeIgniter 3 con guardas, 82 afirmaciones. `#134→#135` hecho: perfil retirado, falso OK de `verificar` arreglado, claves repetidas rechazadas. `#136→#137` hecho: el analizador, 79 afirmaciones. **En vuelo: `#138`** (sello de versión del paquete y documentación). En paralelo,
+`#126→#129` hecho: copia intacta, 13/13 sumas y modos, ejemplo corregido. `#130→#133` hecho: tipo CodeIgniter 3 con guardas, 82 afirmaciones. `#134→#135` hecho: perfil retirado, falso OK de `verificar` arreglado, claves repetidas rechazadas. `#136→#137` hecho: el analizador, 79 afirmaciones. `#138→#139` hecho: sello y guía. **En vuelo: `#140`** (`IP_DESTINO` vacía y cron suspendido no migrado). En paralelo,
 el subagente `hestia-verifier` verifica las órdenes de listado que usará el analizador. Detalle: `estado/tramos/2026-10-17-1700-migracion-caliente.md`.
 
 ## 3. Contadores
 
 Son **dos**, y los dos avanzan por separado (regla `30`):
 
-- **`#NNN`, cadena con el coder.** Último usado: **#138**. El próximo: **#139**.
+- **`#NNN`, cadena con el coder.** Último usado: **#140**. El próximo: **#141**.
   El `#123` se emitió y el canal lo descartó: **consume número igual** (tramo, hallazgo 19).
-- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-022**. El próximo:
-  **A-023**.
+- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-024**. El próximo:
+  **A-025**.
 
 **Reparado el 2026-10-17, y vale la pena saber por qué.** Este archivo declaraba «último usado
 #081» desde el 2026-09-24. Era **falso**: el archivo del tramo de ese mismo día registra
@@ -112,7 +112,7 @@ La fase 2 de la 2.1 queda **aparcada**, sin servidor de pruebas donde ensayarla.
 1. Entrada intacta: hecha (`#127`, `#129`).
 2. Analizador de solo lectura: hecho (`dd414c2`). Sello de versión en `#138`.
 3. Tipo CodeIgniter 3: hecho (`3be710b`, `6220a9e`). Falso OK de `verificar`: arreglado (`641733a`).
-4. Guía: escrita, `docs/migracion/caliente.md`; se commitea en `#138`.
+4. Guía: commiteada (`e7513d1`); correcciones de la lectura en frío, en `#140`.
 
 ### Para cerrar la fase 2
 
