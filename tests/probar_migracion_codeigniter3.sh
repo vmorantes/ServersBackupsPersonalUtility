@@ -188,6 +188,34 @@ $db['default'] = array(
 FIN
 }
 
+# 'password' dos veces, en la forma clave a clave.
+caso_duplicada_clave() {
+  cat > "$1" <<'FIN'
+<?php
+$active_group = 'default';
+$db['default']['hostname'] = 'localhost';
+$db['default']['username'] = 'viejo_user';
+$db['default']['password'] = 'clave-vieja';
+$db['default']['database'] = 'viejo_db';
+$db['default']['password'] = 'clave-que-manda';
+FIN
+}
+
+# 'username' dos veces: lo que mira la guarda de la LECTURA.
+caso_duplicada_usuario() {
+  cat > "$1" <<'FIN'
+<?php
+$active_group = 'default';
+$db['default'] = array(
+	'hostname' => 'localhost',
+	'username' => 'primer_user',
+	'password' => 'clave-vieja',
+	'database' => 'viejo_db',
+	'username' => 'segundo_user',
+);
+FIN
+}
+
 caso_wordpress() {
   cat > "$1" <<'FIN'
 <?php
@@ -321,6 +349,13 @@ test_write_leaves_other_group_untouched() {
     "C4: la base del otro grupo sigue intacta"
   afirmar_igual "$(lineas_cambiadas "$d/database.php" "$d/salida.php")" "3" \
     "C4: cambian exactamente tres líneas, no seis"
+
+  # D4. Las mismas claves están en los dos grupos, pero las del grupo 'otro'
+  # NO cuentan como repetidas: la guarda de claves repetidas mira solo el
+  # cuerpo del grupo default. Si contara el archivo entero, este caso —que es
+  # el normal en un proyecto con dos conexiones— se rechazaría siempre.
+  afirmar_igual "$(wc -c < "$d/stderr.txt" | tr -d ' ')" "0" \
+    "D4: una clave del grupo 'otro' no cuenta como repetida"
 }
 
 # C5. El camino de fallo que más importa: otro grupo activo. No se escribe
@@ -426,30 +461,77 @@ test_write_writes_allowed_characters_verbatim() {
     "C8: no se colaron barras invertidas"
 }
 
-# Regla 3.5, documentada porque el resultado NO es el que se espera a primera
-# vista: el helper se queda con la ÚLTIMA aparición de cada campo, pero en la
-# forma de array el patrón está anclado a "$db['default'] = array(", así que
-# solo puede casar UNA vez por grupo y reescribe la PRIMERA clave duplicada.
-# En PHP gana la última, que es la que la aplicación usa de verdad. Esta
-# prueba fija ese comportamiento para que un cambio futuro no lo mueva en
-# silencio; el riesgo está reportado aparte.
-test_write_with_duplicate_key_rewrites_the_first_one() {
-  nueva_prueba ci3_dup
-  local d="$BANCO_TMP/ci3_dup"
+# D1. Una clave repetida dentro del grupo default se RECHAZA.
+#
+# Antes de la segunda guarda, este caso terminaba en verde y reescribía la
+# PRIMERA aparición: el patrón de la forma de array está anclado a
+# "$db['default'] = array(" y solo puede casar una vez, mientras que en PHP
+# gana la ÚLTIMA, que es la que la aplicación usa. La migración quedaba en
+# verde con la aplicación apuntando a su base vieja. Por eso ahora no se
+# escribe nada.
+test_write_refuses_a_duplicate_key_in_array_form() {
+  nueva_prueba ci3_d1
+  local d="$BANCO_TMP/ci3_d1"
 
   caso_duplicada "$d/database.php"
+  local antes
+  antes="$(sha256sum < "$d/database.php")"
 
   php "$ESCRIBIR" "$d/database.php" "$d/salida.php" \
       "$DB_NUEVA" "$USER_NUEVO" "$CLAVE_NUEVA" codeigniter3 \
       > "$d/stdout.txt" 2> "$d/stderr.txt"
-  afirmar_codigo 0 "$?" "3.5: con la clave duplicada, el helper termina bien"
+  afirmar_codigo 1 "$?" "D1: con 'database' repetida, el helper falla"
 
-  afirmar_contiene "$d/stdout.txt" "^DB_ASSIGNMENTS=1$" \
-    "3.5: el patrón casa una sola vez dentro del grupo"
-  afirmar_contiene "$d/salida.php" "'database' => '$DB_NUEVA'," \
-    "3.5: se reescribe la PRIMERA aparición"
-  afirmar_contiene "$d/salida.php" "'database' => 'segunda_db'," \
-    "3.5: la SEGUNDA aparición, que es la que PHP usa, queda sin tocar"
+  afirmar_contiene "$d/stderr.txt" \
+    "la clave 'database' aparece 2 veces en el grupo default: revisar a mano" \
+    "D1: el mensaje nombra la clave y cuántas veces aparece"
+  afirmar_igual "$(existe_si_no "$d/salida.php")" "no" \
+    "D1: el archivo esperado NO se creó"
+  afirmar_igual "$(sha256sum < "$d/database.php")" "$antes" \
+    "D1: el database.php original queda idéntico"
+}
+
+# D2. Lo mismo en la forma clave a clave, con 'password'.
+test_write_refuses_a_duplicate_key_in_key_by_key_form() {
+  nueva_prueba ci3_d2
+  local d="$BANCO_TMP/ci3_d2"
+
+  caso_duplicada_clave "$d/database.php"
+  local antes
+  antes="$(sha256sum < "$d/database.php")"
+
+  php "$ESCRIBIR" "$d/database.php" "$d/salida.php" \
+      "$DB_NUEVA" "$USER_NUEVO" "$CLAVE_NUEVA" codeigniter3 \
+      > "$d/stdout.txt" 2> "$d/stderr.txt"
+  afirmar_codigo 1 "$?" "D2: con 'password' repetida, el helper falla"
+
+  afirmar_contiene "$d/stderr.txt" \
+    "la clave 'password' aparece 2 veces en el grupo default: revisar a mano" \
+    "D2: el mensaje nombra 'password'"
+  afirmar_igual "$(existe_si_no "$d/salida.php")" "no" \
+    "D2: el archivo esperado NO se creó"
+  afirmar_igual "$(sha256sum < "$d/database.php")" "$antes" \
+    "D2: el database.php original queda idéntico"
+}
+
+# D3. La LECTURA también se niega, y con 'username', que es una de las tres
+# que devuelve. Si leyera, traería el valor de la aparición equivocada.
+test_read_refuses_a_duplicate_key() {
+  nueva_prueba ci3_d3
+  local d="$BANCO_TMP/ci3_d3"
+
+  caso_duplicada_usuario "$d/database.php"
+
+  php "$LEER" "$d/database.php" codeigniter3 > "$d/salida.txt" 2> "$d/stderr.txt"
+  afirmar_codigo 1 "$?" "D3: con 'username' repetida, la lectura falla"
+
+  afirmar_contiene "$d/stderr.txt" \
+    "la clave 'username' aparece 2 veces en el grupo default: revisar a mano" \
+    "D3: el mensaje es el mismo que en la escritura"
+  afirmar_igual "$(wc -c < "$d/salida.txt" | tr -d ' ')" "0" \
+    "D3: no se devuelve ningún valor"
+  afirmar_no_contiene "$d/salida.txt" "primer_user|segundo_user" \
+    "D3: ninguno de los dos usuarios llega a la salida"
 }
 
 # -----------------------------------------------------------------------------
@@ -696,7 +778,9 @@ test_write_treats_missing_active_group_as_default
 test_write_fails_loudly_when_a_key_is_missing
 test_write_handles_double_quotes_and_odd_spacing
 test_write_writes_allowed_characters_verbatim
-test_write_with_duplicate_key_rewrites_the_first_one
+test_write_refuses_a_duplicate_key_in_array_form
+test_write_refuses_a_duplicate_key_in_key_by_key_form
+test_read_refuses_a_duplicate_key
 test_read_array_form
 test_read_key_by_key_form
 test_read_is_not_contaminated_by_another_group

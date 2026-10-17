@@ -143,26 +143,106 @@ $formats = [
  * GUARDAS POR FORMATO
  * ------------------------------------------------------------
  *
- * Un formato puede exigir una condición antes de que se lea
- * nada. Si no define guarda, aquí no pasa nada: los formatos
- * anteriores a esto se comportan igual que siempre.
+ * Condiciones que se comprueban antes de leer nada. Cada
+ * formato tiene una LISTA de guardas; cada una recibe el
+ * contenido y devuelve el motivo del rechazo, o null.
  *
- * Para CodeIgniter 3 la condición es el grupo activo. Con
- * $active_group distinto de 'default' la aplicación usa OTRO
- * grupo, y leer el de default daría las credenciales de una
- * base que no es la suya: se migraría la base equivocada sin un
- * solo error. Mejor no devolver nada.
- *
- * Si $active_group no aparece, CodeIgniter usa 'default'.
+ * Si un formato no define guardas, aquí no pasa nada: los
+ * formatos anteriores a esto se comportan igual que siempre.
  * ------------------------------------------------------------
  */
+
+$ci3Cuerpo = function (string $content): string {
+
+    $re =
+        '~\$db\s*\[\s*[\'"]default[\'"]\s*\]\s*=\s*(?:array\s*\(|\[)'
+        . '((?:(?!\$db\s*\[)[\s\S])*)~';
+
+    if (preg_match($re, $content, $m)) {
+        return $m[1];
+    }
+
+    return '';
+};
+
+$ci3Repetidas = function (string $content, array $claves) use ($ci3Cuerpo): ?string {
+
+    $cuerpo = $ci3Cuerpo($content);
+
+    foreach ($claves as $clave) {
+
+        $k = preg_quote($clave, '~');
+
+        $n = 0;
+
+        if ($cuerpo !== '') {
+            $n += preg_match_all('~[\'"]' . $k . '[\'"]\s*=>~', $cuerpo);
+        }
+
+        $n += preg_match_all(
+            '~\$db\s*\[\s*[\'"]default[\'"]\s*\]\s*\[\s*[\'"]' . $k . '[\'"]\s*\]\s*=~',
+            $content
+        );
+
+        if ($n > 1) {
+
+            return sprintf(
+                "la clave '%s' aparece %d veces en el grupo default: revisar a mano",
+                $clave,
+                $n
+            );
+
+        }
+
+    }
+
+    return null;
+};
+
 
 $guards = [];
 
 $guards['codeigniter3'] = [
-    'pattern'  => '~\$active_group\s*=\s*[\'"]([^\'"]*)[\'"]~',
-    'esperado' => 'default',
-    'mensaje'  => "active_group es '%s', no 'default': revisar a mano",
+
+    /*
+     * El grupo activo. Con otro grupo activo, leer el de default
+     * daría las credenciales de una base que no es la que usa la
+     * aplicación: se migraría la base equivocada sin un solo
+     * error. Mejor no devolver nada.
+     *
+     * Si $active_group no aparece, CodeIgniter usa 'default'.
+     */
+
+    function (string $content): ?string {
+
+        if (
+            preg_match('~\$active_group\s*=\s*[\'"]([^\'"]*)[\'"]~', $content, $m)
+            && $m[1] !== 'default'
+        ) {
+
+            return sprintf(
+                "active_group es '%s', no 'default': revisar a mano",
+                $m[1]
+            );
+
+        }
+
+        return null;
+    },
+
+
+    /*
+     * Claves repetidas. Aquí entra también hostname, que esta
+     * lectura devuelve: con dos hostname se leería el del grupo
+     * equivocado y la comprobación posterior compararía contra
+     * un host que la aplicación no usa.
+     */
+
+    function (string $content) use ($ci3Repetidas): ?string {
+
+        return $ci3Repetidas($content, ['database', 'username', 'hostname']);
+    },
+
 ];
 
 
@@ -174,13 +254,17 @@ if (!isset($formats[$format])) {
 
 if (isset($guards[$format])) {
 
-    $g = $guards[$format];
+    foreach ($guards[$format] as $guard) {
 
-    if (preg_match($g['pattern'], $content, $gm) && $gm[1] !== $g['esperado']) {
+        $motivo = $guard($content);
 
-        fwrite(STDERR, sprintf($g['mensaje'], $gm[1]) . "\n");
+        if ($motivo !== null) {
 
-        exit(1);
+            fwrite(STDERR, $motivo . "\n");
+
+            exit(1);
+        }
+
     }
 
 }

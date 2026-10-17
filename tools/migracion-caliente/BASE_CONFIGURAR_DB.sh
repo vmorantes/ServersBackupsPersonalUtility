@@ -384,25 +384,118 @@ $formats['codeigniter3'] = [
  * GUARDAS POR FORMATO
  * ------------------------------------------------------------
  *
- * Una condición que se comprueba antes de reescribir nada. Un
- * formato que no define guarda no cambia de comportamiento:
+ * Condiciones que se comprueban antes de reescribir nada. Cada
+ * formato tiene una LISTA de guardas; cada guarda recibe el
+ * contenido del archivo y devuelve el motivo del rechazo, o null
+ * si no tiene nada que objetar.
+ *
+ * Un formato que no define guardas no cambia de comportamiento:
  * para los formatos anteriores a esto, el isset es falso.
- *
- * CodeIgniter 3 exige que el grupo activo sea 'default'. Con
- * otro grupo activo, reescribir el de default dejaría la
- * aplicación apuntando a su base vieja y el resultado parecería
- * correcto. Antes de eso, no se escribe.
- *
- * Si $active_group no aparece, CodeIgniter usa 'default'.
  * ------------------------------------------------------------
  */
+
+/*
+ * El cuerpo del grupo 'default' en forma de array, si lo hay:
+ * desde su apertura hasta antes del siguiente $db[, para no
+ * contar las claves de otro grupo.
+ */
+
+$ci3Cuerpo = function (string $content): string {
+
+    $re =
+        '~\$db\s*\[\s*[\'"]default[\'"]\s*\]\s*=\s*(?:array\s*\(|\[)'
+        . '((?:(?!\$db\s*\[)[\s\S])*)~';
+
+    if (preg_match($re, $content, $m)) {
+        return $m[1];
+    }
+
+    return '';
+};
+
+/*
+ * Una clave repetida dentro del grupo default es una trampa
+ * silenciosa: en PHP gana la ÚLTIMA, pero el patrón de la forma
+ * de array está anclado a "$db['default'] = array(" y solo puede
+ * casar una vez, así que reescribiría la PRIMERA. La aplicación
+ * se quedaría apuntando a su base vieja con la migración en
+ * verde. Se cuentan las dos formas, que pueden estar mezcladas.
+ */
+
+$ci3Repetidas = function (string $content, array $claves) use ($ci3Cuerpo): ?string {
+
+    $cuerpo = $ci3Cuerpo($content);
+
+    foreach ($claves as $clave) {
+
+        $k = preg_quote($clave, '~');
+
+        $n = 0;
+
+        if ($cuerpo !== '') {
+            $n += preg_match_all('~[\'"]' . $k . '[\'"]\s*=>~', $cuerpo);
+        }
+
+        $n += preg_match_all(
+            '~\$db\s*\[\s*[\'"]default[\'"]\s*\]\s*\[\s*[\'"]' . $k . '[\'"]\s*\]\s*=~',
+            $content
+        );
+
+        if ($n > 1) {
+
+            return sprintf(
+                "la clave '%s' aparece %d veces en el grupo default: revisar a mano",
+                $clave,
+                $n
+            );
+
+        }
+
+    }
+
+    return null;
+};
+
 
 $guards = [];
 
 $guards['codeigniter3'] = [
-    'pattern'  => '~\$active_group\s*=\s*[\'"]([^\'"]*)[\'"]~',
-    'esperado' => 'default',
-    'mensaje'  => "active_group es '%s', no 'default': revisar a mano",
+
+    /*
+     * El grupo activo. Con $active_group distinto de 'default',
+     * la aplicación usa OTRO grupo y reescribir el de default no
+     * serviría de nada, pero lo parecería.
+     *
+     * Si $active_group no aparece, CodeIgniter usa 'default'.
+     */
+
+    function (string $content): ?string {
+
+        if (
+            preg_match('~\$active_group\s*=\s*[\'"]([^\'"]*)[\'"]~', $content, $m)
+            && $m[1] !== 'default'
+        ) {
+
+            return sprintf(
+                "active_group es '%s', no 'default': revisar a mano",
+                $m[1]
+            );
+
+        }
+
+        return null;
+    },
+
+
+    /*
+     * Claves repetidas. Las tres que se reescriben.
+     */
+
+    function (string $content) use ($ci3Repetidas): ?string {
+
+        return $ci3Repetidas($content, ['database', 'username', 'password']);
+    },
+
 ];
 
 
@@ -591,11 +684,15 @@ try {
 
     if (isset($guards[$format])) {
 
-        $g = $guards[$format];
+        foreach ($guards[$format] as $guard) {
 
-        if (preg_match($g['pattern'], $content, $gm) && $gm[1] !== $g['esperado']) {
+            $motivo = $guard($content);
 
-            throw new RuntimeException(sprintf($g['mensaje'], $gm[1]));
+            if ($motivo !== null) {
+
+                throw new RuntimeException($motivo);
+
+            }
 
         }
 
