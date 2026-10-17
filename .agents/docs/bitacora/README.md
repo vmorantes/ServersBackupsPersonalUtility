@@ -23,3 +23,4 @@ reporte del coder en mano. Plantilla:
 | --- | --- | --- |
 | [0001](0001-adopcion-arquitecto-coder.md) | Adopción del modelo arquitecto-coder | 2026-09-14 |
 | [0002](0002-banco-de-pruebas-local.md) | Banco de pruebas local (`tests/`) | 2026-09-14 |
+| [0003](0003-andamiaje-de-jornada.md) | Andamiaje de jornada: tres skills y seis puertas | 2026-10-17 |
