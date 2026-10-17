@@ -13,21 +13,25 @@ docs/  mkdocs.yml       documentación
 <Servidor>/env.sh       configuración real de cada servidor
 <Servidor>/NOTAS.md     tus apuntes
 <Servidor>/ESTADO.md    foto del despliegue, generada por `pull`
-<Servidor>/output/HestiaCP/   claves Restic (pequeñas, sirven de registro)
 
 ❌ NO SE VERSIONA (.gitignore)
 */output/mysql_backups/   los .zip: ~40 MB diarios, peso muerto en git
+*/output/HestiaCP/        claves de los respaldos (Restic, rclone)
 */logs/  *.log            logs de ejecución
 site/                     lo genera `mkdocs build`
 *.anterior                copias que deja `pull` al traer un env.sh
 temp_sql_*                temporales de un respaldo interrumpido
 ```
 
-!!! note "Por qué `output/HestiaCP/` sí y `output/mysql_backups/` no"
-    Es una decisión deliberada, no un descuido. Los volcados de claves Restic
-    ocupan menos de un kilobyte y tenerlos versionados sirve de historial. Los
-    respaldos de bases de datos pesan 40 MB por ejecución: en un mes serían
-    1,2 GB de basura en el historial de git, irrecuperable sin reescribirlo.
+!!! warning "Las claves de los respaldos no se versionan"
+    Hasta octubre de 2026 este repositorio versionaba `output/HestiaCP/`, con las
+    contraseñas de Restic y la configuración de rclone, que lleva las claves del
+    almacenamiento. Ya no: quien tenga acceso al repositorio no debe poder abrir
+    los respaldos. Esas claves las guardas tú, fuera del repositorio y fuera del
+    servidor que protegen.
+
+    Si alguna vez se versionaron, siguen en la historia de git y en el remoto:
+    retirarlas del árbol no las borra de ahí. Rota esas credenciales.
 
 ## El bit de ejecución
 

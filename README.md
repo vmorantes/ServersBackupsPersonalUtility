@@ -44,7 +44,7 @@ lib/*.sh             🔧 la lógica. Se sube igual a TODOS los servidores
 config/              📖 env.sh.example, referencia de configuración
 docs/  mkdocs.yml    📖 documentación
 
-TejidoTesting/          🖥️ un servidor
+MiServidor/             🖥️ un servidor
 ├── env.sh           ✏️ LO ÚNICO QUE EDITAS TÚ
 ├── NOTAS.md         ✏️ tus apuntes de despliegue (nadie los toca)
 └── ESTADO.md        ⚙️ lo genera `backupctl pull`
@@ -65,8 +65,8 @@ Si te pierdes, lee `docs/empezar/que-es-cada-cosa.md`.
 ```
 
 ```bash
-backupctl -p TejidoTesting deploy admin@servidor   # subir código + config
-backupctl -p TejidoTesting pull   admin@servidor   # traer el estado real
+backupctl -p MiServidor deploy admin@servidor   # subir código + config
+backupctl -p MiServidor pull   admin@servidor   # traer el estado real
 ```
 
 `deploy` deja en el servidor exactamente esto, y allí los scripts viven y corren:
@@ -75,7 +75,7 @@ backupctl -p TejidoTesting pull   admin@servidor   # traer el estado real
 /home/admin/scripts/
 ├── bin/backupctl   ┐ copiados del repo,
 ├── lib/*.sh        ┘ idénticos en todos los servidores
-├── env.sh          ← copiado de TejidoTesting/env.sh
+├── env.sh          ← copiado de config/env.sh.example
 ├── logs/  output/  ← se generan allí
 ```
 
@@ -86,7 +86,7 @@ crontab, los respaldos y el diagnóstico. Es lo que hace que el repositorio
 
 ```bash
 backupctl profiles                  # servidores conocidos
-backupctl -p TejidoTesting status   # trabajar con uno concreto
+backupctl -p MiServidor status   # trabajar con uno concreto
 ```
 
 ## Qué garantiza
