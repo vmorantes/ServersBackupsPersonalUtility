@@ -57,7 +57,7 @@ servidor). Su ADR lleva obligatoriamente:
 | [0005](0005-prosa-comprimida.md) | Prosa comprimida donde no cuesta fiabilidad | sí | Aceptada |
 | [0006](0006-pruebas-en-servidor-las-hace-el-po.md) | Las pruebas contra un servidor las hace el PO | sí | Aceptada |
 | [0007](0007-ramas-master-estable.md) | `master` estable; ramas propias; lo que toca servidores espera la prueba del PO | sí | Aceptada |
-| [0008](0008-credenciales-versionadas.md) | Los perfiles guardan sus credenciales en el repositorio | sí | Aceptada |
+| [0008](0008-credenciales-versionadas.md) | Los perfiles guardan sus credenciales en el repositorio | sí | Reemplazada por 0020 en las claves de respaldo |
 | [0009](0009-banco-de-pruebas-local.md) | Banco de pruebas local: órdenes falsas en el PATH y perfiles sintéticos | sí | Reemplazada por 0010 |
 | [0010](0010-banco-de-pruebas-salvaguardas-propias.md) | Banco de pruebas: cada salvaguarda se comprueba a sí misma | sí | Aceptada |
 | [0011](0011-borrado-de-ramas-fusionadas.md) | El coder borra las ramas locales ya fusionadas (`git branch -d`) | sí | Aceptada |
@@ -68,3 +68,5 @@ servidor). Su ADR lleva obligatoriamente:
 | [0016](0016-incrementales-de-punta-a-punta.md) | Respaldos incrementales de punta a punta desde la herramienta | sí | Reemplazada por 0017 |
 | [0017](0017-incrementales-hechos-corregidos.md) | Incrementales: los hechos corregidos; nada se da por bueno sin una instantánea | sí | Aceptada |
 | [0018](0018-migracion-caliente-como-subherramienta.md) | La migración caliente entra como subherramienta, con un analizador de solo lectura delante | sí | Aceptada (sin implementar) |
+| [0019](0019-migracion-solo-escribe-en-el-destino.md) | La migración caliente solo escribe en el destino y no despierta lo apagado | sí | Aceptada |
+| [0020](0020-claves-de-respaldo-fuera-del-repositorio.md) | Las claves de los respaldos no viven en el repositorio | sí | Aceptada (sin implementar) |

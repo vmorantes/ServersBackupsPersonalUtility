@@ -1,6 +1,6 @@
 # 0008 — Los perfiles guardan sus credenciales en el repositorio
 
-- **Estado:** Aceptada (retrospectiva: formaliza lo que ya se hacía)
+- **Estado:** Reemplazada por 0020 en lo que toca a las claves de los respaldos (2026-10-17); sigue vigente para `env.sh`
 - **Fecha:** 2026-09-14
 - **Decide:** Product Owner
 - **Estructural:** sí (dónde viven las credenciales)
