@@ -33,7 +33,7 @@ Esta página es la vía rápida.
 | Correo | Sí | Cuentas, contraseñas sin cambiarlas, alias, reenvíos, cuotas y buzones enteros. **La clave DKIM es nueva**: hay que publicarla en el DNS |
 | Cron | Sí, salvo dos casos | Los suspendidos en el origen no se migran; los puestos a mano con `crontab -e` no los ve |
 | Cuentas FTP | **No** | Solo se informan |
-| **Zonas DNS** | **No** | Ni una zona ni un registro. Ver abajo |
+| **Zonas DNS** | **No se copian** | HestiaCP crea en el nuevo una zona por defecto, que no es la tuya. Ver abajo |
 
 La herramienta **no cambia nada tuyo en el servidor viejo**: solo lee de él. Lo que haya
 que cambiar allí lo haces tú. La única excepción: si el acceso a MySQL del origen va con
@@ -44,8 +44,9 @@ conexión se corta de golpe, puede quedarse allí: búscalo y bórralo.
 !!! danger "El DNS no se migra"
     La herramienta no copia ningún registro DNS. Pero al crear cada dominio en el
     servidor nuevo, HestiaCP **sí le crea una zona**, desde la plantilla DNS del paquete
-    de la cuenta. Con la plantilla `default` trae sus propios `@ A`, `www`, `mail`,
-    `@ MX 0 mail.<dominio>`, un SPF, `_dmarc` y registros de correo. **No es tu zona.**
+    de la cuenta. Con la plantilla `default` trae sus propios `@ NS` (los del servidor
+    nuevo), `@ A`, `www`, `mail`, `@ MX 0 mail.<dominio>`, un SPF, `_dmarc` y registros
+    de correo. **No es tu zona.**
 
     Si el servidor viejo **sirve** el DNS de tus dominios, antes de cambiar los NS hacia
     el nuevo cada zona tiene que estar en el nuevo **como en el viejo**, con la IP nueva.
@@ -53,8 +54,58 @@ conexión se corta de golpe, puede quedarse allí: búscalo y bórralo.
     **No añadas tus registros encima de esa zona.** HestiaCP no detecta duplicados: te
     quedarían dos `@ A`, dos SPF y **dos MX**, y el correo se repartiría entre los dos
     destinos. Hay que **reemplazar** los registros de la zona por los tuyos, no sumarlos.
-    El informe del analizador te dice qué cuentas tienen zonas y cuántos registros tiene
-    cada una.
+    Y borrarlos uno a uno no sirve: HestiaCP no deja borrar el último `A` ni el último
+    `NS`, y no tiene orden para vaciar una zona. El informe del analizador te dice qué
+    cuentas tienen zonas y cuántos registros tiene cada una.
+
+### Recrear una zona en el servidor nuevo
+
+!!! warning "Nunca probado"
+    Este procedimiento sale de leer el código de HestiaCP 1.10.5, no de haberlo hecho.
+    Pruébalo primero con **una** zona poco importante y comprueba el resultado (paso 5)
+    antes de seguir con las demás.
+
+Después de la fase 1 (la zona ya existe en el nuevo), para cada dominio:
+
+1. **Copia los registros del viejo.** Están en
+   `/usr/local/hestia/data/users/<cuenta>/dns/<dominio>.conf`, un registro por línea. Es
+   solo leer: tráete una copia al servidor nuevo, por ejemplo a
+   `/root/zona-<dominio>.conf`.
+2. **Ajústala, a mano**, antes de cargarla:
+    - la IP del servidor viejo, por la del nuevo, en todos los registros que la lleven;
+    - los registros `NS`: los nombres de tus servidores de nombres tal como quedarán
+      después del cambio;
+    - `mail._domainkey`: si el dominio tiene correo en el servidor nuevo, la clave DKIM es
+      **nueva**. Sustituye esa línea por la que tiene ahora la zona del nuevo (en el mismo
+      archivo del nuevo). Si el correo está fuera (Microsoft 365), conserva los registros
+      que el proveedor te dio, no los del panel.
+3. **Cárgala**, reemplazando los registros de la zona del nuevo (el archivo se mueve, no
+   se copia):
+
+    ```bash
+    /usr/local/hestia/bin/v-insert-dns-records <cuenta> <dominio> /root/zona-<dominio>.conf
+    ```
+
+4. **Regenera las zonas de la cuenta**:
+
+    ```bash
+    /usr/local/hestia/bin/v-rebuild-dns-domains <cuenta>
+    ```
+
+5. **Compruébala contra el servidor nuevo, antes de tocar los NS**, preguntándole a él
+   directamente:
+
+    ```bash
+    dig +short example.org A  @203.0.113.20
+    dig +short example.org MX @203.0.113.20
+    dig +short example.org TXT @203.0.113.20
+    ```
+
+    Tiene que salir lo mismo que en el viejo, con la IP nueva. Un solo MX, y el tuyo.
+
+Si el dominio usa **DNSSEC** en el viejo, el nuevo generará claves propias y el registro
+DS del registrador dejará de coincidir: sin verificar qué pasa exactamente, pero no
+cambies los NS de un dominio con DNSSEC sin revisar eso antes.
 
 !!! danger "Dominios con el correo fuera (por ejemplo, Microsoft 365)"
     La migración les crea igualmente un dominio de correo local en el servidor nuevo
