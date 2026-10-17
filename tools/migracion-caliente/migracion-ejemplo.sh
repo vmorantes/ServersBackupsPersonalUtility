@@ -6,19 +6,39 @@
 #
 # Todos los nombres, dominios, usuarios, bases e IPs de este
 # archivo son FICTICIOS. Las contraseñas son el marcador
-# CAMBIAR_ESTA_CLAVE: no se ejecuta nada con ellas puestas.
+# CAMBIAR_ESTA_CLAVE. Se sustituyen todas antes de ejecutar:
+# la herramienta no comprueba que sigan siendo el marcador.
 #
 # Este archivo se copia con otro nombre (migracion-cliente.sh,
 # por ejemplo) y se edita. El directorio ignora
 # migracion-*.sh salvo este ejemplo, porque un archivo de
 # migración real lleva contraseñas en claro.
 #
-# Se usa así:
+# Se usa así, en este orden:
 #
 #   bash BASE_GENERAL.sh migracion-cliente.sh plan
 #   bash BASE_GENERAL.sh migracion-cliente.sh 1
-#   bash BASE_GENERAL.sh migracion-cliente.sh verificar
+#   bash BASE_GENERAL.sh migracion-cliente.sh sincronizar
+#
+#       ─── aquí se apunta el DNS al servidor nuevo ───
+#
 #   bash BASE_GENERAL.sh migracion-cliente.sh 2
+#   bash BASE_GENERAL.sh migracion-cliente.sh verificar
+#
+# "sincronizar" se puede repetir cuantas veces se quiera
+# hasta el momento de apuntar el DNS, y "verificar" solo lee,
+# así que se puede lanzar cuando se quiera, antes o después.
+#
+# Las dos formas de equivocarse con "sincronizar":
+#
+#   - Saltárselo pierde, sin un solo aviso, todo lo que se
+#     haya escrito en el servidor viejo entre la fase 1 y el
+#     corte de DNS.
+#
+#   - Lanzarlo DESPUÉS del corte de DNS puede pisar con datos
+#     viejos lo que ya se haya escrito en el servidor nuevo:
+#     deja el destino idéntico al origen y borra en el nuevo
+#     lo que en el viejo no exista.
 #
 # La fase que se pasa como segundo argumento manda sobre la
 # que diga FASE aquí abajo.
@@ -83,23 +103,26 @@ CRONJOBS_USUARIOS=();
 # solo declara lo que cambia.
 #
 # php se declara SIEMPRE con la plantilla exacta, en los
-# predeterminados y en cada dominio. En la migración del
-# 2026-10-02, dejar que la versión la eligiera el panel saltó
-# versiones de PHP entre el origen y el destino: un sitio que
-# venía con 7.4 se levantó con otra y falló al abrir.
+# predeterminados y en cada dominio. "default" no es la misma
+# versión en los dos servidores: en la migración del
+# 2026-10-02 era PHP 8.2 en el viejo y 8.5 en el nuevo.
 #
-# forzar_ssl se queda en "no" en todos los dominios: forzar
-# HTTPS no comprueba que el certificado exista, y un dominio
-# redirigido a un HTTPS sin certificado deja de responder.
-# Se fuerza a mano, dominio por dominio, después de comprobar
-# que el certificado está emitido.
+# forzar_ssl se queda en "false" en todos los dominios:
+# forzar HTTPS no comprueba que el certificado exista, y un
+# dominio redirigido a un HTTPS sin certificado deja de
+# responder. Se fuerza a mano, dominio por dominio, después
+# de comprobar que el certificado está emitido.
+#
+# Ojo con el vocabulario: cualquier valor distinto de "true"
+# cuenta como falso (cfg_si, BASE_CONFIG.sh:547), así que una
+# errata desactiva la opción en silencio, sin error.
 #
 # ============================================================
 
 predeterminados \
   php="PHP-8_1" \
   ssl="true" \
-  forzar_ssl="no";
+  forzar_ssl="false";
 
 
 # ============================================================
@@ -124,7 +147,7 @@ predeterminados \
 dominio "example.org" \
   php="PHP-8_1" \
   tipo="wordpress" \
-  forzar_ssl="no" \
+  forzar_ssl="false" \
   bd="web" \
   bd_user="web" \
   bd_pass="CAMBIAR_ESTA_CLAVE";
@@ -142,7 +165,7 @@ dominio "example.org" \
 dominio "sub.example.org" \
   php="PHP-8_1" \
   tipo="joomla" \
-  forzar_ssl="no" \
+  forzar_ssl="false" \
   origen="joomla.example.net" \
   bd="portal" \
   bd_user="portal" \
@@ -175,7 +198,7 @@ dominio "sub.example.org" \
 dominio "example.net" \
   php="PHP-7_4" \
   tipo="ninguno" \
-  forzar_ssl="no" \
+  forzar_ssl="false" \
   bd="intranet" \
   bd_user="intranet" \
   bd_pass="CAMBIAR_ESTA_CLAVE" \
