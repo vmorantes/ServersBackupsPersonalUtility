@@ -290,6 +290,27 @@ comprobadas byte a byte y los números de línea con `~` son aproximados. Planti
   servidor viejo) y el `mail._domainkey` (clave del servidor viejo). DNSSEC: si el origen lo usa,
   el destino genera claves nuevas y el DS del registrador dejaría de coincidir (SOSPECHA razonada).
 
+### Formato y carga de una zona (verificado el 2026-10-17, segunda pasada)
+
+Misma fuente y mismas reservas (lector que resume, líneas ±2).
+
+- Línea de `dns/<dominio>.conf`: `ID RECORD TYPE PRIORITY VALUE SUSPENDED TIME DATE [TTL]`, todo
+  `CLAVE='valor'` (`v-add-dns-record:129-132`, `func/syshealth.sh:74`). La generación de la zona
+  rechaza cualquier otra clave y un valor con `'` (`func/domain.sh` ~494-516). TXT con espacio o `;`
+  se guarda `VALUE='"…"'`; SRV sin comillas dobles. CONFIRMADO.
+- `dns.conf`: `DOMAIN IP TPL TTL EXP SOA SERIAL SRC RECORDS DNSSEC KEY SLAVE MASTER SUSPENDED TIME
+  DATE` (`func/syshealth.sh:67`); `DNSSEC` es `yes`/`no`. CONFIRMADO.
+- IDs: no se validan al leer; huecos inocuos; el rebuild reordena por ID. Duplicados: SIN VERIFICAR
+  qué rompen. Se generan únicos.
+- `v-insert-dns-records`: si la zona no existe sale con 3 y no toca nada; **si el archivo no existe
+  sale con 0 sin hacer nada (falso éxito)**; no valida el contenido; mueve el archivo. CONFIRMADO.
+- `v-rebuild-dns-domains USER`: no cambia el serial (tercer argumento, `no` por defecto), reordena
+  el `.conf`, regenera el `.db`, recarga bind; en `dns.conf` solo escribe `RECORDS` y `KEY`. Su
+  código de salida ignora el del reinicio. CONFIRMADO. Matiz a lo de arriba: «sin tocar los
+  registros» = sin tocar su contenido.
+- La IP en `default.tpl`: `@ A`, `mail A` y el `ip4:` del SPF. CONFIRMADO. Formato de
+  `mail._domainkey` en el `.conf`: SIN VERIFICAR.
+
 ### Correo fuera del servidor (MX en Microsoft 365, por ejemplo)
 
 - Exim considera local todo dominio que tenga entrada en `/etc/exim4/domains/` (`dsearch`,
