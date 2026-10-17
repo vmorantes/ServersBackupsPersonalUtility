@@ -43,7 +43,12 @@ verificable del repositorio antes de la primera instrucción.
 
 ## 2. En vuelo
 
-**Nada en vuelo.** No hay ronda enviada sin reporte y no hay coder activo.
+**En vuelo: el mensaje #082**, enviado al coder el 2026-10-17 a las 14:41. No es trabajo: le
+pide identificarse (rama, últimos commits, árbol, líneas de este archivo) y el resumen que
+debe a su compactación. Hasta su reporte #083 no se emite ninguna instrucción.
+
+**El coder existe y está abierto**: `ServersBackupsPersonalUtility-Coder-Main`, renombrada por
+el PO el 2026-10-17 a las 13:29 y compactada después.
 
 **Desviación del 2026-10-17, anotada a propósito:** todo el andamiaje de jornada —las tres
 skills, las dos puertas y sus ocho commits— lo escribió y lo commiteó **el arquitecto, sin
@@ -51,6 +56,11 @@ coder**, por orden expresa del PO («implementa las puertas, deja el árbol limp
 `30` reserva el commit al coder. La orden del PO autoriza la excepción; que quede escrita es
 lo que impide que se convierta en costumbre. **Lo siguiente que toque `lib/`, `bin/`, `web/`
 o `tools/` va por coder**, sin excepción: ahí la regla no la mueve la prisa.
+
+Y el agravante, que es el que deja lección: el arquitecto afirmó que **no había coder** sin
+comprobarlo. Lo había, abierto y renombrado por el PO. Bastaba una orden —listar las sesiones—
+para saberlo. **Antes de afirmar que algo no existe, se mide**; para afirmar que algo NO está,
+hace falta la salida completa, no la impresión.
 
 **El árbol está sucio a propósito**, con trabajo del arquitecto sin commitear:
 
@@ -68,8 +78,10 @@ o `tools/` va por coder**, sin excepción: ahí la regla no la mueve la prisa.
 
 Son **dos**, y los dos avanzan por separado (regla `30`):
 
-- **`#NNN`, cadena con el coder.** Último usado: **#081** (ARQ). El próximo: **#082**.
-- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. El próximo: **A-001**.
+- **`#NNN`, cadena con el coder.** Último usado: **#082** (ARQ). El próximo: **#083**, que es
+  el reporte del coder.
+- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-003**. El próximo:
+  **A-004**.
 
 ## 4. Qué espera al PO
 
