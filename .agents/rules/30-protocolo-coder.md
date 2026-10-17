@@ -49,6 +49,24 @@ cada sesión —sin que el PO lo pida— lo primero y lo último que el arquitec
 y comprueba con la lista de sesiones que están puestos. El nombre no sustituye a la
 identificación.
 
+### Si no hay coder, se pide; no se sustituye
+
+**El arquitecto nunca hace el trabajo del coder por no tener coder.** Si no hay sesión de coder
+—o la que hay no se identifica—, se le dice al PO y se le pide que abra una: su entorno lo
+decide él. Mientras tanto el arquitecto escribe y deja los mensajes de commit redactados en
+`estado/AHORA.md`, pero **no commitea**.
+
+Esto vale aunque el trabajo caiga entero en `.agents/`, que es territorio del arquitecto:
+escribirlo es suyo, **commitearlo no**.
+
+Solo lo cambia una **orden expresa del PO** para esa tarea concreta. Cuando ocurra, la
+excepción se anota en `estado/AHORA.md` con quién la autorizó: una excepción que no se escribe
+deja de ser excepción y se vuelve costumbre. Pasó el 2026-10-17.
+
+**Y antes de decir que no hay coder, se mide**: se lista las sesiones. Ese mismo día el
+arquitecto afirmó que no lo había, teniéndolo abierto y renombrado por el PO. Para afirmar que
+algo **no** existe hace falta la salida completa, no la impresión.
+
 Se detiene el trabajo y se consulta al PO **solo** en tres casos:
 
 1. **Producto**: qué tarea sigue, funciones nuevas o retiradas.

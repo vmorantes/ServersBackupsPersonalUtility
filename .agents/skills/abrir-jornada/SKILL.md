@@ -65,7 +65,10 @@ Se contestan **en voz alta, en el chat, numeradas**, antes de hacer nada más. C
 **dónde se leyó la respuesta**; una contestada de memoria no cuenta.
 
 1. **¿En qué rama estoy y está el árbol limpio?** — medido, no leído.
-2. **¿Qué está en vuelo?** ¿Hay una instrucción enviada sin reporte? Si la hay, **no se emite
+2. **¿Hay coder, y qué está en vuelo?** Lo primero se **mide** listando las sesiones, no se
+   supone. Si no lo hay, **se le pide al PO que abra una**: el arquitecto no lo sustituye ni
+   commitea en su lugar (regla `30`).
+    ¿Hay una instrucción enviada sin reporte? Si la hay, **no se emite
    otra**: para el coder, cualquier mensaje con trabajo dentro es una ronda. **Se contesta
    contra el disco, no contra el chat**: el archivo del tramo lleva una línea por reporte
    recibido, y el `git log` dice si su trabajo está hecho. Si el estado dice «en vuelo» y los
