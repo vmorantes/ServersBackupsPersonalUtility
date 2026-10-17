@@ -9,6 +9,30 @@ Una tarea sale de aquí al cerrarse; su historia queda en la bitácora. Referenc
 
 ---
 
+## Migración caliente (nombrado por el PO el 2026-10-17; ADR 0018, 0019)
+
+Hecho en `feat/migracion-caliente`: copia intacta, tipo `codeigniter3`, analizador de solo
+lectura, arreglos de `plan`/`verificar`, cron suspendidos y la guía `docs/migracion/caliente.md`.
+Primer uso real: el PO, el 2026-10-19. Lo que queda:
+
+- [ ] **Zonas DNS**: la herramienta no las migra. Propuesto que el analizador genere, por zona,
+      el script que las recrea en el destino con la IP nueva (A-028 §3.1). Pendiente de la
+      verificación de las órdenes DNS y de la respuesta del PO.
+- [ ] `IP_ORIGEN="REVISAR_IP_ORIGEN"` cuando el analizador no lee ninguna IP: dejarlo vacío.
+- [ ] `BASE_COMPROBAR.sh:285` busca `PROXY_TPL`; la clave es `PROXY`.
+- [ ] Crear suspendidos los cron suspendidos en vez de omitirlos (ADR 0019 §2), verificado.
+- [ ] Una prueba que exija que cada tipo de `CFG_RUTA_POR_TIPO` esté en los dos helpers PHP.
+- [ ] Los 12 puntos de `.agents/docs/mejoras-herramienta-migracion.md`.
+- [ ] Unificar con `backupctl` y la web (ADR 0018 §6).
+- [ ] Fusionar en `master` cuando el PO la haya usado (ADR 0007).
+
+## Claves de los respaldos fuera del repositorio (nombrado por el PO el 2026-10-17; ADR 0020)
+
+- [ ] Diseñar el método: dónde deja `backupctl` las claves, cómo se las lleva el PO sin pasar
+      por los agentes, y cómo las encuentra `adoptar`. **Después del lunes.**
+- [ ] `README.md` y `docs/operacion/restic.md` siguen describiendo `output/HestiaCP/` como
+      destino de las claves: revisar con el diseño.
+
 ## Versión 2.1 estable (nombrado por el PO el 2026-09-16; ADR 0013)
 
 Mandato: «rigurosa y bonita como tú quieras; activar y configurar los incrementales desde ella,
@@ -23,7 +47,7 @@ sin HestiaCP, y que me diga qué hizo; potenciarla; dejar una versión estable»
       reintento de `adoptar_conf` con la conexión ya cerrada; hasta tres intentos inútiles de
       devolver `restic.conf`; camino `bc_ssh_tty` sin prueba; la contraseña de panel sale por
       stdout (puede quedar en un log); registro de limpiezas solo en memoria.
-- [ ] **Fase 2 — Incrementales de punta a punta desde la herramienta.** Activar, configurar
+- [ ] **Fase 2 — Incrementales de punta a punta desde la herramienta.** *Aparcada el 2026-10-17: ya no hay servidor de pruebas.* Activar, configurar
       (almacenamiento, retención, programación, exclusiones), comprobar y desactivar Restic de
       HestiaCP sin entrar al panel, usando su mecanismo propio por debajo. Toda acción que escribe
       informa de lo hecho: qué había antes, qué cambió, qué órdenes se ejecutaron y cómo se
