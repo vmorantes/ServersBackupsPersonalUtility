@@ -1,6 +1,5 @@
 # Salidas generadas: peso muerto para el repositorio.
 # 40 MB por ejecución diaria no tienen por qué vivir en git.
-TejidoTesting/output/mysql_backups/
 */output/mysql_backups/
 *.zip
 temp_sql_*
@@ -14,6 +13,10 @@ site/
 
 # Copias que deja `backupctl pull` al traer un env.sh del servidor
 *.anterior
+
+# Claves de los respaldos que trae `backupctl restic`/`hestia keys`:
+# nunca se versionan. Las guarda el PO fuera del repositorio.
+*/output/HestiaCP/
 
 # Migraciones de servidores: archivos de descripción y paquetes generados.
 # Llevan contraseñas de bases de datos de clientes y, los paquetes, el

@@ -234,7 +234,7 @@ ${BC_BLD}EJEMPLOS${BC_RST}
   backupctl backup --only tienda --dry-run     simular el respaldo de una BD
   backupctl verify --restore-test tienda --with-data
   backupctl restore '' tienda --into tienda_prueba
-  backupctl -p TejidoTesting status
+  backupctl -p MiServidor status
   backupctl migrate --to admin@nuevo.example --fresh
   backupctl -p MiVPS remote status             ejecutar en el servidor sin abrir SSH
   backupctl -p MiVPS remote backup
