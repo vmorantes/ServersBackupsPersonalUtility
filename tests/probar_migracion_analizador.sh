@@ -387,6 +387,130 @@ test_the_package_builds_and_embeds_the_reader() {
 
   bash -n "$PAQUETE"
   afirmar_codigo 0 "$?" "el paquete pasa bash -n"
+
+  # El sello. Construido fuera de un repositorio de git, el commit no se
+  # puede saber: tiene que decir "desconocido" y NO fallar, que es la
+  # degradación que pide la instrucción.
+  afirmar_contiene "$PAQUETE" "^ANALIZADOR_COMMIT=" \
+    "S1: el paquete lleva el commit del que sale"
+  afirmar_contiene "$PAQUETE" "^ANALIZADOR_CONSTRUIDO=" \
+    "S1: y la fecha de construcción"
+  afirmar_contiene "$PAQUETE" "^ANALIZADOR_SHA256='analizar.sh [0-9a-f]{64} / BASE_LEER_CONFIG.sh [0-9a-f]{64}'" \
+    "S1: y las sumas de los dos archivos que entran en él"
+  afirmar_contiene "$PAQUETE" "ANALIZADOR_COMMIT='desconocido'" \
+    "S1: fuera de un repositorio, el commit es 'desconocido' y no falla"
+}
+
+# -----------------------------------------------------------------------------
+# S1 y S2: el sello, con un git falso
+# -----------------------------------------------------------------------------
+# Un git de verdad aquí daría un resultado distinto según cómo esté el árbol
+# del repositorio en ese momento, y la prueba cambiaría de sentido sola. Con un
+# git falso se controla la respuesta: es la misma idea que las demás órdenes
+# falsas del banco.
+#
+# Así además se prueba el caso que de verdad importa —un paquete construido con
+# cambios sin commitear— sin tocar el árbol real ni el estado de git.
+construir_con_git_falso() {
+  local d="$1" sucio="$2"
+
+  mkdir -p "$d/bin"
+  cp "$MIG/analizar.sh" "$MIG/BASE_LEER_CONFIG.sh" "$MIG/construir-analizador.sh" "$d/"
+
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'args="$*"\n'
+    # Se ignora el "-C <dir>" de delante: aquí no hay repositorio al que ir.
+    printf 'case "$args" in\n'
+    printf '  *"rev-parse --git-dir"*)    echo ".git"; exit 0 ;;\n'
+    printf '  *"rev-parse --short HEAD"*) echo "abc1234"; exit 0 ;;\n'
+    printf '  *"status --porcelain"*)\n'
+    if [[ "$sucio" == "sucio" ]]; then
+      printf '    echo " M analizar.sh"; exit 0 ;;\n'
+    else
+      printf '    exit 0 ;;\n'
+    fi
+    printf '  *) exit 0 ;;\n'
+    printf 'esac\n'
+  } > "$d/bin/git"
+  chmod +x "$d/bin/git"
+
+  ( cd "$d" && PATH="$d/bin:$PATH" bash construir-analizador.sh ) > "$d/construir.txt" 2>&1
+}
+
+test_the_seal_records_the_commit_and_flags_uncommitted_changes() {
+  nueva_prueba an11
+
+  # --- Árbol limpio: el commit, a secas ---
+  local limpio="$BANCO_TMP/an11/limpio"
+  mkdir -p "$limpio"
+  construir_con_git_falso "$limpio" "limpio"
+  afirmar_codigo 0 "$?" "S1: el constructor termina bien con git disponible"
+
+  afirmar_contiene "$limpio/analizar.paquete.sh" "ANALIZADOR_COMMIT='abc1234'" \
+    "S1: con el árbol limpio, el sello lleva el commit a secas"
+
+  # --- Con cambios sin commitear: el commit, marcado ---
+  local sucio="$BANCO_TMP/an11/sucio"
+  mkdir -p "$sucio"
+  construir_con_git_falso "$sucio" "sucio"
+  afirmar_codigo 0 "$?" "S2: el constructor termina bien con cambios sin commitear"
+
+  afirmar_contiene "$sucio/analizar.paquete.sh" "ANALIZADOR_COMMIT='abc1234\+cambios'" \
+    "S2: con cambios sin commitear, el commit lleva '+cambios'"
+
+  # --- Y el sello llega al informe y a las propuestas ---
+  local d="$BANCO_TMP/an11"
+  local raiz="$d/arbol"
+  sembrar_arbol "$raiz"
+
+  local ruta_path
+  ruta_path="$(montar_falsos "$d/bin" "$d/registro.txt")"
+
+  correr_analizador "$raiz" "$sucio/analizar.paquete.sh" "$ruta_path" \
+    "$d/stdout.txt" "$d/stderr.txt"
+  afirmar_codigo 0 "$?" "S1: el paquete sellado se ejecuta igual"
+
+  local sal
+  sal="$(dir_de_salida "$raiz")"
+
+  afirmar_contiene "$sal/informe.txt" "Analizador, commit  : abc1234\+cambios" \
+    "S1: el informe dice de qué versión del analizador sale"
+  afirmar_contiene "$sal/informe.txt" "Paquete construido  : [0-9]{4}-[0-9]{2}-[0-9]{2}" \
+    "S1: y cuándo se construyó el paquete"
+  afirmar_contiene "$sal/informe.txt" "Sumas               : analizar.sh [0-9a-f]{64}" \
+    "S1: y las sumas de lo que lleva dentro"
+  afirmar_contiene "$sal/migracion-cuenta1.sh" "Analizador, commit: abc1234\+cambios" \
+    "S1: cada propuesta también dice de qué versión sale"
+  afirmar_contiene "$d/stdout.txt" "Analizador, commit : abc1234\+cambios" \
+    "S1: y el resumen en pantalla, para verlo sin abrir el informe"
+
+  afirmar_igual "$(wc -c < "$d/registro.txt" | tr -d ' ')" "0" \
+    "S1: el paquete sellado sigue sin invocar ninguna orden prohibida"
+}
+
+# Sin empaquetar, ejecutando analizar.sh desde el repositorio, el sello lo dice
+# en vez de callar: un informe siempre puede decir de dónde viene.
+test_unpackaged_run_says_so() {
+  nueva_prueba an12
+  local d="$BANCO_TMP/an12"
+  local raiz="$d/arbol"
+  sembrar_arbol "$raiz"
+
+  local ruta_path
+  ruta_path="$(montar_falsos "$d/bin" "$d/registro.txt")"
+
+  correr_analizador "$raiz" "$MIG/analizar.sh" "$ruta_path" "$d/stdout.txt" "$d/stderr.txt"
+  afirmar_codigo 0 "$?" "analizar.sh suelto, desde el repositorio, se ejecuta"
+
+  local sal
+  sal="$(dir_de_salida "$raiz")"
+  afirmar_contiene "$sal/informe.txt" "Analizador, commit  : sin empaquetar" \
+    "el informe de una corrida sin empaquetar lo dice"
+
+  # Y aun sin paquete encuentra el lector, porque está a su lado.
+  afirmar_contiene "$sal/informe.txt" "base que usa   : cuenta1_web" \
+    "sin paquete, el lector se extrae de BASE_LEER_CONFIG.sh que está al lado"
 }
 
 # -----------------------------------------------------------------------------
@@ -741,5 +865,7 @@ test_warnings_for_cron_orphan_database_and_unknown_user
 test_rapido_skips_measuring_and_says_so
 test_missing_hestia_dir_creates_nothing
 test_odd_values_do_not_break_the_report
+test_the_seal_records_the_commit_and_flags_uncommitted_changes
+test_unpackaged_run_says_so
 
 fin_de_suite

@@ -84,6 +84,45 @@ fi;
 
 
 # ------------------------------------------------------------
+# El sello: de qué versión sale este paquete.
+# ------------------------------------------------------------
+#
+# Un paquete es un archivo generado y no versionado: nada avisa
+# de que es más viejo que el analizador del que salió. Pasó al
+# escribirlo: se leyó un informe producido por un paquete
+# anterior a un arreglo y se creyó que el código estaba mal.
+#
+# Con esto, un informe dice siempre de qué versión salió.
+# ------------------------------------------------------------
+
+COMMIT="desconocido";
+
+if command -v git >/dev/null 2>&1 \
+   && git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1; then
+
+  COMMIT="$(git -C "$DIR" rev-parse --short HEAD 2>/dev/null)";
+
+  [ -n "$COMMIT" ] || COMMIT="desconocido";
+
+  # Construido con cambios sin commitear: el commit no basta
+  # para saber qué lleva dentro, y tiene que notarse.
+  if [ -n "$(git -C "$DIR" status --porcelain -- "$DIR" 2>/dev/null)" ]; then
+    COMMIT="$COMMIT+cambios";
+  fi;
+
+fi;
+
+
+SUMA_ANALIZADOR="$(sha256sum "$ANALIZADOR" 2>/dev/null | awk '{print $1}')";
+SUMA_LECTOR="$(sha256sum "$LECTOR" 2>/dev/null | awk '{print $1}')";
+
+[ -n "$SUMA_ANALIZADOR" ] || SUMA_ANALIZADOR="desconocido";
+[ -n "$SUMA_LECTOR" ]     || SUMA_LECTOR="desconocido";
+
+CONSTRUIDO="$(date '+%Y-%m-%d %H:%M:%S')";
+
+
+# ------------------------------------------------------------
 # Escribir el paquete.
 # ------------------------------------------------------------
 
@@ -100,6 +139,14 @@ fi;
   echo '#   bash analizar.paquete.sh [--rapido] [--usuario <cuenta>]';
   echo '#';
   echo '# ============================================================';
+  echo;
+  echo '# De qué versión sale este paquete. El analizador lo imprime en';
+  echo '# el informe: así un paquete viejo se nota al leerlo.';
+  echo;
+  echo "ANALIZADOR_COMMIT='$COMMIT';";
+  echo "ANALIZADOR_CONSTRUIDO='$CONSTRUIDO';";
+  echo "ANALIZADOR_SHA256='analizar.sh $SUMA_ANALIZADOR / BASE_LEER_CONFIG.sh $SUMA_LECTOR';";
+  echo;
   echo;
   echo '# El lector de configuraciones de aplicaciones, tal como vive';
   echo '# en BASE_LEER_CONFIG.sh. No es una copia editada: se extrae en';

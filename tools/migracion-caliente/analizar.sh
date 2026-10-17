@@ -82,6 +82,19 @@ USUARIOS_PEDIDOS=();
 AVISOS=();
 
 
+# ------------------------------------------------------------
+# El sello del paquete: de qué versión del repositorio salió.
+#
+# Las pone construir-analizador.sh. Si no están, esto se está
+# ejecutando desde el repositorio, sin empaquetar, y así se
+# dice: un informe tiene que poder decir de dónde viene.
+# ------------------------------------------------------------
+
+SELLO_COMMIT="${ANALIZADOR_COMMIT:-sin empaquetar}";
+SELLO_CONSTRUIDO="${ANALIZADOR_CONSTRUIDO:-sin empaquetar}";
+SELLO_SHA256="${ANALIZADOR_SHA256:-sin empaquetar}";
+
+
 # ============================================================
 # === ARGUMENTOS ===
 # ============================================================
@@ -1409,6 +1422,8 @@ do
     echo "# Generada el       : $(date '+%Y-%m-%d %H:%M:%S')";
     echo "# Cuenta            : $cuenta";
     echo "# HestiaCP de origen: $(o_no_disponible "$HESTIA_VERSION")";
+    echo "# Analizador, commit: $SELLO_COMMIT";
+    echo "# Paquete construido: $SELLO_CONSTRUIDO";
     echo "#";
     echo "# Esto es una PROPUESTA, no una migración lista. Nada de aquí";
     echo "# se ha ejecutado contra ningún servidor: sale de leer los";
@@ -1524,6 +1539,10 @@ done
   echo "Intérprete de PHP   : $(o_no_disponible "$PHP_BIN")";
   echo "Modo                : $([ "$RAPIDO" = "si" ] && echo "--rapido (sin medir ni contar)" || echo "completo")";
   echo;
+  echo "Analizador, commit  : $SELLO_COMMIT";
+  echo "Paquete construido  : $SELLO_CONSTRUIDO";
+  echo "Sumas               : $SELLO_SHA256";
+  echo;
   echo "Este análisis no ha escrito nada en el servidor fuera de su propio";
   echo "directorio de salida, no ha ejecutado ninguna orden del panel y no";
   echo "ha leído ninguna contraseña.";
@@ -1581,6 +1600,8 @@ rm -f "$CUERPO" "$HELPER_PHP";
 
 echo;
 echo "Análisis terminado.";
+echo "  Analizador, commit : $SELLO_COMMIT";
+echo "  Paquete construido : $SELLO_CONSTRUIDO";
 echo "  Cuentas analizadas : ${#CUENTAS[@]}";
 echo "  Avisos             : ${#AVISOS[@]}";
 echo "  Informe            : $INFORME";
