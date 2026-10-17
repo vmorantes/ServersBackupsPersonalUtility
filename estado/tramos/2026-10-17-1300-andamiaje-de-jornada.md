@@ -19,7 +19,8 @@
 | #109→#110 | Cierre: bitácora 0003 y el estado al día | completado; **el coder encontró que los tres documentos daban tres recuentos distintos de los bloqueos de la guarda** | `3d4203b` `4fdc632` |
 | #111→#112 | Corregir los recuentos, con auditoría de los cinco bloqueos | completado | `86cf1ae` |
 | #113→#114 | Dejar `AHORA.md` verdadero al cerrar | completado; **el coder encontró una cifra rancia en «Espera al PO»** | `71a0f9f` |
-| #115→#116 | Quitar esa cifra y dejar en su lugar cómo medirla | completado | — |
+| #115→#116 | Quitar esa cifra y dejar en su lugar cómo medirla | completado; **el coder encontró que un puntero de «Espera al PO» apuntaba a mensajes perdidos** | `e9b1a09` |
+| #117→#118 | Recuperar la guía de pruebas de la fase 2 en un documento | completado | — |
 
 ## Hallazgos
 
@@ -108,6 +109,31 @@
     resumen de compactación que la regla obliga a enviar, de una lectura de contraste pedida
     expresamente, y de mandarle leer el archivo entero en frío. Ninguno habría aparecido
     ejecutando pasos. **Pedir lectura, y no solo ejecución, es lo que lo hizo rentable hoy.**
+
+11. **El arquitecto podó lo único que el PO tenía para probar la fase 2, el mismo día que
+    escribió las reglas de poda.** «Espera al PO» remitía a los reportes `#076`, `#078` y
+    `#080` para las tres guías de prueba: mensajes de un canal que ya no existe, que el PO no
+    puede abrir. `AHORA.md` conservaba una tabla condensada con las tres órdenes y qué
+    comprobar por fuera, y **se borró al reescribir el archivo**, sin estar recogida en ningún
+    otro sitio.
+
+    Lo detectó el coder leyendo `AHORA.md` en frío y preguntándose si un puntero servía de
+    algo. Recuperado en `.agents/docs/guia-pruebas-fase-2.md`, con lo irrecuperable marcado
+    como tal.
+
+    **La lección, que vale más que el archivo: lo que el PO necesita para trabajar no puede
+    vivir solo en un mensaje.** Y podar exige comprobar antes que lo podado está recogido en
+    otro sitio, no suponerlo.
+
+12. **Cifras que pueden envejecer, medidas y listadas por el coder** (§4.2 de la ronda
+    `#115`): «23 suites», «seis puertas» y «12 afirmaciones» son correctas hoy **y las imprime
+    `verificar.sh` en cada ejecución**, así que son las únicas de `AHORA.md` que una puerta
+    podría comprobar por máquina. «Siete pasos y medio de ocho» es la que peor envejece:
+    parece precisa y «medio» es un juicio. Ninguna se arregla hoy; quedan medidas para cuando
+    el PO lo nombre.
+
+    Detalle que sorprende y no es un error: el script tiene **seis** puertas pero imprime
+    **cinco** líneas `ok:`. La puerta 0, la de que el archivo existe, solo habla cuando falla.
 
 ## Decisiones
 
