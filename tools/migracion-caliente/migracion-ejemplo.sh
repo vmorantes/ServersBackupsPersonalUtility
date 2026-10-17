@@ -175,34 +175,40 @@ dominio "sub.example.org" \
 # ------------------------------------------------------------
 # Un CodeIgniter 3.
 #
-# Va con tipo="ninguno" HASTA QUE EXISTA SU PROPIO TIPO: la
-# base se migra, pero la herramienta NO reescribe ninguna
-# configuración. Las credenciales nuevas se escriben A MANO,
-# después de la fase 1, en:
+# tipo="codeigniter3" lee y reescribe el grupo 'default' de
+# application/config/database.php, en sus dos formas: la de
+# array y la de clave a clave. Ya no hay que editar nada a
+# mano.
 #
-#   application/config/database.php
-#
-# en las claves $db['default']['database'], ['username'] y
-# ['password'].
-#
-# El tipo "piecesphp" NO sirve para CodeIgniter 3: busca
+# No se usa "piecesphp": ese busca
 # $config['database']['default'][...] en
-# app/config/database.php, y CodeIgniter 3 declara
-# $db['default'] en application/config/database.php. Falla en
-# voz alta, sin escribir, pero falla.
+# app/config/database.php, que es otra forma y otra ruta.
 #
-# Con tipo="ninguno" no hay archivo del que leer el nombre de
-# la base en el servidor viejo, así que bd_origen se declara.
+# bd_origen no se declara: el tipo lee del servidor viejo el
+# nombre de la base y el usuario.
+#
+# DOS COSAS QUE HAY QUE COMPROBAR EN CADA PROYECTO:
+#
+#   - La ruta por defecto supone que application/ cuelga de
+#     public_html/. Si no, se declara con ruta_db.
+#
+#   - Si el proyecto tiene
+#     application/config/<ENTORNO>/database.php, ESE manda
+#     sobre el general: hay que apuntar ruta_db a él, o se
+#     reescribiría el archivo que la aplicación no usa y la
+#     migración parecería correcta.
+#
+# Y si $active_group no es 'default', la herramienta se niega
+# y lo dice: ese proyecto usa otro grupo y se revisa a mano.
 # ------------------------------------------------------------
 
 dominio "example.net" \
   php="PHP-7_4" \
-  tipo="ninguno" \
+  tipo="codeigniter3" \
   forzar_ssl="false" \
   bd="intranet" \
   bd_user="intranet" \
-  bd_pass="CAMBIAR_ESTA_CLAVE" \
-  bd_origen="cuentavieja_intranet";
+  bd_pass="CAMBIAR_ESTA_CLAVE";
 
 
 # ============================================================
