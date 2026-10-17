@@ -17,5 +17,7 @@ site/
 
 # Migraciones de servidores: archivos de descripción y paquetes generados.
 # Llevan contraseñas de bases de datos de clientes y, los paquetes, el
-# contenido entero de la herramienta. Solo se versiona el README.
+# contenido entero de la herramienta, y los documentos de cada migración nombran
+# cuentas, dominios e IPs reales (40-salvaguardas.md §1). Nada de aquí se versiona:
+# lo genérico vive en .agents/docs/mejoras-herramienta-migracion.md.
 migraciones/
