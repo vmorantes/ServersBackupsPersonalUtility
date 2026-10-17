@@ -16,7 +16,8 @@
 | #103→#104 | Identificación del coder y su resumen de compactación | completado; **el coder encontró el desfase del contador** | — |
 | #105→#106 | La puerta del contador contra los tramos, con su prueba de rechazo | completado | `4267744` `c2e67c2` |
 | #107→#108 | Documentación, el archivo de este tramo, y los números a tres dígitos | completado; **el coder separó dos defectos de la guarda que se contaban como uno** | `5427423` `dac630b` `0bf1291` |
-| #109→#110 | Cierre: bitácora 0003 y el estado al día | completado | — |
+| #109→#110 | Cierre: bitácora 0003 y el estado al día | completado; **el coder encontró que los tres documentos daban tres recuentos distintos de los bloqueos de la guarda** | `3d4203b` `4fdc632` |
+| #111→#112 | Corregir los recuentos, con auditoría de los cinco bloqueos | completado | — |
 
 ## Hallazgos
 
@@ -41,14 +42,14 @@
    coder, se pide; no se sustituye», y la pregunta 2 de `abrir-jornada` pasa a ser «¿hay
    coder, y qué está en vuelo?», con la medición obligatoria.
 
-3. **La guarda frenó el trabajo cuatro veces en un día, y son DOS defectos distintos**, no
+3. **La guarda frenó el trabajo CINCO veces en un día, y son DOS defectos distintos**, no
    uno. Lo separó el coder, que vio que se estaban contando juntos:
-   - **Defecto A — confunde el contenido de un archivo con una orden.** Cinco veces: al
-     arquitecto escribiendo un documento que citaba órdenes `v-*`; al coder escribiendo un
-     script que contenía su propio borrado de temporal; y al arquitecto tres veces más, al
-     intentar describir por escrito ese mismo bloqueo. Es el error ya arreglado para los
-     mensajes de commit (H13), sin aplicar aquí.
-   - **Defecto B — no distingue la ruta de un borrado legítimo.** Al coder, borrando un
+   - **Defecto A — confunde el contenido de un archivo con una orden: 4 veces.** El
+     arquitecto escribiendo un documento que citaba órdenes `v-*`; el coder escribiendo un
+     script que contenía su propio borrado de temporal; y el arquitecto dos veces más, al
+     intentar escribir en el estado y en la bitácora la frase que describía ese bloqueo. Es el
+     error ya arreglado para los mensajes de commit (H13), sin aplicar aquí.
+   - **Defecto B — no distingue la ruta de un borrado legítimo: 1 vez.** El coder, borrando un
      temporal de su propio scratchpad, que `40-salvaguardas.md` §2 permite expresamente. La
      guarda solo ve que la ruta va en una variable.
 
@@ -66,6 +67,13 @@
 6. **El margen del contador es de uno**, y así tiene que ser: los tramos citan hasta el `#110`
    y `AHORA.md` declara el `#110`. La puerta morderá el día que el tramo avance y `AHORA.md`
    no.
+
+7. **Tres documentos de esta jornada daban tres recuentos distintos** de los bloqueos de la
+   guarda, y dos se contradecían a sí mismos en párrafos consecutivos. Lo encontró el coder al
+   firmarlos, haciendo la lectura de contraste que se le pidió. **Es el mismo defecto que esta
+   jornada se dedicó a cazar**, cometido en el documento que lo cuenta. Ninguna puerta lo
+   detecta: comparan números de mensaje, no prosa. Corregido con una auditoría de los cinco
+   bloqueos, uno a uno.
 
 ## Decisiones
 

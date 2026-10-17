@@ -43,8 +43,9 @@ verificable del repositorio antes de la primera instrucción.
 
 ## 2. En vuelo
 
-**En vuelo: la instrucción #109**, la ronda de cierre del tramo: el coder commitea la entrada
-0003 de la bitácora y el estado al día. Cuando reporte, **nada en vuelo**.
+**En vuelo: la instrucción #111**, que corrige los recuentos de los bloqueos de la guarda: los
+tres documentos de la jornada daban tres cifras distintas, y lo encontró el coder al firmarlos.
+Cuando reporte, **nada en vuelo**.
 
 Cerradas hoy: **#103→#104** (identificación del coder y su resumen de compactación; **él
 encontró el desfase del contador**), **#105→#106** (la puerta del contador y su prueba de
@@ -83,9 +84,9 @@ hace falta la salida completa, no la impresión.
 
 Son **dos**, y los dos avanzan por separado (regla `30`):
 
-- **`#NNN`, cadena con el coder.** Último usado: **#110**. El próximo: **#111**.
-- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-008**. El próximo:
-  **A-009**.
+- **`#NNN`, cadena con el coder.** Último usado: **#112**. El próximo: **#113**.
+- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-009**. El próximo:
+  **A-010**.
 
 **Reparado el 2026-10-17, y vale la pena saber por qué.** Este archivo declaraba «último usado
 #081» desde el 2026-09-24. Era **falso**: el archivo del tramo de ese mismo día registra
@@ -140,18 +141,16 @@ servidores del 2026-10-02 y, el 2026-10-17, el andamiaje de jornada.
 Las **seis** puertas del estado corren por máquina en `verificar.sh`
 (`.agents/scripts/puertas_estado.sh`, con su prueba de rechazo: 12 afirmaciones). Queda:
 
-5. **La guarda: DOS defectos distintos**, que frenaron el trabajo cinco veces el 2026-10-17.
-   Lo separó el coder; contarlos como uno haría que el arreglo dejara vivo el segundo.
-   - **A — confunde el contenido de un archivo con una orden.** Un documento que citaba
-     órdenes `v-*`, un script que contenía su propio borrado de temporal, y tres intentos de
-     describir por escrito ese mismo bloqueo. Es el error ya arreglado para los mensajes de
-     commit (H13), sin aplicar aquí.
-   - **B — no distingue la ruta de un borrado legítimo.** Un temporal del scratchpad de la
-     sesión, que `40-salvaguardas.md` §2 permite expresamente, bloqueado solo porque la ruta
-     iba en una variable.
+5. **La guarda: DOS defectos distintos**, que frenaron el trabajo **cinco veces** el
+   2026-10-17. Contarlos como uno haría que el arreglo dejara vivo el segundo; lo separó el
+   coder.
+   - **A — confunde el contenido de un archivo con una orden (4 veces).** Es el error ya
+     arreglado para los mensajes de commit (H13), sin aplicar aquí.
+   - **B — no distingue la ruta de un borrado legítimo (1 vez).** Un temporal del scratchpad
+     de la sesión, que `40-salvaguardas.md` §2 permite expresamente.
 
-   Ninguna se esquivó. **Es lo único que queda abierto del andamiaje**, y el coste ya es real:
-   cinco interrupciones en una jornada.
+   Ninguna se esquivó. El detalle de los cinco, en el tramo del 2026-10-17. **Es lo único que
+   queda abierto del andamiaje**, y el coste ya es real.
 
 
 ## 7. Decidido y sin implementar

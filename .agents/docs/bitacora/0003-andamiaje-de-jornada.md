@@ -33,8 +33,10 @@ quedaba ninguna referencia a ella en el repositorio.
 El primer tramo lo escribió y commiteó **el arquitecto sin coder**, por orden expresa del PO
 (diez commits). Es una desviación de la regla 30, anotada como tal.
 
-Después, con coder: `#105→#106` la puerta del contador y su prueba de rechazo; `#107→#108` la
-documentación, el tramo y el formato de tres dígitos; `#109→#110` el cierre.
+Después, con coder: `#103→#104` la identificación y su resumen de compactación; `#105→#106`
+la puerta del contador y su prueba de rechazo; `#107→#108` la
+documentación, el tramo y el formato de tres dígitos; `#109→#110` el cierre, y `#111→#112` la corrección
+de los recuentos que el coder encontró al firmarlo.
 
 ## Qué se obtuvo
 
@@ -73,12 +75,21 @@ imprimir.
 cuando debía fallar, porque la prueba generaba nombres de archivo repetidos y nunca llegaba a
 crear 14. Corregido antes de entrar.
 
-**Y la guarda, cuatro veces en un día.** Tres de ellas por el mismo defecto —confunde el
-contenido de un archivo con una orden— y **la cuarta por otro distinto**: un borrado legítimo
-dentro del scratchpad de la sesión, que las salvaguardas permiten expresamente, bloqueado
-solo porque la ruta iba en una variable. Lo separó el coder, que vio que se estaban contando
-como un solo defecto. Ninguna de las cuatro se esquivó: se reportaron y se usó otra
-herramienta.
+**Y la guarda, cinco veces en un día, por DOS defectos distintos.** Cuatro por confundir el
+contenido de un archivo con una orden —un documento que citaba órdenes `v-*`, un script que
+contenía su propio borrado de temporal, y dos intentos de escribir en el estado y aquí mismo
+la frase que describía ese bloqueo—, y una quinta por no distinguir la ruta de un borrado
+legítimo dentro del scratchpad de la sesión, que las salvaguardas permiten expresamente. Los
+separó el coder, que vio que se estaban contando como un solo defecto. Ninguna de las cinco se
+esquivó: se reportaron y se usó otra herramienta.
+
+**Y una última, que es la que más dice de todo esto.** Al cerrar, el coder encontró que los
+tres documentos de esta jornada daban **tres recuentos distintos** de esos bloqueos, y que dos
+se contradecían a sí mismos en párrafos consecutivos. El hallazgo central del día es «dos
+documentos del mismo día, del mismo autor, contradiciéndose, y nadie lo vio en un mes», y el
+documento que lo cuenta tenía el mismo defecto al lado. **Ninguna puerta lo caza**: la del
+contador compara números de mensaje, no recuentos en prosa. Lo caza alguien que lee. Las
+cifras de arriba son las de una auditoría de los cinco bloqueos, uno a uno.
 
 ## Qué se dejó fuera
 
