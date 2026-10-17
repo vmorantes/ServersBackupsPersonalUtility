@@ -175,14 +175,18 @@ de `verificar.sh`. Su prueba de rechazo —cada puerta vista fallar— es
 | **El tope** | `estado/AHORA.md` ≤ 200 líneas | Lo pasa |
 | **Un solo «al retomar»** | Cuenta los bloques de arranque de `AHORA.md` | Hay cero o más de uno |
 | **Los contadores declarados** | Que `AHORA.md` tiene su sección y declara `#NNN` **y** `A-NNN` | Falta la sección o uno de los dos |
+| **El contador no se queda atrás** | El `#NNN` que `AHORA.md` declara como último usado, contra el mayor que registren los tramos | El tramo va por delante, o falta el «Último usado» |
 | **Tramos podados** | Que no hay más de 10 archivos en `estado/tramos/` | Hay más |
 
 **Lo que la máquina NO puede comprobar, y sigue siendo del arquitecto:**
 
-- Que el número del contador sea **el correcto**. La puerta comprueba que está declarado, no
-  que acierte: eso solo lo sabe quien contó los mensajes.
+- Que el número del contador **acierte**. La puerta detecta que se haya quedado **atrás**
+  respecto a los tramos, que es el fallo que ya ocurrió; no que el número sea el correcto. Si
+  `AHORA.md` va por delante de la realidad, pasa.
 - **Que ningún reporte recibido esté sin anotar** en el archivo del tramo (§2.0). No hay
-  fuente canónica contra la que compararlo: si la hubiera, el problema no existiría.
+  fuente canónica contra la que compararlo: si la hubiera, el problema no existiría. Y de aquí
+  sale el límite de la puerta anterior: **compara contra los tramos, así que una ronda que no
+  se anota no delata nada**. La puerta protege al que escribe el tramo, no al que lo olvida.
 - Que lo escrito sea **verdad**. Ninguna puerta detecta un `AHORA.md` bien formado y falso.
 
 Las puertas quitan de en medio los descuidos mecánicos para que la atención vaya a esto otro.

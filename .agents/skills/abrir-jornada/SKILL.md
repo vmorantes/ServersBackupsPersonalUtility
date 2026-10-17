@@ -113,7 +113,8 @@ Eso incluye ya las **puertas del estado** (`puertas_estado.sh`): el tope de 200 
 
 A mano queda lo que ninguna máquina puede comprobar:
 
-- **Que el número de cada contador sea el correcto**, no solo que esté escrito.
+- **Que el número de cada contador sea el correcto**, no solo que esté escrito y que no se
+  haya quedado atrás respecto a los tramos.
 - **Que lo que dice `AHORA.md` sea verdad.** Un archivo bien formado y falso pasa todas las
   puertas.
 - **Los enlaces de reglas y skills son enlaces, no copias:**
