@@ -116,8 +116,7 @@ Tocar los dos de `backup.sh` cambia el formato del respaldo, que es un contrato
 - [ ] **Datos reales del PO en el código** (T7): dominio de un cliente, usuario y bases en
       `lib/adoptar.sh`, placeholders de `web/index.html`, huellas del servidor en comentarios.
 - [ ] **Documentación que miente** (`30-trampas.md`, última sección):
-      `docs/desarrollo/arquitectura.md`, el enlace roto de `TejidoTesting/Instrucciones.md`,
-      la ayuda de `bin/backupctl`.
+      `docs/desarrollo/arquitectura.md`, la ayuda de `bin/backupctl`.
 - [ ] **Auditoría de seguridad** de lo marcado como SOSPECHA en T6 y de lo confirmado en T1
       que no es decisión del PO (la web devuelve el `env.sh`; `pull` copia su diff a
       `ESTADO.md`).

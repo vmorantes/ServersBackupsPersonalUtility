@@ -15,9 +15,11 @@ decimal y locale, menús en stderr, `mysqldump --force` que miente.
 
 ### T1. Credenciales reales dentro del repositorio — CONFIRMADA
 
-`TejidoTesting/env.sh` (contraseña de MySQL) y `TejidoTesting/output/HestiaCP/`
-(`rclone_*.conf` con claves S3; `Restic_Configs_*.txt` con claves de Restic, según la sesión
-anterior) están versionados y en el remoto. `docs/desarrollo/repositorio.md` presenta como
+**Retirado del árbol el 2026-10-17** (`c603d4f`): el perfil `TejidoTesting`, con su `env.sh`
+(contraseña de MySQL) y `output/HestiaCP/` (`rclone_*.conf` con claves S3; `Restic_Configs_*.txt`
+con claves de Restic), y `*/output/HestiaCP/` queda ignorado. **Sigue en la historia y en el
+remoto**: rotar esas credenciales es del PO. Lo que sigue de esta trampa vale para cualquier perfil.
+Lo que había: `docs/desarrollo/repositorio.md` presenta como
 deliberado versionar `output/HestiaCP/`. Además: `pull` escribe en `ESTADO.md` el diff del
 `env.sh` (`pull.sh:135-143`) y `ESTADO.md` no está ignorado; `/api/config-raw` manda el
 `env.sh` al navegador (`server.py:755-771`); `adoptar --como` imprime contraseñas en claro
@@ -75,8 +77,7 @@ Dominio de un cliente en `lib/adoptar.sh:658`; usuario y bases reales en
 `lib/adoptar.sh:69,593,1357`; como `placeholder` en `web/index.html:411,423,425`; huellas del
 servidor en comentarios (recuentos de bases en `remote.sh:76`, `config.sh:134`,
 `adoptar.sh:406,1346`, `mysql.sh:21`; IDs de instantáneas en `adoptar.sh:1221-1223`). Incumple
-la regla 40 §1 (roadmap). El nombre del perfil `TejidoTesting` aparece en `bin/backupctl:178`
-y en `README.md`.
+la regla 40 §1 (roadmap). El nombre del perfil `TejidoTesting` ya no aparece en el código ni en `README.md` (2026-10-17).
 
 ## Volcados e importación (MySQL / HestiaCP)
 
@@ -300,7 +301,6 @@ Importa `server.py` y regenera `web/__pycache__/server.cpython-312.pyc`, que est
   (son 573); su trampa ERR (79) no es la de `bc_trap_err` (`bin:59-73`); el diagrama y «Añadir
   una orden nueva» no incluyen la web; `--debug <orden> --dry-run` (151) sugiere un ensayo
   inocuo (T4).
-- `TejidoTesting/Instrucciones.md` enlaza a `docs/servidores/tejidotesting.md`, que no existe.
 - `bin/backupctl:503`: comentario de `exec-count` fuera de su sitio; la lista de órdenes con
   ensayo de la ayuda (143-144) omite `hestia rclone/restic/cron` y `adoptar*`.
 - `docs/desarrollo/repositorio.md` «Ramas»: actualizado con el ADR 0007 el 2026-09-14.

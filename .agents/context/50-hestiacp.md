@@ -237,3 +237,7 @@ Para un dato fresco se mide con `du`. FUENTE. Cada cuánto los refresca el panel
   - Pero el `plan` (`BASE_PLAN.sh:175`) anunciaría «ya existe, se omitirá» para dominios nuevos, y
     `verificar` (`BASE_VERIFICAR.sh:106`) daría por existente un dominio que no existe: **falso OK**.
   - Y cada consulta fallida añade una línea al `error.log` del destino.
+  - **Arreglado el 2026-10-17** (`641733a`), con un segundo defecto que encontró el coder al
+    probarlo: el `grep` sin `-F` trataba el punto como comodín, y **la ficha de un subdominio
+    hacía «existir» al dominio padre**. Hoy exige la clave json entre comillas y descarta
+    `Error:`. En modo API, la forma del error: SIN VERIFICAR.

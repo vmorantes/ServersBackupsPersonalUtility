@@ -24,8 +24,8 @@ config/env.sh.example    Estructura de un perfil: la ÚNICA referencia que leen 
 docs/  mkdocs.yml        Documentación MkDocs para personas; la navegación vive en mkdocs.yml
 site/                    Sitio compilado, ignorado por git
 README.md  UtilCommands.md
-TejidoTesting/           PERFIL REAL del PO: env.sh, Instrucciones.md, output/HestiaCP/
-                         Credenciales dentro (30-trampas.md T1). No se lee.
+<Perfil>/                Perfiles del PO (hoy ninguno versionado; el último, TejidoTesting,
+                         se retiró el 2026-10-17). Credenciales dentro: no se leen.
 estado/  .agents/  .claude/  .vscode/  AGENTS.md    Trabajo con agentes
 ```
 
@@ -52,8 +52,8 @@ install hestia shield adoptar`. Los mayores: `adoptar.sh` (1483 líneas) y `hest
   `$BC_ROOT/servers/*/env.sh`, `$BC_ROOT/*/env.sh`. Excluye `bin lib docs config site .git
   servers node_modules` (35); **no** excluye `web`, `tools` ni directorios nuevos. Los ocultos
   no entran. Un directorio con un `env.sh` dentro se convierte en perfil.
-- **Perfil por defecto**: si hay exactamente uno, ese (56-63). Hoy es `TejidoTesting`: toda
-  orden sin `-p` usa sus credenciales reales.
+- **Perfil por defecto**: si hay exactamente uno, ese (56-63). Con un solo perfil en la máquina,
+  toda orden sin `-p` usa sus credenciales reales, en silencio.
 - `-p <ruta>/env.sh` acepta un perfil fuera del repositorio (77-78): así se usa un perfil
   sintético en un temporal. La web no lo ve.
 - Perfil **remoto** (`DEPLOY_HOST` puesto y `SCRIPTS_DIR` inexistente en esta máquina): sus
