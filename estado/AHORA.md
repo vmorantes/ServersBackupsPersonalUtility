@@ -71,9 +71,9 @@ rechazo), **#107→#108** (documentación, el tramo, los números a tres dígito
 (bitácora y cierre), **#111→#112** (cuadrar los recuentos de la guarda, **hallazgo suyo**) y
 **#113→#114** (dejar este archivo verdadero) y **#115→#116** (quitar una cifra rancia de
 «Espera al PO», **hallazgo suyo**) y **#117→#118** (recuperar la guía de pruebas que el
-arquitecto había podado) **#119→#120** (completarla: le faltaba **cómo se ensaya**) y **#121→#122** (el perfil en cada
-orden).
-**Siete hallazgos del coder en el día, cinco de ellos en la documentación del arquitecto.** El detalle, en
+arquitecto había podado) **#119→#120** (completarla: le faltaba **cómo se ensaya**) **#121→#122** (el perfil en cada orden). El último arreglo —un puntero a medias y un recuento que
+sobraba— lo escribió y commiteó el arquitecto: **el canal entre sesiones descartó la
+instrucción #123** y no se reenvía. El detalle, en
 `estado/tramos/2026-10-17-1300-andamiaje-de-jornada.md`.
 
 
@@ -84,9 +84,10 @@ orden).
 
 Son **dos**, y los dos avanzan por separado (regla `30`):
 
-- **`#NNN`, cadena con el coder.** Último usado: **#122**. El próximo: **#123**.
-- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-014**. El próximo:
-  **A-015**.
+- **`#NNN`, cadena con el coder.** Último usado: **#123**. El próximo: **#124**.
+  El `#123` se emitió y el canal lo descartó: **consume número igual** (tramo, hallazgo 19).
+- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-015**. El próximo:
+  **A-016**.
 
 **Reparado el 2026-10-17, y vale la pena saber por qué.** Este archivo declaraba «último usado
 #081» desde el 2026-09-24. Era **falso**: el archivo del tramo de ese mismo día registra
@@ -191,7 +192,7 @@ Las **seis** puertas del estado corren por máquina en `verificar.sh`
 **Una corrección parcial que se anuncia como completa es peor que no corregir**, porque quien
 la lee se fía. Y un documento correcto en lo que afirma puede ser peligroso por lo que omite.
 Las dos lecciones costaron un servidor del PO cada una. El relato entero, en `abrir-jornada`
-§7 y en el tramo del 2026-10-17.
+§7.
 
 ## Para una sesión nueva
 

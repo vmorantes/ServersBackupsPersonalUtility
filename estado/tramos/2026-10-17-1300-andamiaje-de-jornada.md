@@ -22,7 +22,8 @@
 | #115→#116 | Quitar esa cifra y dejar en su lugar cómo medirla | completado; **el coder encontró que un puntero de «Espera al PO» apuntaba a mensajes perdidos** | `e9b1a09` |
 | #117→#118 | Recuperar la guía de pruebas de la fase 2 en un documento | completado; **el coder encontró que la guía mandaba ensayar sin decir cómo** | `ae581a9` |
 | #119→#120 | Completar la guía: la bandera de ensayo y los cinco pasos que faltaban | completado; **el coder vio que ninguna orden llevaba el perfil** | `eaacadd` |
-| #121→#122 | El perfil en cada orden de la guía | completado | — |
+| #121→#122 | El perfil en cada orden de la guía | completado; **el coder comprobó que la poda no se llevó nada** | `f1dee9d` |
+| sin ronda | Quitar un recuento que envejece y arreglar un puntero a medias | completado por el arquitecto: **el canal descartó la instrucción #123** | — |
 
 ## Hallazgos
 
@@ -171,6 +172,34 @@
     anuncia una copia fechada y el camino real se niega. No escribe en ninguno de los dos
     casos. Es la única orden donde el ensayo y el camino real no dicen lo mismo, y se resuelve
     solo al cerrar el paso 8.
+
+17. **Un recuento de hallazgos en `AHORA.md` es exactamente el tipo de cifra que este mismo
+    tramo decidió no escribir.** Decía «siete hallazgos, cinco en documentación del
+    arquitecto» cuando ya eran ocho y seis. Lo señaló el coder, y con la propuesta correcta:
+    no corregir el número, **quitarlo**. Aplicada la decisión del hallazgo 9 a un caso que el
+    arquitecto no había visto como tal.
+
+18. **La poda de `AHORA.md` se comprobó buscando el TEXTO, no el puntero**, que es lo que
+    falló por la tarde. Resultado: lo podado está entero en `abrir-jornada` §7, y con más
+    detalle del que tenía —incluidas las palabras literales del PO—. **La poda mejoró el
+    conjunto.** Pero el puntero nuevo citaba dos sitios y en uno de ellos no estaba: medio
+    puntero muerto, corregido.
+
+19. **El canal entre sesiones descartó un mensaje**, el `#123`, por un corte de bucle de
+    relevo. No se reenvía: reintentar en bucle es justo lo que el canal estaba cortando. El
+    arreglo que llevaba dentro —quitar el recuento y corregir el puntero— lo escribió y
+    commiteó el arquitecto, **segunda vez en el día** que lo hace sin coder, amparado en la
+    misma orden del PO («deja el árbol limpio») y anotado igual que la primera.
+
+    **Y la puerta del contador resolvió un caso que la regla no cubría.** El arquitecto dio
+    el `#123` por no gastado, apoyándose en «un mensaje redactado y no enviado no gasta
+    número». La puerta falló: el tramo citaba el `#123` y `AHORA.md` declaraba el `#122`.
+    Tenía razón la puerta. **Enviado y descartado no es lo mismo que redactado y no enviado**:
+    el número ya existe en el registro, y reutilizarlo volvería ambiguo citar «el mensaje
+    #123», que es exactamente lo que la puerta protege. El contador va por `#123`.
+
+    Es la segunda vez en el día que una puerta escrita esta mañana corta algo de verdad, y la
+    primera que **decide una cuestión de protocolo** en vez de cazar un descuido.
 
 ## Decisiones
 
