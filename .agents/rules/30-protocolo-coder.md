@@ -99,6 +99,26 @@ Todo recuadro del arquitecto y todo reporte del coder abren con un identificador
   usado vive en `estado/AHORA.md`: así una sesión nueva sabe por dónde va.
 - Un mensaje redactado y no enviado no gasta número. Los del PO no consumen número.
 
+### Los mensajes al PO también van etiquetados (decidido el 2026-10-17)
+
+El PO pidió poder citar un mensaje y una parte concreta de él. Por eso **todo mensaje del
+arquitecto al PO** —no solo los recuadros al coder— abre con su propio identificador y lleva
+**sus partes numeradas**:
+
+```
+[A-014 · ARQ → PO · 2026-10-17 13:40]
+
+1. Lo primero
+   1.1. Un detalle de lo primero
+2. Lo segundo
+```
+
+- **Son dos contadores distintos y los dos viven en `estado/AHORA.md`**: `#NNN` para la cadena
+  con el coder, `A-NNN` para la cadena con el PO. Mezclarlos hace imposible saber qué falta.
+- **Las partes se numeran siempre que haya más de una.** El PO cita «A-014 §2» y los dos saben
+  de qué se habla. Un mensaje de una sola idea no necesita numeración.
+- Vale también para el informe de cierre y para el resumen de arranque.
+
 ## Idioma
 
 | Qué | Idioma |
