@@ -22,7 +22,8 @@
 | #136→#137 | El analizador de solo lectura, con su suite | completado: 79 afirmaciones; M1-M3 muerden; el coder encontró y arregló dos defectos propios leyendo un informe real | `9285e58` `0c3c85f` `dd414c2` `7fc5cd2` |
 | #138→#139 | Sello de versión en el paquete del analizador; commitear guía y README | completado; la lectura en frío de la guía encontró cuatro cosas | `51e0b2a` `e7513d1` `cf0e16d` |
 | #140→#141 | `IP_DESTINO` vacía en las propuestas; cron suspendido no se migra; correcciones de la guía | completado; 27 suites. La guía commiteada decía que el plan anuncia el cron suspendido: falso, lo escribió el arquitecto sin comprobarlo. Corregido después | `c02449c` `2efdc4b` `154bace` `afc6a3e` |
-| #142→#143 | Cierre: commitear la guía corregida (con «Qué se migra y qué no»), ADR 0019 y 0020, roadmap y estado | ronda de cierre; el reporte #143 cierra la jornada | ver `git log` |
+| #142→#143 | Cierre: commitear la guía corregida (con «Qué se migra y qué no»), ADR 0019 y 0020, roadmap y estado | completado salvo la guía: una frase decía que la herramienta nunca escribe en el origen; el coder no la commiteó | `bb006b6` `3d0612c` `8bec5e9` |
+| #144→#145 | Segunda ronda de cierre: la guía corregida y la verificación de DNS en `50-hestiacp.md` | ronda de cierre | ver `git log` |
 
 ## Hallazgos
 
@@ -138,6 +139,13 @@
     MySQL en modo "user" (`BASE_PRIVILEGIOS.sh:811-826`), borrado por `trap EXIT` (949). Se retira la
     propuesta de generar un script para A.
 
+34. **Verificación de DNS en la fuente** (subagente, depositada en `50-hestiacp.md`): el alta del
+    dominio crea zona desde plantilla; añadir registros duplica; la copia fiel es reemplazar el
+    `.conf` y regenerar; Exim trata como local todo dominio con dominio de correo y no consulta el
+    MX. El ejemplo de DNS del PO, aplicado sobre esa zona, dejaba dos MX.
+35. **Tercera afirmación absoluta del arquitecto en la guía, el mismo día**: «nunca modifica el
+    servidor viejo», contradicha por su propio ADR 0019. La cazó el coder en la ronda de cierre.
+
 ## Decisiones
 
 - ADR 0018: copia intacta primero, analizador de solo lectura, tipo CodeIgniter 3, y la
@@ -149,8 +157,8 @@
 
 ## Cerrado
 
-- **Duración:** de 16:30 (apertura de la jornada) a 18:00 del 2026-10-17. Rondas `#124`–`#142`,
-  nueve pares con el coder.
+- **Duración:** de 16:30 (apertura de la jornada) a 18:00 del 2026-10-17. Rondas `#124`–`#145`,
+  once pares con el coder.
 - **Sin bitácora todavía**: el mandato no está cerrado; su primer uso real es el lunes. La entrada
   se escribe cuando el PO lo haya usado.
 - **Fallos propios del arquitecto, hoy**: escribir en la guía que el plan anuncia los cron

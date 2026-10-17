@@ -11,10 +11,8 @@
 
 1. Comprobar los dos nombres de sesión (§1) en la lista de sesiones, y **medir si hay coder**.
 2. `bash .agents/scripts/verificar.sh` — tiene que salir en verde.
-3. Comprobar que la ronda de cierre `#142` llegó a commitearse (§2). Si no, pedir su reporte.
-4. Recuperar la verificación de DNS (§2, «Sin depositar»): si no está en
-   `.agents/context/50-hestiacp.md`, volver a lanzar el subagente `hestia-verifier`.
-5. Seguir lo que el PO conteste en «Espera al PO».
+3. Comprobar que la ronda de cierre `#144` llegó a commitearse (§2). Si no, pedir su reporte.
+4. Seguir lo que el PO conteste en «Espera al PO».
 
 ## Espera al PO
 
@@ -23,13 +21,14 @@
    `feat/migracion-caliente`. Primero el analizador con `--rapido` en el origen; empezar por la
    cuenta más pequeña. Lo añadido (analizador, `codeigniter3`, arreglos de `plan`/`verificar`, cron
    suspendidos) **nunca ha corrido en un servidor**: la guía lo dice arriba.
-2. **El DNS no se migra** y ese servidor sirve sus zonas. Antes de cambiar los NS, cada zona tiene
-   que estar en el destino registro por registro. Contestar a A-028 §5: ¿se construye el script
+2. **El DNS no se migra** y ese servidor sirve sus zonas. El alta del dominio en el destino crea
+   una zona desde plantilla, y añadir registros encima los duplica (dos MX). Hay que REEMPLAZAR los
+   registros de cada zona por los del origen, con la IP nueva. Contestar a A-028 §5: ¿se construye el script
    que el analizador generaría para recrearlas en el destino? (El script para el origen quedó
    retirado: la herramienta no toca el servidor viejo, ADR 0019.)
 3. **Dominios con el correo en Microsoft 365**: en su propuesta, `eliminar_mail="true"` y
-   `correo="false"` (la guía lo explica). Si un dominio de correo local en el destino desvía el
-   correo que envía el propio servidor: SIN VERIFICAR.
+   `correo="false"`. CONFIRMADO en la fuente: con dominio de correo local, el servidor no manda al
+   MX lo que él mismo envía a ese dominio (`50-hestiacp.md`, «Zonas DNS al migrar»).
 4. **Rotar las credenciales que estuvieron versionadas**: las claves S3 de los `rclone_*.conf` y
    las contraseñas de Restic del perfil `TejidoTesting`. Siguen en la historia de git y en el
    remoto (ADR 0020).
@@ -58,19 +57,16 @@ instrucción. El coder de hoy se identificó en `#124→#125`.
 
 ## 2. En vuelo
 
-**`#142`: la ronda de cierre**, que commitea la guía corregida, los ADR 0019 y 0020, el roadmap y
-este estado. Si al retomar no está su commit `docs(estado): cerrar la jornada…` en `git log`, lo
-que falta es el reporte o el trabajo: se mide y se pide.
+**`#144`: la segunda ronda de cierre**, que commitea la guía (la `#142` no la commiteó: una frase
+decía que la herramienta nunca escribe en el origen, y el ADR 0019 documenta una excepción), la
+verificación de DNS en `50-hestiacp.md` y este estado. Si al retomar no está su commit
+`docs(estado): …` en `git log`, se mide y se pide.
 
-**Sin depositar:** la verificación de las órdenes DNS de HestiaCP (firma, plantillas por defecto
-de una zona, copia fiel del `.conf`, cómo decide Exim si un dominio es local) la estaba haciendo
-un subagente al cerrar. Su resultado vive solo en la sesión del arquitecto hasta que se deposite.
-
-Tramo: `estado/tramos/2026-10-17-1700-migracion-caliente.md`, rondas `#124`–`#142`.
+Tramo: `estado/tramos/2026-10-17-1700-migracion-caliente.md`, rondas `#124`–`#145`.
 
 ## 3. Contadores
 
-- **`#NNN`, cadena con el coder.** Último usado: **#143** (el reporte de cierre). El próximo: **#144**.
+- **`#NNN`, cadena con el coder.** Último usado: **#145** (el reporte de cierre). El próximo: **#146**.
   El `#123` se emitió y el canal lo descartó: consume número igual.
 - **`A-NNN`, mensajes al PO.** Último usado: **A-030**. El próximo: **A-031**.
 
@@ -97,8 +93,8 @@ Arriba, en «Espera al PO». Si cambia, se cambia en los dos sitios o en ninguno
 1. Hecho y commiteado en `feat/migracion-caliente`: copia intacta (13/13 sumas, `d3461b8`),
    `codeigniter3` (`3be710b`, `6220a9e`), falso OK de `verificar` (`641733a`), analizador
    (`dd414c2`, `51e0b2a`), IP de destino vacía (`c02449c`), cron suspendidos (`2efdc4b`), guía.
-2. **Zonas DNS**: sin herramienta. Depende de la respuesta del PO (Espera §2) y de la verificación
-   sin depositar (§2).
+2. **Zonas DNS**: sin herramienta. La vía verificada (reemplazar el `.conf` de la zona y regenerar)
+   está en `50-hestiacp.md`. Depende de la respuesta del PO (Espera §2).
 3. `IP_ORIGEN="REVISAR_IP_ORIGEN"` cuando no se lee ninguna IP: dejar vacío (roadmap).
 
 ### Después del lunes
