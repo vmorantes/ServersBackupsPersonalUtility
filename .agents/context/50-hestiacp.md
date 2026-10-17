@@ -110,7 +110,8 @@ enlace), **SIN VERIFICAR**. Al verificar algo, se actualiza su estado con el enl
   `/home/<cuenta>/web/<dominio>/public_html`, dentro de lo que copia restic): solo evita que se
   preparen sus metadatos. **`DB` sí funciona**, porque el volcado no existe en disco hasta que
   ese script lo genera. `DNS` no tiene el problema: el archivo de zona es el contenido.
-  `MAIL`: **SIN VERIFICAR** dónde viven los buzones. FUENTE (sin números de línea: la
+  `MAIL` tampoco: los buzones viven en `/home/<cuenta>/mail/`, dentro de lo que copia restic
+  (verificado el 2026-10-17, sección «Leer un HestiaCP sin escribir nada»). FUENTE (sin números de línea: la
   verificación se hizo sin shell).
 - El respaldo clásico lo instala el instalador como `10 05 * * * sudo …/v-backup-users` en el
   crontab de `hestiaweb`, que HestiaCP edita **siempre a mano** (`echo >>`, `sed -i`), nunca con
@@ -146,3 +147,93 @@ enlace), **SIN VERIFICAR**. Al verificar algo, se actualiza su estado con el enl
 - Los respaldos nativos del panel y su formato (`backup.conf` dentro de la instantánea, leído
   con `eval` en `adoptar.sh:885`): CÓDIGO; su formato exacto, SIN VERIFICAR aquí.
 - Versión de Restic mínima que exige `adoptar`: 0.14 (`adoptar.sh:195-230`). CÓDIGO.
+
+## Leer un HestiaCP sin escribir nada (1.10.5, verificado el 2026-10-17)
+
+Para el analizador de la migración caliente (ADR 0018). Fuente: etiqueta `1.10.5` de
+`hestiacp/hestiacp` (existe, **sin `v`**). Verificación sin shell, por lector web: números de
+línea de `bin/` con ±1 de margen; los de `func/main.sh`, aproximados (se cita función y texto).
+
+### Las órdenes de listado: solo lectura en el camino feliz, NO en el de error
+
+- Las listas del panel (usuarios, dominios web, bases, correo, DNS, cron, IPs, información del
+  sistema, PHP) no escriben, no bloquean y no reinician nada **cuando el objeto existe**. FUENTE.
+- **Si se consulta un objeto que no existe, o faltan argumentos, SÍ escriben**: `check_result`
+  hace `echo "Error: …"` **por la salida estándar** (no json) y `log_event`, que añade una línea a
+  `$HESTIA/log/error.log`. Código de salida `E_NOTEXIST=3`. FUENTE.
+  Consecuencia: nunca se sondea por nombre; se lista primero y se consulta solo lo listado.
+- Un formato desconocido devuelve **vacío con código 0** (no hay rama por defecto). FUENTE.
+- El json se arma con `echo` y **los valores no se escapan**: una comilla en un valor produce json
+  inválido. FUENTE.
+- No comprueban ser root, pero los datos de `data/users/` tienen modos 770/660: en la práctica
+  hace falta root. SOSPECHA razonable.
+- La información del sistema (`v-list-sys-config`) **lleva secretos** en su json
+  (`SERVER_SMTP_PASSWD`, `PHPMYADMIN_KEY`): no se usa para leer la versión. FUENTE.
+
+**Decisión para el analizador**: no llama a ninguna orden del panel. Lee los `.conf` de
+`$HESTIA/data/users/<u>/` (formato `CLAVE='valor'`, como ya hace la herramienta copiada) y mide
+con `du` y `find`. Así es de solo lectura sin excepciones.
+
+### Qué hay en cada archivo
+
+- **Usuarios**: los que tienen `@` en el GECOS de `/etc/passwd` y un `user.conf`. En los listados,
+  `NAME` es el nombre de **contacto**, no el usuario. FUENTE.
+- **`web.conf`**, una línea por dominio: `DOMAIN, IP, IP6, CUSTOM_DOCROOT, ALIAS, TPL, SSL,
+  SSL_FORCE, SSL_HOME, LETSENCRYPT, FTP_USER, FTP_MD5, BACKEND, PROXY, PROXY_EXT, STATS,
+  STATS_USER, STATS_CRYPT, U_DISK, U_BANDWIDTH, SUSPENDED, TIME, DATE`
+  (`bin/v-add-web-domain:240-244`). FUENTE.
+  - Forzar HTTPS es `SSL_FORCE`. La plantilla de proxy es **`PROXY`**, no `PROXY_TPL`.
+  - `FTP_MD5` y `STATS_CRYPT` son hashes: **no se imprimen**.
+  - Raíz del sitio: `CUSTOM_DOCROOT` si no está vacío; si no, `/home/<u>/web/<dominio>/public_html/`.
+- **Versión de PHP**: `BACKEND` guarda el nombre de la plantilla, p. ej. `PHP-8_1`, o `default`.
+  La versión sale de `^.*PHP-([0-9])_([0-9])$`; si no casa, es la predeterminada del multiphp
+  (`bin/v-change-web-domain-backend-tpl:168-171`). FUENTE. **A qué versión equivale `default`
+  en un servidor concreto: SIN VERIFICAR**; hay que resolverla allí.
+- Versiones de PHP instaladas: directorios `/etc/php/*/fpm` (con backend) o `/etc/php/*/cli`.
+  Detecta directorios, no paquetes. FUENTE.
+- **`db.conf`**: `DB, DBUSER, HOST, TYPE, CHARSET, U_DISK, SUSPENDED, TIME, DATE`. FUENTE.
+- **`mail/<dominio>.conf`**: cuentas con `ALIAS, FWD, FWD_ONLY, AUTOREPLY, QUOTA, U_DISK, …`.
+  `QUOTA` en MB o `unlimited`. FUENTE.
+- **`cron.conf`**: `MIN, HOUR, DAY, MONTH, WDAY, CMD, JOB, SUSPENDED`. Un cron puesto a mano con
+  `crontab -e` **no** aparece aquí. FUENTE.
+- **`dns.conf`** y `dns/<dominio>.conf`. FUENTE.
+- **IPs**: `$HESTIA/data/ips/<IP>`, con `OWNER, STATUS, NAME, NAT, …`. FUENTE.
+- **Versión del panel**: `grep '^VERSION=' $HESTIA/conf/hestia.conf`. FUENTE (la clave); que no
+  haya otra clave que también contenga `VERSION`: SIN VERIFICAR, por eso se ancla.
+- Separador de las listas `ALIAS` y `FWD`: SIN VERIFICAR.
+
+### Los tamaños guardados son viejos
+
+`U_DISK` en `user.conf`, `web.conf`, `db.conf` y los de correo **no se recalculan al listar**: los
+refrescan las órdenes de actualización de disco, que **escriben** (y el analizador no llama).
+Para un dato fresco se mide con `du`. FUENTE. Cada cuánto los refresca el panel: SIN VERIFICAR.
+
+### Dónde viven los buzones (cierra el SIN VERIFICAR de MAIL)
+
+- `/home/<u>/mail/<dominio>/<cuenta>/`, en **Maildir** (`cur/ new/ tmp/` y carpetas `.Sent`, …).
+  Lo crea `v-add-mail-account:101-103` (`chown <u>:mail`, `chmod 700`). FUENTE.
+  - Dovecot 2.3: `mail_location = maildir:%h/mail/%d/%n`. Dovecot 2.4: `mail_path = ~` con el
+    home de la cuenta en ese mismo directorio. Mismo resultado. FUENTE (configuración).
+  - Para dominios con acentos el directorio usa la forma punycode; el `passwd` de Dovecot 2.4 usa
+    la otra forma. Efecto: SIN VERIFICAR.
+- Contraseñas (hashes): `/home/<u>/conf/mail/<dominio>/passwd`. **No se imprimen.**
+- Número de mensajes: ninguna orden de correo del panel lo da. Se cuenta con
+  `find <buzón> -path '*/cur/*' -o -path '*/new/*' -type f`. `doveadm` se evita: puede actualizar
+  índices (SIN VERIFICAR).
+- **Consecuencia para las exclusiones del incremental** (paso 8 de la fase 2): el correo vive
+  dentro de `/home/<cuenta>`, igual que la web. **Excluir `MAIL` no impide que los buzones entren
+  en la instantánea**, por la misma razón que `WEB`. FUENTE (por la ruta; razonado).
+
+### Dos defectos en el código copiado, por lectura
+
+- `tools/migracion-caliente/BASE_COMPROBAR.sh:285` busca `PROXY_TPL=` en `web.conf`: la clave es
+  `PROXY`. La plantilla de proxy nunca se reporta. FUENTE (lectura).
+- `tools/migracion-caliente/BASE_PLAN.sh:50`, `plan_dominio_existe`: busca el nombre del dominio
+  en la salida de la consulta. Si el dominio **no** existe, HestiaCP imprime
+  `Error: web domain <dominio> doesn't exist` por la salida estándar, que contiene el nombre: la
+  función respondería «existe». `hestia_salida` (`BASE_PRIVILEGIOS.sh:452-491`) no filtra nada en
+  modo cli. CONFIRMADO por lectura, no ejecutado; en modo API, SIN VERIFICAR.
+  - La fase 1 crea los dominios sin consultarla (`BASE_GENERAL.sh:1549`): **no destruye nada**.
+  - Pero el `plan` (`BASE_PLAN.sh:175`) anunciaría «ya existe, se omitirá» para dominios nuevos, y
+    `verificar` (`BASE_VERIFICAR.sh:106`) daría por existente un dominio que no existe: **falso OK**.
+  - Y cada consulta fallida añade una línea al `error.log` del destino.
