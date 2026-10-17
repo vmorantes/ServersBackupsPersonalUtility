@@ -21,3 +21,8 @@ site/
 # cuentas, dominios e IPs reales (40-salvaguardas.md §1). Nada de aquí se versiona:
 # lo genérico vive en .agents/docs/mejoras-herramienta-migracion.md.
 migraciones/
+
+# Migración caliente: lo que se genera al usarla lleva contraseñas.
+tools/migracion-caliente/*.paquete.sh
+tools/migracion-caliente/migracion-*.sh
+!tools/migracion-caliente/migracion-ejemplo.sh
