@@ -96,6 +96,7 @@ nav:
   - Migración:
       - Subir y descargar: migracion/despliegues.md
       - Desplegar en otro servidor: migracion/desplegar.md
+      - Migración caliente de cuentas: migracion/caliente.md
       - Migrar bases de datos: migracion/migrar.md
       - Portabilidad del volcado: migracion/portabilidad.md
   - Interfaces:
