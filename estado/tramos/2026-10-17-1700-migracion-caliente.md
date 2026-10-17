@@ -19,7 +19,8 @@
 | #130→#131 | Tipo `codeigniter3` | **bloqueado por su propio gate**: la regla de `active_group` no cabe sin tocar el helper compartido. El coder paró, midió y trajo un prototipo probado | — |
 | #132→#133 | `codeigniter3` con gancho de guardas en los dos helpers, suite y tres mutaciones | completado: 82 afirmaciones; M1, M2 y M3 muerden | `3be710b` `96e7908` |
 | #134→#135 | T1 retirar `TejidoTesting`; T2 falso OK de `plan_dominio_existe`; T3 claves repetidas en CodeIgniter 3 | completado; 25 suites | `c603d4f` `641733a` `6220a9e` `80e1ccf` `d64dd19` |
-| #136 | El analizador de solo lectura, con su suite | en vuelo | — |
+| #136→#137 | El analizador de solo lectura, con su suite | completado: 79 afirmaciones; M1-M3 muerden; el coder encontró y arregló dos defectos propios leyendo un informe real | `9285e58` `0c3c85f` `dd414c2` `7fc5cd2` |
+| #138 | Sello de versión en el paquete del analizador; commitear guía y README | en vuelo | — |
 
 ## Hallazgos
 
@@ -94,6 +95,15 @@
     caso que nadie le pidió. Arreglado con `grep -F` en `641733a`.
 21. **`docs/desarrollo/repositorio.md` decía que versionar las claves era «una decisión
     deliberada».** Corregido por el arquitecto, con el aviso de rotar lo que se versionó.
+
+22. **`cfg_validar` no valida el valor de `php`, solo que no esté vacío.** Un centinela de texto
+    habría sido aceptado y la migración habría corrido con una plantilla inexistente. El analizador
+    deja `php=""`, que sí se rechaza. Lo midió el coder en el gate.
+23. **La fase 2 NO vuelve a copiar archivos**, aunque la cabecera de `BASE_GENERAL.sh` diga que sí:
+    está desactivada (`SINCRONIZAR_EN_FASE2`, línea ~2179) para no pisar lo escrito tras el corte.
+    La guía lo dice. Comprobado por el arquitecto al escribirla.
+24. **Un paquete viejo miente y no se nota**: el coder leyó un informe de un paquete construido
+    antes de su propio arreglo. Se sella el paquete con la versión de la que sale (`#138`).
 
 ## Decisiones
 

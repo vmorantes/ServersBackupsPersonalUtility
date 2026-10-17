@@ -37,6 +37,10 @@
    apagar el servidor viejo.
 3. **`rm ~/.local/bin/backupctl`** — resto de una «prueba» que nunca debió ejecutarse.
 4. **Bajarse el `.tgz` de las claves** fuera del servidor que protegen.
+0. **EL LUNES 2026-10-19: la migración.** Todo en `docs/migracion/caliente.md`, desde la rama
+   `feat/migracion-caliente`. Primero el analizador con `--rapido` en el origen; empezar por la
+   cuenta más pequeña. Lo nuevo (analizador, `codeigniter3`, arreglo de `plan`/`verificar`) **nunca
+   ha corrido en un servidor**: la guía lo dice arriba.
 5. **Ya no hay servidor de pruebas** (PO, 2026-10-17). Lo de la fase 2 **nunca** se ha ejecutado
    contra un HestiaCP real y ahora no hay dónde ensayarlo: no se usa en producción. Guía, por si vuelve uno:
    `.agents/docs/guia-pruebas-fase-2.md`. **Lunes 2026-10-19: migra un servidor MUY grande** (Joomla y
@@ -67,14 +71,14 @@ verificable del repositorio antes de la primera instrucción.
 **Tramo «migración caliente» (ADR 0018)**, abierto el 2026-10-17. Rama `feat/migracion-caliente`,
 creada desde `release/2.1`. Coder identificado en `#124→#125`.
 
-`#126→#129` hecho: copia intacta, 13/13 sumas y modos, ejemplo corregido. `#130→#133` hecho: tipo CodeIgniter 3 con guardas, 82 afirmaciones. `#134→#135` hecho: perfil retirado, falso OK de `verificar` arreglado, claves repetidas rechazadas. **En vuelo: `#136`** (el analizador). En paralelo,
+`#126→#129` hecho: copia intacta, 13/13 sumas y modos, ejemplo corregido. `#130→#133` hecho: tipo CodeIgniter 3 con guardas, 82 afirmaciones. `#134→#135` hecho: perfil retirado, falso OK de `verificar` arreglado, claves repetidas rechazadas. `#136→#137` hecho: el analizador, 79 afirmaciones. **En vuelo: `#138`** (sello de versión del paquete y documentación). En paralelo,
 el subagente `hestia-verifier` verifica las órdenes de listado que usará el analizador. Detalle: `estado/tramos/2026-10-17-1700-migracion-caliente.md`.
 
 ## 3. Contadores
 
 Son **dos**, y los dos avanzan por separado (regla `30`):
 
-- **`#NNN`, cadena con el coder.** Último usado: **#136**. El próximo: **#137**.
+- **`#NNN`, cadena con el coder.** Último usado: **#138**. El próximo: **#139**.
   El `#123` se emitió y el canal lo descartó: **consume número igual** (tramo, hallazgo 19).
 - **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-022**. El próximo:
   **A-023**.
@@ -106,9 +110,9 @@ La fase 2 de la 2.1 queda **aparcada**, sin servidor de pruebas donde ensayarla.
 ### Para el lunes (ADR 0018, «Orden»)
 
 1. Entrada intacta: hecha (`#127`, `#129`).
-2. Analizador de solo lectura, con pruebas sintéticas. **`#136`**.
+2. Analizador de solo lectura: hecho (`dd414c2`). Sello de versión en `#138`.
 3. Tipo CodeIgniter 3: hecho (`3be710b`, `6220a9e`). Falso OK de `verificar`: arreglado (`641733a`).
-4. Guía del lunes y documentación de las dos vías (las escribe el arquitecto).
+4. Guía: escrita, `docs/migracion/caliente.md`; se commitea en `#138`.
 
 ### Para cerrar la fase 2
 
