@@ -45,6 +45,13 @@ verificable del repositorio antes de la primera instrucción.
 
 **Nada en vuelo.** No hay ronda enviada sin reporte y no hay coder activo.
 
+**Desviación del 2026-10-17, anotada a propósito:** todo el andamiaje de jornada —las tres
+skills, las dos puertas y sus ocho commits— lo escribió y lo commiteó **el arquitecto, sin
+coder**, por orden expresa del PO («implementa las puertas, deja el árbol limpio»). La regla
+`30` reserva el commit al coder. La orden del PO autoriza la excepción; que quede escrita es
+lo que impide que se convierta en costumbre. **Lo siguiente que toque `lib/`, `bin/`, `web/`
+o `tools/` va por coder**, sin excepción: ahí la regla no la mueve la prisa.
+
 **El árbol está sucio a propósito**, con trabajo del arquitecto sin commitear:
 
 | Archivo | Qué es | Commit propuesto |
