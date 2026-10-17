@@ -380,6 +380,7 @@ cat > "$TMP/index.html" <<'FIN_HTML'
       <div><label for="def_tipo">Aplicación</label>
         <select id="def_tipo">
           <option value="piecesphp">PiecesPHP / CodeIgniter</option>
+          <option value="codeigniter3">CodeIgniter 3</option>
           <option value="wordpress">WordPress</option>
           <option value="joomla">Joomla</option>
           <option value="drupal">Drupal</option>
@@ -430,7 +431,7 @@ const $ = id => document.getElementById(id);
 let contadorD = 0;
 let contadorB = 0;
 
-const TIPOS = ['piecesphp','wordpress','joomla','drupal','laravel','prestashop','prestashop16','ninguno'];
+const TIPOS = ['piecesphp','codeigniter3','wordpress','joomla','drupal','laravel','prestashop','prestashop16','ninguno'];
 
 function opciones(sel) {
   return TIPOS.map(t => `<option value="${t}"${t===sel?' selected':''}>${t}</option>`).join('');

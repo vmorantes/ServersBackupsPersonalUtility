@@ -340,6 +340,72 @@ $formats['laravel'] = [
 ];
 
 
+/*
+ * CodeIgniter 3
+ *
+ *   $db['default'] = array('database' => 'valor', ...);
+ *   $db['default']['database'] = 'valor';
+ *
+ * Las dos formas en un solo patrón, con (?|...), el branch reset
+ * de PCRE: las dos ramas comparten la numeración, así que el
+ * prefijo, el valor y el sufijo son 1, 2 y 3 venga de la forma
+ * que venga. Sin branch reset la segunda rama ocuparía los
+ * grupos 4, 5 y 6, el prefijo llegaría VACÍO y la sustitución
+ * destrozaría el archivo.
+ *
+ * Solo el grupo 'default': (?!\$db\s*\[) impide que la primera
+ * rama cruce a un $db['otro'] declarado más abajo.
+ */
+
+$ci3Field = function (string $key): string {
+
+    $k = preg_quote($key, '~');
+
+    return
+        '~(?|'
+        . '(\$db\s*\[\s*[\'"]default[\'"]\s*\]\s*=\s*(?:array\s*\(|\[)'
+        . '(?:(?!\$db\s*\[)[\s\S])*?'
+        . '[\'"]' . $k . '[\'"]\s*=>\s*[\'"])(.*?)([\'"])'
+        . '|'
+        . '(\$db\s*\[\s*[\'"]default[\'"]\s*\]\s*\[\s*[\'"]' . $k . '[\'"]\s*\]'
+        . '\s*=\s*[\'"])(.*?)([\'"]\s*;)'
+        . ')~';
+};
+
+$formats['codeigniter3'] = [
+    'db'       => $ci3Field('database'),
+    'user'     => $ci3Field('username'),
+    'password' => $ci3Field('password'),
+];
+
+
+/*
+ * ------------------------------------------------------------
+ * GUARDAS POR FORMATO
+ * ------------------------------------------------------------
+ *
+ * Una condición que se comprueba antes de reescribir nada. Un
+ * formato que no define guarda no cambia de comportamiento:
+ * para los formatos anteriores a esto, el isset es falso.
+ *
+ * CodeIgniter 3 exige que el grupo activo sea 'default'. Con
+ * otro grupo activo, reescribir el de default dejaría la
+ * aplicación apuntando a su base vieja y el resultado parecería
+ * correcto. Antes de eso, no se escribe.
+ *
+ * Si $active_group no aparece, CodeIgniter usa 'default'.
+ * ------------------------------------------------------------
+ */
+
+$guards = [];
+
+$guards['codeigniter3'] = [
+    'pattern'  => '~\$active_group\s*=\s*[\'"]([^\'"]*)[\'"]~',
+    'esperado' => 'default',
+    'mensaje'  => "active_group es '%s', no 'default': revisar a mano",
+];
+
+
 if (!isset($formats[$format])) {
 
     fwrite(
@@ -516,6 +582,25 @@ function replaceLastAssignment(
 
 
 try {
+
+    /*
+     * La guarda del formato, si lo define. Va dentro del try
+     * para que su mensaje salga por el mismo camino que los
+     * demás errores y el archivo esperado no se escriba.
+     */
+
+    if (isset($guards[$format])) {
+
+        $g = $guards[$format];
+
+        if (preg_match($g['pattern'], $content, $gm) && $gm[1] !== $g['esperado']) {
+
+            throw new RuntimeException(sprintf($g['mensaje'], $gm[1]));
+
+        }
+
+    }
+
 
     /*
      * DB
@@ -1096,6 +1181,12 @@ do
   case "$TIPO_APP" in
 
     piecesphp)    PATRON_PERMITIDO='database.*default.*(db|user|password)';;
+    # Las dos formas de CodeIgniter 3 con el mismo patrón: en la de array la
+    # línea que cambia es solo "'database' => '...'," y no lleva ningún $db,
+    # así que no se puede exigir el prefijo. Se nombran las tres claves, como
+    # en drupal. Sin barras invertidas a propósito: esto viaja en un -v de
+    # awk, que las procesaría.
+    codeigniter3) PATRON_PERMITIDO='(database|username|password)';;
     wordpress)    PATRON_PERMITIDO='DB_NAME|DB_USER|DB_PASSWORD';;
     joomla)       PATRON_PERMITIDO='\$(db|user|password)[ \t]*=';;
     prestashop)   PATRON_PERMITIDO='database_(name|user|password)';;

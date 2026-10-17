@@ -96,6 +96,35 @@ $env = function (string $key): string {
     return '~^[ \t]*' . preg_quote($key, '~') . '[ \t]*=[ \t]*"?([^"\r\n]*)"?[ \t]*$~m';
 };
 
+/*
+ * CodeIgniter 3, las dos formas de su database.php:
+ *
+ *   $db['default'] = array('database' => 'valor', ...);
+ *   $db['default']['database'] = 'valor';
+ *
+ * El (?|...) es un branch reset de PCRE: las dos ramas comparten
+ * la numeración de grupos, así que el valor es $m[1] venga de la
+ * forma que venga.
+ *
+ * La primera rama no cruza a otro grupo: (?!\$db\s*\[) corta
+ * antes de un $db['otro'] que viniera detrás.
+ */
+
+$ci3 = function (string $key): string {
+
+    $k = preg_quote($key, '~');
+
+    return
+        '~(?|'
+        . '\$db\s*\[\s*[\'"]default[\'"]\s*\]\s*=\s*(?:array\s*\(|\[)'
+        . '(?:(?!\$db\s*\[)[\s\S])*?'
+        . '[\'"]' . $k . '[\'"]\s*=>\s*[\'"](.*?)[\'"]'
+        . '|'
+        . '\$db\s*\[\s*[\'"]default[\'"]\s*\]\s*\[\s*[\'"]' . $k . '[\'"]\s*\]'
+        . '\s*=\s*[\'"](.*?)[\'"]\s*;'
+        . ')~';
+};
+
 
 $formats = [
     'piecesphp'    => ['db' => $php('db'),            'user' => $php('user'),            'host' => $php('host')],
@@ -105,12 +134,55 @@ $formats = [
     'prestashop16' => ['db' => $def('_DB_NAME_'),     'user' => $def('_DB_USER_'),       'host' => $def('_DB_SERVER_')],
     'laravel'      => ['db' => $env('DB_DATABASE'),   'user' => $env('DB_USERNAME'),     'host' => $env('DB_HOST')],
     'drupal'       => ['db' => $arr('database'),      'user' => $arr('username'),       'host' => $arr('host')],
+    'codeigniter3' => ['db' => $ci3('database'),      'user' => $ci3('username'),       'host' => $ci3('hostname')],
+];
+
+
+/*
+ * ------------------------------------------------------------
+ * GUARDAS POR FORMATO
+ * ------------------------------------------------------------
+ *
+ * Un formato puede exigir una condición antes de que se lea
+ * nada. Si no define guarda, aquí no pasa nada: los formatos
+ * anteriores a esto se comportan igual que siempre.
+ *
+ * Para CodeIgniter 3 la condición es el grupo activo. Con
+ * $active_group distinto de 'default' la aplicación usa OTRO
+ * grupo, y leer el de default daría las credenciales de una
+ * base que no es la suya: se migraría la base equivocada sin un
+ * solo error. Mejor no devolver nada.
+ *
+ * Si $active_group no aparece, CodeIgniter usa 'default'.
+ * ------------------------------------------------------------
+ */
+
+$guards = [];
+
+$guards['codeigniter3'] = [
+    'pattern'  => '~\$active_group\s*=\s*[\'"]([^\'"]*)[\'"]~',
+    'esperado' => 'default',
+    'mensaje'  => "active_group es '%s', no 'default': revisar a mano",
 ];
 
 
 if (!isset($formats[$format])) {
     fwrite(STDERR, "Formato desconocido: {$format}\n");
     exit(1);
+}
+
+
+if (isset($guards[$format])) {
+
+    $g = $guards[$format];
+
+    if (preg_match($g['pattern'], $content, $gm) && $gm[1] !== $g['esperado']) {
+
+        fwrite(STDERR, sprintf($g['mensaje'], $gm[1]) . "\n");
+
+        exit(1);
+    }
+
 }
 
 

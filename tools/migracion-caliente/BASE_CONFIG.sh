@@ -106,6 +106,7 @@
 #                   archivo de configuración se reescribe:
 #
 #                     piecesphp     (por defecto)
+#                     codeigniter3
 #                     wordpress
 #                     joomla
 #                     prestashop    (1.7 y Symfony)
@@ -116,6 +117,21 @@
 #
 #                   Para añadir uno, ver la guía: son tres
 #                   sitios, todos con un ejemplo al lado.
+#
+#                   codeigniter3 lee y reescribe el grupo
+#                   'default' de application/config/database.php,
+#                   en forma de array o clave a clave. Se niega
+#                   si $active_group no es 'default'.
+#
+#                   Su ruta por defecto supone que application/
+#                   cuelga de public_html/. Cuando no es así, se
+#                   declara con ruta_db.
+#
+#                   Y si el proyecto tiene
+#                   application/config/<ENTORNO>/database.php,
+#                   ESE manda sobre el general: hay que apuntar
+#                   ruta_db a él, o se reescribiría el que la
+#                   aplicación no usa.
 #
 #   ruta_db         ruta del archivo de configuración relativa
 #                   a la raíz del dominio. Si se omite, se
@@ -213,6 +229,7 @@ CFG_DEFECTOS[tipo]="piecesphp";
 declare -A CFG_RUTA_POR_TIPO=();
 
 CFG_RUTA_POR_TIPO[piecesphp]="public_html/app/config/database.php";
+CFG_RUTA_POR_TIPO[codeigniter3]="public_html/application/config/database.php";
 CFG_RUTA_POR_TIPO[wordpress]="public_html/wp-config.php";
 CFG_RUTA_POR_TIPO[joomla]="public_html/configuration.php";
 CFG_RUTA_POR_TIPO[prestashop]="public_html/app/config/parameters.php";
