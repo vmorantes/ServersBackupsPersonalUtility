@@ -47,7 +47,18 @@ plan_dominio_existe() {
 
   salida="$(hestia_salida v-list-web-domain "$USER_DESTINO" "$site" json 2>/dev/null)";
 
-  if [ -n "$salida" ] && echo "$salida" | grep -q "$site"; then
+  # Cuando el dominio NO existe, HestiaCP contesta por la salida
+  # ESTÁNDAR "Error: web domain <dominio> doesn't exist", que lleva
+  # el nombre dentro: buscarlo a secas daba "existe" para todo
+  # dominio nuevo. En la ficha json el nombre es una clave, y va
+  # entre comillas dobles; en el mensaje de error, sin comillas.
+  # grep -F porque el punto del dominio no es un comodín.
+
+  case "$salida" in
+    ""|Error:*) return 1;;
+  esac;
+
+  if printf '%s\n' "$salida" | grep -qF "\"$site\""; then
     return 0;
   fi;
 
