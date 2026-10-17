@@ -37,13 +37,10 @@
    apagar el servidor viejo.
 3. **`rm ~/.local/bin/backupctl`** — resto de una «prueba» que nunca debió ejecutarse.
 4. **Bajarse el `.tgz` de las claves** fuera del servidor que protegen.
-5. **Las pruebas de la fase 2**, para su servidor de **PRUEBAS**:
-   **`.agents/docs/guia-pruebas-fase-2.md`**. Nada de eso se ha ejecutado nunca contra un
-   HestiaCP real. **El ensayo es `--dry-run`, y la ayuda de `backupctl` NO lo dice de las
-   subórdenes de `hestia`**: la guía lo advierte. Ensayo primero siempre, y en
-   `hestia cuentas`, una sola cuenta antes que todas. Cada orden lleva `-p <perfil>`: con un
-   solo perfil en la máquina, se elige **en silencio**.
-
+5. **Ya no hay servidor de pruebas** (PO, 2026-10-17). Lo de la fase 2 **nunca** se ha ejecutado
+   contra un HestiaCP real y ahora no hay dónde ensayarlo: no se usa en producción. Guía, por si vuelve uno:
+   `.agents/docs/guia-pruebas-fase-2.md`. **Lunes 2026-10-19: migra un servidor MUY grande** (Joomla y
+   proyectos CodeIgniter 3.1.7). Mandato: ADR 0018.
 6. **Decidir qué sigue** (§5).
 
 ## 1. Sesiones
@@ -62,32 +59,20 @@ verificable del repositorio antes de la primera instrucción.
 
 ## 2. En vuelo
 
-**Nada en vuelo.** El tramo del andamiaje de jornada se cerró el 2026-10-17 con el reporte
-`#122`. No hay instrucción enviada sin reporte.
+**Tramo «migración caliente» (ADR 0018)**, abierto el 2026-10-17. Rama `feat/migracion-caliente`,
+creada desde `release/2.1`. Coder identificado en `#124→#125`.
 
-Rondas del día: **#103→#104** (identificación del coder y su resumen de compactación; **él
-encontró el desfase del contador**), **#105→#106** (la puerta del contador y su prueba de
-rechazo), **#107→#108** (documentación, el tramo, los números a tres dígitos), **#109→#110**
-(bitácora y cierre), **#111→#112** (cuadrar los recuentos de la guarda, **hallazgo suyo**) y
-**#113→#114** (dejar este archivo verdadero) y **#115→#116** (quitar una cifra rancia de
-«Espera al PO», **hallazgo suyo**) y **#117→#118** (recuperar la guía de pruebas que el
-arquitecto había podado) **#119→#120** (completarla: le faltaba **cómo se ensaya**) **#121→#122** (el perfil en cada orden). El último arreglo —un puntero a medias y un recuento que
-sobraba— lo escribió y commiteó el arquitecto: **el canal entre sesiones descartó la
-instrucción #123** y no se reenvía. El detalle, en
-`estado/tramos/2026-10-17-1300-andamiaje-de-jornada.md`.
-
-
-**El árbol queda limpio.** Nada sin commitear.
-
+**En vuelo: `#126`**, entrada intacta de la herramienta en `tools/migracion-caliente/`. Sin
+reporte todavía. Detalle: `estado/tramos/2026-10-17-1700-migracion-caliente.md`.
 
 ## 3. Contadores
 
 Son **dos**, y los dos avanzan por separado (regla `30`):
 
-- **`#NNN`, cadena con el coder.** Último usado: **#123**. El próximo: **#124**.
+- **`#NNN`, cadena con el coder.** Último usado: **#126**. El próximo: **#127**.
   El `#123` se emitió y el canal lo descartó: **consume número igual** (tramo, hallazgo 19).
-- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-015**. El próximo:
-  **A-016**.
+- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-018**. El próximo:
+  **A-019**.
 
 **Reparado el 2026-10-17, y vale la pena saber por qué.** Este archivo declaraba «último usado
 #081» desde el 2026-09-24. Era **falso**: el archivo del tramo de ese mismo día registra
@@ -105,18 +90,20 @@ Arriba, en «Espera al PO». Si cambia, se cambia en los dos sitios o en ninguno
 
 ## 5. Mandato vigente
 
-El último que el PO nombró fue **«dale fase 1 y 2»** de la versión 2.1 (ADR 0013). La fase 1
-está terminada; la fase 2, en siete pasos y medio de ocho.
+**PO, 2026-10-17**: unificar aquí las dos vías —respaldos (larga) y migración caliente de cuenta
+completa (rápida)—, con la otra herramienta como subherramienta y un analizador de solo lectura
+delante. Urgencia: el **lunes 2026-10-19** migra un servidor muy grande. Decisión: ADR 0018.
 
-Desde entonces el trabajo ha sido suyo, no del repositorio: la migración real de sus
-servidores del 2026-10-02 y, el 2026-10-17, el andamiaje de jornada.
-
-**Hay dos frentes y el arquitecto no elige**:
-
-- **(a)** Cerrar la fase 2: el paso 8, la revisión de seguridad y la documentación de usuario.
-- **(b)** Lo que quede del andamiaje: solo el punto 5 de §6, la guarda.
+La fase 2 de la 2.1 queda **aparcada**, sin servidor de pruebas donde ensayarla.
 
 ## 6. Qué falta, medible
+
+### Para el lunes (ADR 0018, «Orden»)
+
+1. Entrada intacta: sumas iguales al commit `1474e4c` de origen, ejemplo saneado. **`#126`**.
+2. Analizador de solo lectura, con pruebas sintéticas.
+3. Tipo CodeIgniter 3, con pruebas sintéticas.
+4. Guía del lunes y documentación de las dos vías (las escribe el arquitecto).
 
 ### Para cerrar la fase 2
 
