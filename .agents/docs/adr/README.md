@@ -67,3 +67,4 @@ servidor). Su ADR lleva obligatoriamente:
 | [0015](0015-interfaz-por-tareas.md) | La interfaz web se organiza por tareas, no por órdenes | sí | Propuesta |
 | [0016](0016-incrementales-de-punta-a-punta.md) | Respaldos incrementales de punta a punta desde la herramienta | sí | Reemplazada por 0017 |
 | [0017](0017-incrementales-hechos-corregidos.md) | Incrementales: los hechos corregidos; nada se da por bueno sin una instantánea | sí | Aceptada |
+| [0018](0018-migracion-caliente-como-subherramienta.md) | La migración caliente entra como subherramienta, con un analizador de solo lectura delante | sí | Aceptada (sin implementar) |
