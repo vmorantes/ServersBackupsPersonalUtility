@@ -43,9 +43,12 @@ verificable del repositorio antes de la primera instrucción.
 
 ## 2. En vuelo
 
-**En vuelo: el mensaje #082**, enviado al coder el 2026-10-17 a las 14:41. No es trabajo: le
-pide identificarse (rama, últimos commits, árbol, líneas de este archivo) y el resumen que
-debe a su compactación. Hasta su reporte #083 no se emite ninguna instrucción.
+**En vuelo: la instrucción #105**, enviada al coder el 2026-10-17. Le pide implementar la
+puerta del contador (§6.5) y commitear lo que el arquitecto dejó escrito en `estado/`.
+
+El coder **se identificó y entregó su resumen de compactación** (reportes `#104`): misma
+sesión con continuidad desde la fase 2, sin ronda en vuelo, árbol intacto, y el hallazgo del
+contador que está resuelto arriba.
 
 **El coder existe y está abierto**: `ServersBackupsPersonalUtility-Coder-Main`, renombrada por
 el PO el 2026-10-17 a las 13:29 y compactada después.
@@ -78,10 +81,19 @@ hace falta la salida completa, no la impresión.
 
 Son **dos**, y los dos avanzan por separado (regla `30`):
 
-- **`#NNN`, cadena con el coder.** Último usado: **#082** (ARQ). El próximo: **#083**, que es
-  el reporte del coder.
-- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-003**. El próximo:
-  **A-004**.
+- **`#NNN`, cadena con el coder.** Último usado: **#104**. El próximo: **#105**.
+- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-005**. El próximo:
+  **A-006**.
+
+**Reparado el 2026-10-17, y vale la pena saber por qué.** Este archivo declaraba «último usado
+#081» desde el 2026-09-24. Era **falso**: el archivo del tramo de ese mismo día registra
+`#097` en vuelo y «Mensajes: #053–#097». Los dos documentos se contradecían y nadie lo vio en
+casi un mes. El coder, al volver de una compactación, dijo que su último número era el `#102`
+—el de su reporte del commit `e99a338`—, y la medición le dio la razón.
+
+Consecuencia: los dos mensajes de hoy etiquetados `#082` (ARQ) y `#083` (COD) **son en
+realidad el `#103` y el `#104`**. Se dejan con su etiqueta original —reescribir lo ya enviado
+sería peor— y constan aquí. La cadena continúa en **#105**.
 
 ## 4. Qué espera al PO
 
@@ -126,7 +138,12 @@ servidores del 2026-10-02 y, el 2026-10-17, el andamiaje de jornada.
 Las puertas del estado ya corren por máquina en `verificar.sh`
 (`.agents/scripts/puertas_estado.sh`, con su prueba de rechazo). Queda:
 
-5. **La guarda confunde el contenido de un documento con una orden.** El 2026-10-17 bloqueó
+5. **La puerta del contador, sin implementar.** Las puertas comprueban que el contador esté
+   **declarado**, no que **cuadre**. El desfase de casi un mes lo demuestra: `AHORA.md` decía
+   `#081` y el archivo del tramo decía `#097`, y ninguna puerta se enteró. Falta comparar el
+   número declarado aquí con el mayor `#NNN` que aparezca en `estado/tramos/`: si el tramo va
+   por delante, este archivo miente. Con su prueba de rechazo.
+6. **La guarda confunde el contenido de un documento con una orden.** El 2026-10-17 bloqueó
    escribir un documento porque el texto citaba órdenes `v-*`. Es el mismo error que ya se
    arregló con los mensajes de commit (H13): falta la misma distinción para los heredocs que
    escriben documentación. **Es lo único que queda abierto del andamiaje.**
