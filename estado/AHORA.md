@@ -4,94 +4,78 @@
 > preguntas de abajo. Si alguna no se contesta aquí, **el estado falló y arreglarlo es el primer
 > trabajo del día**.
 
-- **Actualizado:** 2026-10-17, al adoptar las skills de jornada.
-- **Formato:** este archivo sigue el contrato de `cerrar-jornada` §2.2. Tope: 200 líneas.
+- **Actualizado:** 2026-10-17, 18:00, al cerrar la jornada.
+- **Formato:** contrato de `cerrar-jornada` §2.2. Tope: 200 líneas.
 
 ## Al retomar — el primer paso, uno solo
 
-1. Poner los dos nombres de sesión (§1) y comprobarlos en la lista.
-2. **Medir si hay coder**, listando las sesiones. No suponerlo (regla `30`).
-3. `bash .agents/scripts/verificar.sh` — tiene que salir en verde, 23 suites y seis puertas.
-4. Preguntar al PO qué sigue: hay dos frentes abiertos y **él elige** (§5).
-
+1. Comprobar los dos nombres de sesión (§1) en la lista de sesiones, y **medir si hay coder**.
+2. `bash .agents/scripts/verificar.sh` — tiene que salir en verde.
+3. Comprobar que la ronda de cierre `#142` llegó a commitearse (§2). Si no, pedir su reporte.
+4. Recuperar la verificación de DNS (§2, «Sin depositar»): si no está en
+   `.agents/context/50-hestiacp.md`, volver a lanzar el subagente `hestia-verifier`.
+5. Seguir lo que el PO conteste en «Espera al PO».
 
 ## Espera al PO
 
-1. **`git push` de `release/2.1`.** Hay commits sin subir; **no se escribe aquí cuántos**.
-   Una cifra escrita una vez envejece y se lee como medida: este archivo dijo «68» durante
-   semanas y no coincidía con ninguna medición posible. Lo que sí se puede medir sin tocar el
-   remoto, y que quien lea esto debe **repetir en vez de creer**:
-
-   ```
-   git rev-list --count master..release/2.1
-   git rev-list --count origin/release/2.1..release/2.1
-   ```
-
-   **La segunda cifra no es una verdad del servidor**: `origin/release/2.1` es una referencia
-   local, de la última vez que alguien sincronizó. No se refresca desde aquí —`fetch` y
-   `ls-remote` usan la URL del remoto, que lleva credencial (`40-salvaguardas.md` §3)—. Lo que
-   falta por subir de verdad solo lo sabe el PO.
-
-2. **La migración de sus servidores del 2026-10-02**: las tareas pendientes están en
-   `migraciones/PENDIENTES.md`, fuera de git porque llevan datos reales. Fases A y B antes de
-   apagar el servidor viejo.
-3. **`rm ~/.local/bin/backupctl`** — resto de una «prueba» que nunca debió ejecutarse.
-4. **Bajarse el `.tgz` de las claves** fuera del servidor que protegen.
-0. **EL LUNES 2026-10-19: la migración.** Todo en `docs/migracion/caliente.md`, desde la rama
+1. **Lunes 2026-10-19: la migración del servidor grande.** Todo en
+   `docs/migracion/caliente.md` (sitio: Migración → Migración caliente de cuentas), desde la rama
    `feat/migracion-caliente`. Primero el analizador con `--rapido` en el origen; empezar por la
-   cuenta más pequeña. Lo nuevo (analizador, `codeigniter3`, arreglo de `plan`/`verificar`) **nunca
-   ha corrido en un servidor**: la guía lo dice arriba.
-5. **Ya no hay servidor de pruebas** (PO, 2026-10-17). Lo de la fase 2 **nunca** se ha ejecutado
-   contra un HestiaCP real y ahora no hay dónde ensayarlo: no se usa en producción. Guía, por si vuelve uno:
-   `.agents/docs/guia-pruebas-fase-2.md`. **Lunes 2026-10-19: migra un servidor MUY grande** (Joomla y
-   proyectos CodeIgniter 3.1.7). Mandato: ADR 0018.
-6. **El PO borró `TejidoTesting/` del disco (2026-10-17)**: era el único perfil versionado, con su
-   `env.sh` y seis archivos de claves de Restic y rclone. **Sigue en la historia** (4 commits) y
-   probablemente en el remoto. Si el almacenamiento de esos `rclone_*.conf` sigue activo, sus
-   credenciales hay que rotarlas. Borrado sin commitear: lo commitea el coder cuando se le ordene.
-   Mandato nuevo: claves fuera del repositorio y un método para respaldarlas a mano (A-022).
-6. **Decidir qué sigue** (§5).
+   cuenta más pequeña. Lo añadido (analizador, `codeigniter3`, arreglos de `plan`/`verificar`, cron
+   suspendidos) **nunca ha corrido en un servidor**: la guía lo dice arriba.
+2. **El DNS no se migra** y ese servidor sirve sus zonas. Antes de cambiar los NS, cada zona tiene
+   que estar en el destino registro por registro. Contestar a A-028 §5: ¿se construye el script
+   que el analizador generaría para recrearlas en el destino? (El script para el origen quedó
+   retirado: la herramienta no toca el servidor viejo, ADR 0019.)
+3. **Dominios con el correo en Microsoft 365**: en su propuesta, `eliminar_mail="true"` y
+   `correo="false"` (la guía lo explica). Si un dominio de correo local en el destino desvía el
+   correo que envía el propio servidor: SIN VERIFICAR.
+4. **Rotar las credenciales que estuvieron versionadas**: las claves S3 de los `rclone_*.conf` y
+   las contraseñas de Restic del perfil `TejidoTesting`. Siguen en la historia de git y en el
+   remoto (ADR 0020).
+5. **Secretos en `HestiaCPCliMigrationUtility`**: su `MIGRACION.sh` versionado lleva seis
+   contraseñas de base de datos reales y tres dominios reales, en cuatro commits (A-018 §2).
+6. **`git push`** de `release/2.1` y de `feat/migracion-caliente`. Lo que falta por subir de
+   verdad solo lo sabe el PO: aquí no se refresca el remoto. Para medir lo local:
+   `git rev-list --count master..feat/migracion-caliente`.
+7. **La migración del 2026-10-02**: `migraciones/PENDIENTES.md` (fuera de git, datos reales).
+   Fases A y B antes de apagar el servidor viejo.
+8. **`rm ~/.local/bin/backupctl`** — resto de una «prueba» que nunca debió ejecutarse.
+9. **Bajarse el `.tgz` de las claves** fuera del servidor que protegen.
 
 ## 1. Sesiones
 
-El renombrado es **obligatorio para trabajar** (PO, 2026-09-24): no se emite la primera
-instrucción hasta que los dos nombres estén puestos y comprobados.
+El renombrado es **obligatorio para trabajar** (PO, 2026-09-24).
 
 ```
 /rename ServersBackupsPersonalUtility-Arquitecto-Main
 /rename ServersBackupsPersonalUtility-Coder-Main
 ```
 
-Tras un `/clear` **no** hace falta renombrar: conserva el nombre. Hace falta si la sesión se
-mató de verdad. El nombre **no sustituye a la identificación**: al coder se le pide un dato
-verificable del repositorio antes de la primera instrucción.
+Tras un `/clear` no hace falta renombrar. Hace falta si la sesión se mató. El nombre **no
+sustituye a la identificación**: al coder se le pide un dato verificable antes de la primera
+instrucción. El coder de hoy se identificó en `#124→#125`.
 
 ## 2. En vuelo
 
-**Tramo «migración caliente» (ADR 0018)**, abierto el 2026-10-17. Rama `feat/migracion-caliente`,
-creada desde `release/2.1`. Coder identificado en `#124→#125`.
+**`#142`: la ronda de cierre**, que commitea la guía corregida, los ADR 0019 y 0020, el roadmap y
+este estado. Si al retomar no está su commit `docs(estado): cerrar la jornada…` en `git log`, lo
+que falta es el reporte o el trabajo: se mide y se pide.
 
-`#126→#129` hecho: copia intacta, 13/13 sumas y modos, ejemplo corregido. `#130→#133` hecho: tipo CodeIgniter 3 con guardas, 82 afirmaciones. `#134→#135` hecho: perfil retirado, falso OK de `verificar` arreglado, claves repetidas rechazadas. `#136→#137` hecho: el analizador, 79 afirmaciones. `#138→#139` hecho: sello y guía. **En vuelo: `#140`** (`IP_DESTINO` vacía y cron suspendido no migrado). En paralelo,
-el subagente `hestia-verifier` verifica las órdenes de listado que usará el analizador. Detalle: `estado/tramos/2026-10-17-1700-migracion-caliente.md`.
+**Sin depositar:** la verificación de las órdenes DNS de HestiaCP (firma, plantillas por defecto
+de una zona, copia fiel del `.conf`, cómo decide Exim si un dominio es local) la estaba haciendo
+un subagente al cerrar. Su resultado vive solo en la sesión del arquitecto hasta que se deposite.
+
+Tramo: `estado/tramos/2026-10-17-1700-migracion-caliente.md`, rondas `#124`–`#142`.
 
 ## 3. Contadores
 
-Son **dos**, y los dos avanzan por separado (regla `30`):
+- **`#NNN`, cadena con el coder.** Último usado: **#143** (el reporte de cierre). El próximo: **#144**.
+  El `#123` se emitió y el canal lo descartó: consume número igual.
+- **`A-NNN`, mensajes al PO.** Último usado: **A-030**. El próximo: **A-031**.
 
-- **`#NNN`, cadena con el coder.** Último usado: **#140**. El próximo: **#141**.
-  El `#123` se emitió y el canal lo descartó: **consume número igual** (tramo, hallazgo 19).
-- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-024**. El próximo:
-  **A-025**.
-
-**Reparado el 2026-10-17, y vale la pena saber por qué.** Este archivo declaraba «último usado
-#081» desde el 2026-09-24. Era **falso**: el archivo del tramo de ese mismo día registra
-`#097` en vuelo y «Mensajes: #053–#097». Los dos documentos se contradecían y nadie lo vio en
-casi un mes. El coder, al volver de una compactación, dijo que su último número era el `#102`
-—el de su reporte del commit `e99a338`—, y la medición le dio la razón.
-
-Consecuencia: los dos mensajes de hoy etiquetados `#082` (ARQ) y `#083` (COD) **son en
-realidad el `#103` y el `#104`**. Se dejan con su etiqueta original —reescribir lo ya enviado
-sería peor— y constan aquí. La cadena continúa en **#105**.
+Los mensajes etiquetados `#082` y `#083` del 2026-10-17 son en realidad el `#103` y el `#104`
+(tramo del andamiaje, hallazgo 1).
 
 ## 4. Qué espera al PO
 
@@ -99,98 +83,73 @@ Arriba, en «Espera al PO». Si cambia, se cambia en los dos sitios o en ninguno
 
 ## 5. Mandato vigente
 
-**PO, 2026-10-17**: unificar aquí las dos vías —respaldos (larga) y migración caliente de cuenta
-completa (rápida)—, con la otra herramienta como subherramienta y un analizador de solo lectura
-delante. Urgencia: el **lunes 2026-10-19** migra un servidor muy grande. Decisión: ADR 0018.
-
-La fase 2 de la 2.1 queda **aparcada**, sin servidor de pruebas donde ensayarla.
+- **PO, 2026-10-17**: unificar aquí las dos vías —respaldos y migración caliente—, con la otra
+  herramienta como subherramienta y un analizador de solo lectura delante (ADR 0018). Urgencia: el
+  lunes 2026-10-19. Regla del PO: la herramienta nunca toca el servidor viejo (ADR 0019).
+- **PO, 2026-10-17**: las claves de los respaldos fuera del repositorio, obtenidas por él sin pasar
+  por los agentes (ADR 0020). **Después del lunes.**
+- **Aparcado**: la fase 2 de la 2.1 (ADR 0013), sin servidor de pruebas donde ensayarla.
 
 ## 6. Qué falta, medible
 
-### Para el lunes (ADR 0018, «Orden»)
+### Para el lunes
 
-1. Entrada intacta: hecha (`#127`, `#129`).
-2. Analizador de solo lectura: hecho (`dd414c2`). Sello de versión en `#138`.
-3. Tipo CodeIgniter 3: hecho (`3be710b`, `6220a9e`). Falso OK de `verificar`: arreglado (`641733a`).
-4. Guía: commiteada (`e7513d1`); correcciones de la lectura en frío, en `#140`.
+1. Hecho y commiteado en `feat/migracion-caliente`: copia intacta (13/13 sumas, `d3461b8`),
+   `codeigniter3` (`3be710b`, `6220a9e`), falso OK de `verificar` (`641733a`), analizador
+   (`dd414c2`, `51e0b2a`), IP de destino vacía (`c02449c`), cron suspendidos (`2efdc4b`), guía.
+2. **Zonas DNS**: sin herramienta. Depende de la respuesta del PO (Espera §2) y de la verificación
+   sin depositar (§2).
+3. `IP_ORIGEN="REVISAR_IP_ORIGEN"` cuando no se lee ninguna IP: dejar vacío (roadmap).
 
-### Para cerrar la fase 2
+### Después del lunes
 
-1. **El paso 8, las exclusiones.** Está en **solo lectura** a propósito, con un `bc_err`
-   explícito que lo impide y su comentario. Lo que falta para quitarlo:
-   - **WEB — confirmado:** `v-backup-user-config` solo copia configuración, nunca el contenido
-     del sitio; y ese contenido vive dentro de lo que copia `restic backup /home/<cuenta>`.
-     **Excluir WEB no impide que los archivos acaben en la instantánea.**
-   - **DB — al revés:** el volcado no existe hasta que el script lo genera, así que excluir sí
-     funciona.
-   - **DNS:** el archivo de zona *es* el contenido.
-   - **MAIL — SIN VERIFICAR.** Es lo único abierto: no se miró dónde viven los buzones.
-   - Con eso: decir por sección **qué efecto real tiene excluirla en cada uno de los dos
-     respaldos**, quitar el modo solo lectura y devolver las dos pruebas retiradas.
-2. **Revisión de seguridad y de código** de todo lo de la fase 2 — obligatoria: se ha tocado
-   mucho código que corre como root.
-3. **Documentación de usuario** de las órdenes nuevas, que escribe el arquitecto.
-4. **H36**: `hestia cuentas` no está en la TUI, y ningún paso nuevo está en la web. La interfaz
-   es el centro: hay que cerrarlo antes de dar la 2.1 por buena.
+Roadmap, secciones «Migración caliente» y «Claves de los respaldos fuera del repositorio».
 
-### Para cerrar el andamiaje de jornada
+### Del andamiaje (frente que el PO no ha nombrado)
 
-Las **seis** puertas del estado corren por máquina en `verificar.sh`
-(`.agents/scripts/puertas_estado.sh`, con su prueba de rechazo: 12 afirmaciones). Queda:
-
-0. **Pendientes de código, nacidos hoy** (detalle en el tramo, hallazgos 13 y 16): la sección
-   ENSAYO de la ayuda no nombra las subórdenes de `hestia`, aunque las ocho admiten
-   `--dry-run`; y el ensayo de `hestia exclusiones` anuncia una escritura que el camino real
-   se niega a hacer. Lo segundo se resuelve solo al cerrar el paso 8.
-
-
-5. **La guarda: DOS defectos distintos**, que frenaron el trabajo **cinco veces** el
-   2026-10-17. Contarlos como uno haría que el arreglo dejara vivo el segundo; lo separó el
-   coder.
-   - **A — confunde el contenido de un archivo con una orden (4 veces).** Es el error ya
-     arreglado para los mensajes de commit (H13), sin aplicar aquí.
-   - **B — no distingue la ruta de un borrado legítimo (1 vez).** Un temporal del scratchpad
-     de la sesión, que `40-salvaguardas.md` §2 permite expresamente.
-
-   Ninguna se esquivó. El detalle de los cinco, en el tramo del 2026-10-17. **Es lo único que
-   queda abierto del andamiaje**, y el coste ya es real.
-
+La guarda, **tres defectos**, que frenaron el trabajo varias veces más el 2026-10-17:
+- **A**: confunde el contenido de un texto con una orden (bloqueó escribir `scp`, `backupctl`,
+  órdenes del panel y una de git en documentos y estado).
+- **B**: no distingue la ruta de un borrado legítimo, ni el directorio real cuando el cwd es otro.
+- **C**: `REDIRECCION_AL_SISTEMA` (`guardia.py:89`) bloquea toda redirección a `/var/…`, y el
+  repositorio vive en `/var/www/html/`.
+- Y no deja restaurar un archivo concreto con checkout (lo trata como el árbol entero).
 
 ## 7. Decidido y sin implementar
 
-- **ADR 0013** (fases de la 2.1): la fase 2 sin terminar; las fases 3 y 4 sin empezar.
+- **ADR 0020**: el método para que el PO obtenga las claves de los respaldos. Hoy `lib/restic.sh:40`
+  las escribe en `<perfil>/output/HestiaCP/` y `adoptar` las busca ahí.
+- **ADR 0018 §6**: unificar la migración caliente con la CLI y la web.
+- **ADR 0013**: la fase 2 sin terminar; fases 3 y 4 sin empezar.
 - **ADR 0015** (interfaz por tareas): sin empezar; necesita una sesión de diseño con el PO.
-- **La web puede contradecir a la línea de órdenes.** No siempre pasa por `backupctl`: lee el
-  servidor por su cuenta en al menos tres sitios. Todo el rigor de la fase 2 vive **solo en la
-  CLI**. **Decisión del PO (2026-09-24): se aborda en la fase 3.** Mientras tanto, y hay que
-  decírselo cuando pruebe: **si las dos discrepan, manda `hestia status`.**
-- La web llama a todo con `-y`, así que las dos negativas nuevas se dispararán allí con
-  mensajes escritos para una terminal. Protegen igual; se verán mal. También para la fase 3.
+- **La web puede contradecir a la línea de órdenes** (lee el servidor por su cuenta). Decisión del
+  PO (2026-09-24): fase 3. Mientras tanto, si discrepan, manda `hestia status`.
 
 ## 8. Trampas del área en curso
 
-- `.agents/context/30-trampas.md`, **T2 y T20–T26**. **T21**: antes de un `adoptar --to` real,
-  copiar el `restic.conf` del destino.
-- `.agents/context/50-hestiacp.md` **entero**: lo verificado ahí **no se vuelve a verificar**.
-  Incluido lo del 2026-10-17: la etiqueta del repositorio de HestiaCP es `1.10.5`, **sin `v`**.
+- **Migración caliente**: la cabecera de `BASE_GENERAL.sh` está desfasada (dice «dos fases» y que
+  la fase 2 recopia archivos; no lo hace). Manda el código, y la guía ya lo dice.
+- **Los helpers PHP están duplicados** entre `BASE_LEER_CONFIG.sh` y `BASE_CONFIGURAR_DB.sh`, ahora
+  también con lógica (guardas de `codeigniter3`). Un tipo registrado en uno solo falla asimétrico.
+- **El paquete del analizador se construye justo antes de subirlo**: un paquete viejo miente. El
+  informe dice de qué commit sale.
+- `.agents/context/50-hestiacp.md`, sección «Leer un HestiaCP sin escribir nada»: lo verificado
+  **no se vuelve a verificar**. Las listas del panel escriben en `error.log` si se consulta algo
+  que no existe; el analizador no usa ninguna.
+- `.agents/context/30-trampas.md`, T1 (credenciales) y T20–T26.
 - `.agents/context/20-convenciones.md`: «vacío» y «no lo sé» no se escriben igual.
-- `.agents/context/40-entorno.md`: el banco de pruebas y sus salvaguardas.
-- **Zona horaria, sin cerrar**: `bc_hestia_diag_instantanea` compara la fecha de la instantánea
-  con «ahora». Si las dos puntas no están en la misma referencia, un respaldo que se saltó una
-  noche puede parecer reciente. **Falso OK.**
-- **Sin verificar contra un servidor real**: que `v-change-user-config-value` con la clave
-  presente no toque nada más que esa clave. Lo que sabemos viene de leer su código.
-- **H34** (decidido, se queda): cada cuenta se lee dos veces, una para la foto y otra justo
-  antes de escribir. Entre las dos hay una persona decidiendo.
+- `core.fileMode=false` en la copia de trabajo: un bit de ejecución solo llega a git con
+  `git update-index --chmod=+x`.
 
 ## La lección que no se poda
 
 **Una corrección parcial que se anuncia como completa es peor que no corregir**, porque quien
 la lee se fía. Y un documento correcto en lo que afirma puede ser peligroso por lo que omite.
-Las dos lecciones costaron un servidor del PO cada una. El relato entero, en `abrir-jornada`
-§7.
+Las dos costaron un servidor del PO cada una. El 2026-10-17 el arquitecto volvió a escribir en la
+guía del lunes una frase que no había medido («y lo dice en el plan»); la cazó la lectura en frío
+del coder. El relato entero, en `abrir-jornada` §7.
 
 ## Para una sesión nueva
 
-Lee este archivo, el último de `estado/tramos/`, y los ADR **0013, 0014, 0015 y 0017** (el 0016
-está reemplazado). Luego `.agents/README.md` para el orden del resto.
+Lee este archivo, el último de `estado/tramos/`, y los ADR **0018, 0019 y 0020**. Luego
+`.agents/README.md` para el orden del resto.

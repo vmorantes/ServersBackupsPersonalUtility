@@ -21,7 +21,8 @@
 | #134→#135 | T1 retirar `TejidoTesting`; T2 falso OK de `plan_dominio_existe`; T3 claves repetidas en CodeIgniter 3 | completado; 25 suites | `c603d4f` `641733a` `6220a9e` `80e1ccf` `d64dd19` |
 | #136→#137 | El analizador de solo lectura, con su suite | completado: 79 afirmaciones; M1-M3 muerden; el coder encontró y arregló dos defectos propios leyendo un informe real | `9285e58` `0c3c85f` `dd414c2` `7fc5cd2` |
 | #138→#139 | Sello de versión en el paquete del analizador; commitear guía y README | completado; la lectura en frío de la guía encontró cuatro cosas | `51e0b2a` `e7513d1` `cf0e16d` |
-| #140 | `IP_DESTINO` vacía en las propuestas; cron suspendido no se migra; correcciones de la guía | en vuelo | — |
+| #140→#141 | `IP_DESTINO` vacía en las propuestas; cron suspendido no se migra; correcciones de la guía | completado; 27 suites. La guía commiteada decía que el plan anuncia el cron suspendido: falso, lo escribió el arquitecto sin comprobarlo. Corregido después | `c02449c` `2efdc4b` `154bace` `afc6a3e` |
+| #142→#143 | Cierre: commitear la guía corregida (con «Qué se migra y qué no»), ADR 0019 y 0020, roadmap y estado | ronda de cierre; el reporte #143 cierra la jornada | ver `git log` |
 
 ## Hallazgos
 
@@ -115,14 +116,50 @@
 27. **La guía mandaba borrar el directorio de la corrida sin decir dónde está ni que guarda
     `deshacer.sh`.** Está en `/home/<cuenta>/migraciones/<fecha>/`. Corregido.
 
+28. **La herramienta NO migra el DNS**: ni zonas ni registros (no hay ninguna orden de registros
+    en su código). El servidor del lunes **sí sirve el DNS** (PO, 2026-10-17). El PO recrea zonas con
+    órdenes de alta de registro una a una; su ejemplo real (con datos reales, no se copia aquí)
+    muestra un dominio cuyo **correo vive en Microsoft 365**: un dominio de correo local en el
+    destino entregaría en local lo que el servidor envíe a ese dominio. SIN VERIFICAR. Subagente
+    `hestia-verifier` en curso: firma de las órdenes DNS, plantillas por defecto, copia fiel del
+    `.conf` con regeneración, y cómo decide Exim si un dominio es local.
+29. **También faltan en la guía**: cuentas FTP (no se migran) y la clave DKIM nueva.
+
+30. **El arquitecto escribió en la guía «y lo dice en el plan» sin comprobarlo.** El plan solo cuenta
+    los cron por usuario. Lo vio el coder en su lectura en frío. Es el error que la lección de
+    `abrir-jornada` §7 describe: una afirmación plausible que nadie midió, en el documento que el PO
+    va a seguir. Corregido.
+31. **Queda `IP_ORIGEN="REVISAR_IP_ORIGEN"`** cuando el analizador no lee ninguna IP: mismo agujero
+    que `IP_DESTINO`. Para la próxima ronda.
+32. **Plan de DNS del PO** (2026-10-17): migrar A→B, cambiar NS a B, y en A apuntar todo a B mientras
+    propaga; A vence el 29. Requiere que B tenga las zonas completas: la herramienta no las copia.
+33. **Regla del PO (2026-10-17): la herramienta nunca toca el servidor viejo.** Solo escribe en B;
+    los cambios en A los hace él. Medido: hoy solo lee en A, salvo un temporal con la contraseña de
+    MySQL en modo "user" (`BASE_PRIVILEGIOS.sh:811-826`), borrado por `trap EXIT` (949). Se retira la
+    propuesta de generar un script para A.
+
 ## Decisiones
 
 - ADR 0018: copia intacta primero, analizador de solo lectura, tipo CodeIgniter 3, y la
   unificación con `backupctl` después del lunes.
+- ADR 0019: la herramienta solo escribe en el destino (regla del PO); los cron suspendidos no se
+  migran; las propuestas dejan vacío lo que no saben.
+- ADR 0020: las claves de los respaldos fuera del repositorio (mandato del PO), sin implementar.
 - La fase 2 de la 2.1 queda aparcada.
+
+## Cerrado
+
+- **Duración:** de 16:30 (apertura de la jornada) a 18:00 del 2026-10-17. Rondas `#124`–`#142`,
+  nueve pares con el coder.
+- **Sin bitácora todavía**: el mandato no está cerrado; su primer uso real es el lunes. La entrada
+  se escribe cuando el PO lo haya usado.
+- **Fallos propios del arquitecto, hoy**: escribir en la guía que el plan anuncia los cron
+  suspendidos sin comprobarlo (hallazgo 30); dictar el ejemplo de migración sin revisar su
+  secuencia de fases, que se saltaba `sincronizar` (hallazgo 5, cazado una ronda después); y citar
+  `#133` en el tramo antes de recibirlo, que hizo fallar `verificar.sh`.
 
 ## Pendiente del PO
 
-1. Decidir qué hace con los secretos versionados en `HestiaCPCliMigrationUtility` (`A-018` §2).
-2. Crear el servidor de destino e instalar HestiaCP; pasar las salidas de solo lectura que se le
-   den.
+En `estado/AHORA.md`, «Espera al PO», puntos 1 a 9. Lo más urgente: la migración del lunes con
+`docs/migracion/caliente.md`, la respuesta sobre el script de zonas DNS (A-028 §5), y rotar las
+credenciales que estuvieron versionadas.
