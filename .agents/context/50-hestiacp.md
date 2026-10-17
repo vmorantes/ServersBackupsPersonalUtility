@@ -241,3 +241,61 @@ Para un dato fresco se mide con `du`. FUENTE. Cada cuánto los refresca el panel
     probarlo: el `grep` sin `-F` trataba el punto como comodín, y **la ficha de un subdominio
     hacía «existir» al dominio padre**. Hoy exige la clave json entre comillas y descarta
     `Error:`. En modo API, la forma del error: SIN VERIFICAR.
+
+## Zonas DNS al migrar (1.10.5, verificado el 2026-10-17)
+
+Fuente: etiqueta `1.10.5`, leída sin shell con un lector web que resume: las citas no están
+comprobadas byte a byte y los números de línea con `~` son aproximados. Plantillas DNS en
+`$HESTIA/data/templates/dns` (`func/main.sh:111`); en el repositorio de HestiaCP,
+`install/common/templates/dns/`: `default`, `default-nomail`, `office365`, `gmail`, `zoho`,
+`child-ns`.
+
+### Lo que crea el alta de un dominio
+
+- **`v-add-domain USER DOMAIN [IP] [RESTART]` crea web, DNS y correo**, cada uno solo si el
+  servidor tiene ese sistema (`WEB_SYSTEM`, `DNS_SYSTEM`, `MAIL_SYSTEM`) y el paquete tiene cupo.
+  Es la orden que usa la migración caliente (`tools/migracion-caliente/BASE_GENERAL.sh:1549`),
+  sin IP: toma la del usuario. CONFIRMADO. (`v-add-web-domain` solo crea el web.)
+- La zona sale de la plantilla `DNS_TEMPLATE` del paquete del usuario. Con `default`, 21 registros:
+  `@ NS` (uno por NS), `@ A %ip%`, `www`, `ftp` y `webmail` CNAME, `mail A`, `@ MX 0 mail.%domain%.`,
+  `@ TXT "v=spf1 a mx ip4:%ip% -all"`, `_dmarc TXT` y cinco SRV de correo. CONFIRMADO (las líneas
+  15-21, por campos, no literal). `office365.tpl` no trae MX y su SPF incluye
+  `spf.protection.outlook.com`. Qué plantilla tiene el paquete en un servidor concreto: SIN
+  VERIFICAR, se lee allí.
+- El alta del dominio de correo añade a la zona `mail._domainkey TXT` con la clave DKIM nueva.
+
+### Añadir registros: duplica
+
+- `v-add-dns-record USER DOMAIN RECORD TYPE VALUE [PRIORITY] [ID] [RESTART] [TTL]`. **No compara
+  contenido: siempre añade una línea nueva.** Solo falla si se fuerza un ID ya usado. CONFIRMADO.
+  Sobre una zona creada desde plantilla, recrear los registros del origen deja dos `@ A`, dos SPF y
+  **dos MX**: el correo se reparte.
+- Comillas en TXT: quita todas las dobles y vuelve a entrecomillar si el valor tiene espacio o `;`.
+  No duplica comillas. Un valor de más de 255 caracteres se trocea al generar la zona. MX con
+  prioridad 0: válido. CNAME en `@`: rechazado. Cada alta reconstruye la zona y reinicia el DNS
+  salvo `RESTART=no`. CONFIRMADO.
+- `v-change-dns-record USER DOMAIN ID RECORD TYPE VALUE [PRIORITY] [RESTART] [TTL]`: **el orden de
+  la cola es distinto** al de `v-add-dns-record`. `v-delete-dns-record USER DOMAIN ID [RESTART]` no
+  deja borrar el último `A` ni el último `NS`. No hay orden para vaciar una zona. CONFIRMADO.
+- `v-add-dns-domain USER DOMAIN IP [NS1..NS8] [RESTART]`: **si falta NS2, toma TODOS los NS del
+  usuario**, también el NS1 pasado. CONFIRMADO.
+
+### La copia fiel
+
+- `v-insert-dns-records USER DOMAIN ARCHIVO` **reemplaza** `dns/<dominio>.conf` por el archivo (lo
+  mueve, sin validarlo); la zona tiene que existir. `v-rebuild-dns-domains USER` regenera el `.db`
+  de cada zona desde su `.conf`, sin tocar los registros, y recalcula bien los contadores (la forma
+  singular parece sobrescribirlos: SOSPECHA). CONFIRMADO salvo lo marcado.
+- Al copiar del origen hay que ajustar: las IP de los `A`/`AAAA`, los valores `NS` (nombres del
+  servidor viejo) y el `mail._domainkey` (clave del servidor viejo). DNSSEC: si el origen lo usa,
+  el destino genera claves nuevas y el DS del registrador dejaría de coincidir (SOSPECHA razonada).
+
+### Correo fuera del servidor (MX en Microsoft 365, por ejemplo)
+
+- Exim considera local todo dominio que tenga entrada en `/etc/exim4/domains/` (`dsearch`,
+  `install/deb/exim/exim4.conf.template:21-22`), y esa entrada la crea el alta del dominio de
+  correo. Los routers de salida llevan `domains = !+local_domains`: **para un dominio local Exim no
+  consulta el MX**. El correo que envíe el propio servidor (formularios, cron) a ese dominio **no
+  llega a Microsoft 365**. CONFIRMADO el enrutamiento; si rebota o se pierde: SIN VERIFICAR.
+- Se evita borrando el dominio de correo en el destino (`v-delete-mail-domain`, que borra también
+  sus cuentas). En la migración caliente: `eliminar_mail="true"` y `correo="false"`.
