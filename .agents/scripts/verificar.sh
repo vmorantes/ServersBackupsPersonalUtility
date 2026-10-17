@@ -111,6 +111,12 @@ else
     echo "sin ejemplos con ruta relativa"
 fi
 
+paso "Puertas del estado versionado (skill cerrar-jornada)"
+bash .agents/scripts/puertas_estado.sh || fallo "puertas_estado.sh"
+
+paso "Prueba de rechazo de las puertas del estado"
+bash .agents/scripts/probar_puertas_estado.sh || fallo "probar_puertas_estado.sh"
+
 paso "Pruebas del proyecto"
 if [ -f tests/ejecutar.sh ]; then
     bash tests/ejecutar.sh || fallo "tests/ejecutar.sh"
