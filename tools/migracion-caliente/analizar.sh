@@ -1457,9 +1457,9 @@ do
     echo;
     echo "IP_ORIGEN=\"$ip_cuenta\";";
     echo;
-    echo "# REVISAR: el servidor de destino todavía no está aquí. Sin esta IP";
-    echo "# la herramienta no arranca.";
-    echo "IP_DESTINO=\"PENDIENTE_IP_DESTINO\";";
+    echo "# REVISAR: la IP del servidor nuevo. Vacía a propósito: la";
+    echo "# herramienta se niega a ejecutar hasta que se escriba.";
+    echo "IP_DESTINO=\"\";";
     echo;
     echo "SSH_ORIGEN=\"root\";";
     echo "SSH_DESTINO=\"root\";";

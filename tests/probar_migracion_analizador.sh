@@ -730,7 +730,7 @@ test_proposals_are_rejected_as_generated_and_accepted_once_reviewed() {
 
   # Revisada: se resuelve el centinela de php y la IP de destino.
   sed -e 's/^  php="" \\/  php="PHP-8_1" \\/' \
-      -e 's/PENDIENTE_IP_DESTINO/203.0.113.20/' \
+      -e 's/^IP_DESTINO="";/IP_DESTINO="203.0.113.20";/' \
       "$prop" > "$d/revisada.sh"
 
   env -i PATH="$ruta_path" LANG=C.UTF-8 HOME="$d" bash -c '
@@ -755,6 +755,88 @@ test_proposals_are_rejected_as_generated_and_accepted_once_reviewed() {
     "P9: y lleva los avisos de su cuenta"
   afirmar_contiene "$prop" 'forzar_ssl="false"' \
     "P9: forzar_ssl siempre en false"
+}
+
+# -----------------------------------------------------------------------------
+# T1: la IP de destino se deja VACÍA, y eso basta para que se rechace
+# -----------------------------------------------------------------------------
+# Antes, el centinela era el texto "PENDIENTE_IP_DESTINO", que la herramienta
+# NO rechaza: BASE_GENERAL.sh solo comprueba que IP_DESTINO no esté vacía, y no
+# valida su formato en ninguna parte. Así que una cuenta en la que ningún
+# dominio tuviera BACKEND="default" —y por tanto sin ningún php="" que
+# cfg_validar rechazara— se podía ejecutar tal como salía del analizador, con
+# una IP que era una palabra.
+#
+# cuenta2 es exactamente ese caso: todos sus dominios traen PHP-7_4 o PHP-8_1.
+# Por eso la prueba va contra su propuesta, no contra la de cuenta1.
+#
+# La comprobación que rechaza la IP vacía NO está en cfg_validar, sino en el
+# bloque de validaciones iniciales de BASE_GENERAL.sh, así que se extrae ese
+# bloque por sus marcadores y se ejecuta aislado. El bloque no conecta a nada:
+# son comprobaciones de variables.
+test_empty_destination_ip_is_rejected_even_without_a_php_sentinel() {
+  nueva_prueba an13
+  local d="$BANCO_TMP/an13"
+  local prop2="$SALIDA_DIR/migracion-cuenta2.sh"
+
+  afirmar_contiene "$prop2" '^IP_DESTINO="";' \
+    "T1: la propuesta deja IP_DESTINO vacía"
+  afirmar_no_contiene "$prop2" "PENDIENTE_IP_DESTINO" \
+    "T1: ya no se emite el centinela de texto"
+  afirmar_contiene "$prop2" "Vacía a propósito: la" \
+    "T1: y explica por qué está vacía"
+
+  # Y esta cuenta NO tiene ningún php vacío: su rechazo solo puede venir de
+  # la IP. Si alguna vez lo tuviera, esta prueba dejaría de probar lo que dice.
+  afirmar_no_contiene "$prop2" 'php="" ' \
+    "T1: cuenta2 no tiene ningún dominio con php vacío (es el caso que importa)"
+
+  # El bloque de validaciones iniciales, por marcadores.
+  awk '
+    index($0, "=== VALIDACIONES INICIALES ===") > 0 { dentro = 1; next }
+    dentro && index($0, "ya fueron validados") > 0 { exit }
+    dentro { print }
+  ' "$MIG/BASE_GENERAL.sh" > "$d/validaciones.sh"
+
+  afirmar_contiene "$d/validaciones.sh" 'IP_DESTINO no está definido' \
+    "T1: se extrajo el bloque de validaciones que rechaza la IP vacía"
+
+  local registro="$d/registro.txt"
+  local ruta_path
+  ruta_path="$(montar_falsos "$d/bin" "$registro")"
+
+  # Tal como sale: el bloque tiene que rechazarla.
+  env -i PATH="$ruta_path" LANG=C.UTF-8 HOME="$d" bash -c '
+    cd "$1"
+    FASE="plan"
+    source "$2/BASE_CONFIG.sh"
+    source "$3"
+    source "$1/validaciones.sh"
+    echo "NO SE DETUVO"
+  ' _ "$d" "$MIG" "$prop2" > "$d/tal-cual.txt" 2>&1
+  afirmar_codigo 1 "$?" \
+    "T1: tal como sale, la cuenta sin php vacío se RECHAZA por la IP"
+  afirmar_contiene "$d/tal-cual.txt" "ERROR: IP_DESTINO no está definido" \
+    "T1: y el mensaje dice qué falta"
+  afirmar_no_contiene "$d/tal-cual.txt" "NO SE DETUVO" \
+    "T1: la ejecución se detuvo ahí, no siguió"
+
+  # Con la IP puesta, pasa.
+  sed -e 's/^IP_DESTINO="";/IP_DESTINO="203.0.113.20";/' "$prop2" > "$d/revisada.sh"
+
+  env -i PATH="$ruta_path" LANG=C.UTF-8 HOME="$d" bash -c '
+    cd "$1"
+    FASE="plan"
+    source "$2/BASE_CONFIG.sh"
+    source "$3"
+    source "$1/validaciones.sh"
+    echo "PASO"
+  ' _ "$d" "$MIG" "$d/revisada.sh" > "$d/revisada.txt" 2>&1
+  afirmar_contiene "$d/revisada.txt" "PASO" \
+    "T1: con la IP escrita, las validaciones iniciales la aceptan"
+
+  afirmar_igual "$(wc -c < "$registro" | tr -d ' ')" "0" \
+    "T1: nada de esto invocó una orden prohibida"
 }
 
 # -----------------------------------------------------------------------------
@@ -861,6 +943,7 @@ test_codeigniter_environment_and_guards
 test_php_version_is_explicit_or_refused
 test_mail_messages_are_counted_exactly
 test_proposals_are_rejected_as_generated_and_accepted_once_reviewed
+test_empty_destination_ip_is_rejected_even_without_a_php_sentinel
 test_warnings_for_cron_orphan_database_and_unknown_user
 test_rapido_skips_measuring_and_says_so
 test_missing_hestia_dir_creates_nothing
