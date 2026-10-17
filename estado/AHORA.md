@@ -43,13 +43,13 @@ verificable del repositorio antes de la primera instrucción.
 
 ## 2. En vuelo
 
-**En vuelo: la instrucción #107**, enviada al coder el 2026-10-17. Le pide commitear la
-documentación y el estado que dejó escritos el arquitecto, y un arreglo cosmético de formato.
+**En vuelo: la instrucción #109**, la ronda de cierre del tramo: el coder commitea la entrada
+0003 de la bitácora y el estado al día. Cuando reporte, **nada en vuelo**.
 
-Cerradas hoy: la ronda **#103→#104** (identificación del coder y su resumen de compactación;
-**él encontró el desfase del contador**) y la **#105→#106** (la puerta del contador contra los
-tramos, con su prueba de rechazo: 12 afirmaciones, y la puerta vista fallar contra una copia
-del repositorio real). El detalle entero, en
+Cerradas hoy: **#103→#104** (identificación del coder y su resumen de compactación; **él
+encontró el desfase del contador**), **#105→#106** (la puerta del contador y su prueba de
+rechazo: 12 afirmaciones, y la puerta vista fallar contra una copia del repositorio real) y
+**#107→#108** (documentación, el archivo del tramo, y los números a tres dígitos). El detalle entero, en
 `estado/tramos/2026-10-17-1300-andamiaje-de-jornada.md`.
 
 **El coder existe y está abierto**: `ServersBackupsPersonalUtility-Coder-Main`, renombrada por
@@ -83,9 +83,9 @@ hace falta la salida completa, no la impresión.
 
 Son **dos**, y los dos avanzan por separado (regla `30`):
 
-- **`#NNN`, cadena con el coder.** Último usado: **#107**. El próximo: **#108**.
-- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-006**. El próximo:
-  **A-007**.
+- **`#NNN`, cadena con el coder.** Último usado: **#110**. El próximo: **#111**.
+- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-008**. El próximo:
+  **A-009**.
 
 **Reparado el 2026-10-17, y vale la pena saber por qué.** Este archivo declaraba «último usado
 #081» desde el 2026-09-24. Era **falso**: el archivo del tramo de ese mismo día registra
@@ -140,14 +140,19 @@ servidores del 2026-10-02 y, el 2026-10-17, el andamiaje de jornada.
 Las **seis** puertas del estado corren por máquina en `verificar.sh`
 (`.agents/scripts/puertas_estado.sh`, con su prueba de rechazo: 12 afirmaciones). Queda:
 
-5. **La guarda confunde el contenido de un archivo con una orden.** El 2026-10-17 pasó
-   **tres veces, de tres formas distintas**: al arquitecto, escribiendo un documento que
-   citaba órdenes `v-*`; al coder, escribiendo un script que contenía su propio borrado
-   recursivo de un temporal con la ruta en variable; y otra vez al arquitecto, escribiendo en
-   este archivo esa misma frase. Ninguno de los dos la esquivó: se reportó y se usó la
-   herramienta de escritura de archivos. Es el mismo error que ya se arregló con los mensajes
-   de commit (H13), y el arreglo tiene que cubrir las tres formas. **Es lo único que queda
-   abierto del andamiaje**, y ya ha costado tiempo tres veces en un día.
+5. **La guarda: DOS defectos distintos**, que frenaron el trabajo cinco veces el 2026-10-17.
+   Lo separó el coder; contarlos como uno haría que el arreglo dejara vivo el segundo.
+   - **A — confunde el contenido de un archivo con una orden.** Un documento que citaba
+     órdenes `v-*`, un script que contenía su propio borrado de temporal, y tres intentos de
+     describir por escrito ese mismo bloqueo. Es el error ya arreglado para los mensajes de
+     commit (H13), sin aplicar aquí.
+   - **B — no distingue la ruta de un borrado legítimo.** Un temporal del scratchpad de la
+     sesión, que `40-salvaguardas.md` §2 permite expresamente, bloqueado solo porque la ruta
+     iba en una variable.
+
+   Ninguna se esquivó. **Es lo único que queda abierto del andamiaje**, y el coste ya es real:
+   cinco interrupciones en una jornada.
+
 
 ## 7. Decidido y sin implementar
 
@@ -179,14 +184,11 @@ Las **seis** puertas del estado corren por máquina en `verificar.sh`
 ## La lección que no se poda
 
 El 2026-09-23 se corrigieron cuatro ejemplos de `docs/hestiacp/protocolo-manual.md` y se
-anunció la guía como arreglada. Quedaban ocho ejemplos con rutas relativas en otros cuatro
-archivos, y **el 2026-09-24 esa misma documentación rompió un segundo servidor del PO**.
-
-Corregidos todos, y añadido a `verificar.sh` el paso «Rutas relativas en ejemplos de
-almacenamiento», probado en las dos direcciones.
+anunció la guía como arreglada. Quedaban ocho en otros cuatro archivos, y **el 2026-09-24 esa
+misma documentación rompió un segundo servidor del PO**.
 
 **Una corrección parcial que se anuncia como completa es peor que no corregir**, porque quien
-la lee se fía.
+la lee se fía. El relato entero y lo que salió de él, en `abrir-jornada` §7.
 
 ## Para una sesión nueva
 

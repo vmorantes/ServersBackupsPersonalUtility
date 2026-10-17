@@ -15,6 +15,8 @@
 | sin coder | Las tres skills, la unificación de `cierre-de-tramo`, las puertas del estado y su prueba de rechazo, el contador `A-NNN`, `AHORA.md` reescrito | completado, **con desviación**: lo escribió y commiteó el arquitecto por orden expresa del PO | `7f0eb3d` `70a69c3` `13d5650` `bb6f4f8` `576a860` `ca0f649` `f360830` `623728f` `44b0e49` `67fcc70` |
 | #103→#104 | Identificación del coder y su resumen de compactación | completado; **el coder encontró el desfase del contador** | — |
 | #105→#106 | La puerta del contador contra los tramos, con su prueba de rechazo | completado | `4267744` `c2e67c2` |
+| #107→#108 | Documentación, el archivo de este tramo, y los números a tres dígitos | completado; **el coder separó dos defectos de la guarda que se contaban como uno** | `5427423` `dac630b` `0bf1291` |
+| #109→#110 | Cierre: bitácora 0003 y el estado al día | completado | — |
 
 ## Hallazgos
 
@@ -39,19 +41,31 @@
    coder, se pide; no se sustituye», y la pregunta 2 de `abrir-jornada` pasa a ser «¿hay
    coder, y qué está en vuelo?», con la medición obligatoria.
 
-3. **La guarda confunde el contenido de un archivo con una orden**, dos veces el mismo día y
-   de dos formas distintas: bloqueó al arquitecto al escribir un documento que citaba órdenes
-   `v-*`, y bloqueó al coder al escribir un script que contenía su propio `rm -rf "$raiz"`. Es
-   el mismo error que ya se arregló para los mensajes de commit (H13). **Ninguno de los dos la
-   esquivó**: los dos lo reportaron y usaron la herramienta de escritura de archivos.
+3. **La guarda frenó el trabajo cuatro veces en un día, y son DOS defectos distintos**, no
+   uno. Lo separó el coder, que vio que se estaban contando juntos:
+   - **Defecto A — confunde el contenido de un archivo con una orden.** Cinco veces: al
+     arquitecto escribiendo un documento que citaba órdenes `v-*`; al coder escribiendo un
+     script que contenía su propio borrado de temporal; y al arquitecto tres veces más, al
+     intentar describir por escrito ese mismo bloqueo. Es el error ya arreglado para los
+     mensajes de commit (H13), sin aplicar aquí.
+   - **Defecto B — no distingue la ruta de un borrado legítimo.** Al coder, borrando un
+     temporal de su propio scratchpad, que `40-salvaguardas.md` §2 permite expresamente. La
+     guarda solo ve que la ruta va en una variable.
+
+   **Ninguna se esquivó**: se reportaron y se usó otra herramienta. Un arreglo que solo cubra
+   A deja B vivo.
 
 4. **El límite de la puerta nueva, dicho por el coder y que conviene no olvidar:** compara
    contra los tramos, así que **una ronda que no se anota no delata nada**. Protege al que
    escribe el tramo, no al que lo olvida.
 
-5. **Cosmético, sin arreglar:** en los mensajes de la puerta los ceros a la izquierda
-   desaparecen (`#097` se imprime `#97`). El número es correcto; el formato no sigue la
-   convención de tres dígitos del proyecto.
+5. **El formato de tres dígitos, arreglado en la ronda #107→#108.** Con una trampa dentro:
+   `printf` interpreta el octal igual que la comparación, así que hay que normalizar antes de
+   comparar **y** antes de imprimir.
+
+6. **El margen del contador es de uno**, y así tiene que ser: los tramos citan hasta el `#110`
+   y `AHORA.md` declara el `#110`. La puerta morderá el día que el tramo avance y `AHORA.md`
+   no.
 
 ## Decisiones
 
@@ -75,6 +89,12 @@
 - **El octal.** La comparación aritmética de bash lee `097` como octal y habría dado error de
   sintaxis en vez de comparar. El tramo real tiene ese número. Lo cazó el coder y quitó los
   ceros a la izquierda antes de comparar.
+
+## Cerrado
+
+- **Duración:** 13:00 a 16:00 del 2026-10-17. Tres rondas con coder, más un tramo inicial sin
+  él por orden del PO.
+- **Bitácora:** `.agents/docs/bitacora/0003-andamiaje-de-jornada.md`.
 
 ## Pendiente del PO
 
