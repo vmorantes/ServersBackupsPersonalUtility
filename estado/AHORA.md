@@ -11,7 +11,7 @@
 
 1. Comprobar los dos nombres de sesión (§1) en la lista de sesiones, y **medir si hay coder**.
 2. `bash .agents/scripts/verificar.sh` — tiene que salir en verde.
-3. Comprobar que la ronda de cierre `#144` llegó a commitearse (§2). Si no, pedir su reporte.
+3. Comprobar que la ronda de cierre `#146` llegó a commitearse (§2). Si no, pedir su reporte.
 4. Seguir lo que el PO conteste en «Espera al PO».
 
 ## Espera al PO
@@ -23,7 +23,9 @@
    suspendidos) **nunca ha corrido en un servidor**: la guía lo dice arriba.
 2. **El DNS no se migra** y ese servidor sirve sus zonas. El alta del dominio en el destino crea
    una zona desde plantilla, y añadir registros encima los duplica (dos MX). Hay que REEMPLAZAR los
-   registros de cada zona por los del origen, con la IP nueva. Contestar a A-028 §5: ¿se construye el script
+   registros de cada zona por los del origen, con la IP nueva: procedimiento en la guía, «Recrear
+   una zona en el servidor nuevo», **nunca probado**; primero con una zona poco importante.
+   Sigue abierta la pregunta de A-028 §5: ¿se automatiza en el analizador? Contestar a A-028 §5: ¿se construye el script
    que el analizador generaría para recrearlas en el destino? (El script para el origen quedó
    retirado: la herramienta no toca el servidor viejo, ADR 0019.)
 3. **Dominios con el correo en Microsoft 365**: en su propuesta, `eliminar_mail="true"` y
@@ -57,18 +59,17 @@ instrucción. El coder de hoy se identificó en `#124→#125`.
 
 ## 2. En vuelo
 
-**`#144`: la segunda ronda de cierre**, que commitea la guía (la `#142` no la commiteó: una frase
-decía que la herramienta nunca escribe en el origen, y el ADR 0019 documenta una excepción), la
-verificación de DNS en `50-hestiacp.md` y este estado. Si al retomar no está su commit
-`docs(estado): …` en `git log`, se mide y se pide.
+**`#146`: la tercera ronda de cierre**, que commitea el procedimiento para recrear una zona en la
+guía (lo pidió el coder en `#145` §6.3: la guía decía qué hacer y no cómo) y este estado. Si al
+retomar no está su commit `docs(estado): …` en `git log`, se mide y se pide.
 
-Tramo: `estado/tramos/2026-10-17-1700-migracion-caliente.md`, rondas `#124`–`#145`.
+Tramo: `estado/tramos/2026-10-17-1700-migracion-caliente.md`, rondas `#124`–`#147`.
 
 ## 3. Contadores
 
-- **`#NNN`, cadena con el coder.** Último usado: **#145** (el reporte de cierre). El próximo: **#146**.
+- **`#NNN`, cadena con el coder.** Último usado: **#147** (el reporte de cierre). El próximo: **#148**.
   El `#123` se emitió y el canal lo descartó: consume número igual.
-- **`A-NNN`, mensajes al PO.** Último usado: **A-030**. El próximo: **A-031**.
+- **`A-NNN`, mensajes al PO.** Último usado: **A-030** (el informe final de la jornada). El próximo: **A-031**.
 
 Los mensajes etiquetados `#082` y `#083` del 2026-10-17 son en realidad el `#103` y el `#104`
 (tramo del andamiaje, hallazgo 1).

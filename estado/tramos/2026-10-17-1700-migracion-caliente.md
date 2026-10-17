@@ -23,7 +23,8 @@
 | #138→#139 | Sello de versión en el paquete del analizador; commitear guía y README | completado; la lectura en frío de la guía encontró cuatro cosas | `51e0b2a` `e7513d1` `cf0e16d` |
 | #140→#141 | `IP_DESTINO` vacía en las propuestas; cron suspendido no se migra; correcciones de la guía | completado; 27 suites. La guía commiteada decía que el plan anuncia el cron suspendido: falso, lo escribió el arquitecto sin comprobarlo. Corregido después | `c02449c` `2efdc4b` `154bace` `afc6a3e` |
 | #142→#143 | Cierre: commitear la guía corregida (con «Qué se migra y qué no»), ADR 0019 y 0020, roadmap y estado | completado salvo la guía: una frase decía que la herramienta nunca escribe en el origen; el coder no la commiteó | `bb006b6` `3d0612c` `8bec5e9` |
-| #144→#145 | Segunda ronda de cierre: la guía corregida y la verificación de DNS en `50-hestiacp.md` | ronda de cierre | ver `git log` |
+| #144→#145 | Segunda ronda de cierre: la guía corregida y la verificación de DNS en `50-hestiacp.md` | completado; la lectura en frío encontró que la guía decía qué hacer con las zonas y no cómo | `142ce15` `00b0f89` `086268b` |
+| #146→#147 | Tercera ronda de cierre: procedimiento para recrear una zona en la guía | ronda de cierre | ver `git log` |
 
 ## Hallazgos
 
@@ -157,8 +158,8 @@
 
 ## Cerrado
 
-- **Duración:** de 16:30 (apertura de la jornada) a 18:00 del 2026-10-17. Rondas `#124`–`#145`,
-  once pares con el coder.
+- **Duración:** de 16:30 (apertura de la jornada) a 18:00 del 2026-10-17. Rondas `#124`–`#147`,
+  doce pares con el coder.
 - **Sin bitácora todavía**: el mandato no está cerrado; su primer uso real es el lunes. La entrada
   se escribe cuando el PO lo haya usado.
 - **Fallos propios del arquitecto, hoy**: escribir en la guía que el plan anuncia los cron
