@@ -21,7 +21,8 @@
 | #113→#114 | Dejar `AHORA.md` verdadero al cerrar | completado; **el coder encontró una cifra rancia en «Espera al PO»** | `71a0f9f` |
 | #115→#116 | Quitar esa cifra y dejar en su lugar cómo medirla | completado; **el coder encontró que un puntero de «Espera al PO» apuntaba a mensajes perdidos** | `e9b1a09` |
 | #117→#118 | Recuperar la guía de pruebas de la fase 2 en un documento | completado; **el coder encontró que la guía mandaba ensayar sin decir cómo** | `ae581a9` |
-| #119→#120 | Completar la guía: la bandera de ensayo y los cinco pasos que faltaban | completado | — |
+| #119→#120 | Completar la guía: la bandera de ensayo y los cinco pasos que faltaban | completado; **el coder vio que ninguna orden llevaba el perfil** | `eaacadd` |
+| #121→#122 | El perfil en cada orden de la guía | completado | — |
 
 ## Hallazgos
 
@@ -155,6 +156,21 @@
     **en ese orden**, porque `desactivar` se niega sin un rescate previo y esa negativa parece
     un fallo sin serlo. Y una línea diciendo que `exclusiones` está en solo lectura a
     propósito, para ahorrar un viaje.
+
+15. **La guía no decía contra QUÉ servidor se ejecuta.** Ninguna de sus trece órdenes llevaba
+    `-p <perfil>`. El encabezado decía «servidor de PRUEBAS» en negrita, pero eso es prosa y
+    lo que se copia son las líneas. Mismo patrón que el `--dry-run`: dicho en prosa, ausente
+    del comando.
+
+    Y el matiz que lo hace serio, medido por el coder: con **varios** perfiles la herramienta
+    se niega a adivinar y pide `-p`; **con uno solo, elige en silencio**. El PO acaba de
+    migrar servidores, así que su juego de perfiles puede no ser el de este clon.
+
+16. **El ensayo de `hestia exclusiones` promete una escritura que no ocurre.** El corte por
+    `--dry-run` está antes del `bc_err` que deja la orden en solo lectura, así que el ensayo
+    anuncia una copia fechada y el camino real se niega. No escribe en ninguno de los dos
+    casos. Es la única orden donde el ensayo y el camino real no dicen lo mismo, y se resuelve
+    solo al cerrar el paso 8.
 
 ## Decisiones
 

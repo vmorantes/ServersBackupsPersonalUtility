@@ -41,7 +41,8 @@
    **`.agents/docs/guia-pruebas-fase-2.md`**. Nada de eso se ha ejecutado nunca contra un
    HestiaCP real. **El ensayo es `--dry-run`, y la ayuda de `backupctl` NO lo dice de las
    subórdenes de `hestia`**: la guía lo advierte. Ensayo primero siempre, y en
-   `hestia cuentas`, una sola cuenta antes que todas.
+   `hestia cuentas`, una sola cuenta antes que todas. Cada orden lleva `-p <perfil>`: con un
+   solo perfil en la máquina, se elige **en silencio**.
 
 6. **Decidir qué sigue** (§5).
 
@@ -62,7 +63,7 @@ verificable del repositorio antes de la primera instrucción.
 ## 2. En vuelo
 
 **Nada en vuelo.** El tramo del andamiaje de jornada se cerró el 2026-10-17 con el reporte
-`#120`. No hay instrucción enviada sin reporte.
+`#122`. No hay instrucción enviada sin reporte.
 
 Rondas del día: **#103→#104** (identificación del coder y su resumen de compactación; **él
 encontró el desfase del contador**), **#105→#106** (la puerta del contador y su prueba de
@@ -70,7 +71,8 @@ rechazo), **#107→#108** (documentación, el tramo, los números a tres dígito
 (bitácora y cierre), **#111→#112** (cuadrar los recuentos de la guarda, **hallazgo suyo**) y
 **#113→#114** (dejar este archivo verdadero) y **#115→#116** (quitar una cifra rancia de
 «Espera al PO», **hallazgo suyo**) y **#117→#118** (recuperar la guía de pruebas que el
-arquitecto había podado) y **#119→#120** (completarla: le faltaba **cómo se ensaya**).
+arquitecto había podado) **#119→#120** (completarla: le faltaba **cómo se ensaya**) y **#121→#122** (el perfil en cada
+orden).
 **Siete hallazgos del coder en el día, cinco de ellos en la documentación del arquitecto.** El detalle, en
 `estado/tramos/2026-10-17-1300-andamiaje-de-jornada.md`.
 
@@ -82,9 +84,9 @@ arquitecto había podado) y **#119→#120** (completarla: le faltaba **cómo se 
 
 Son **dos**, y los dos avanzan por separado (regla `30`):
 
-- **`#NNN`, cadena con el coder.** Último usado: **#120**. El próximo: **#121**.
-- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-013**. El próximo:
-  **A-014**.
+- **`#NNN`, cadena con el coder.** Último usado: **#122**. El próximo: **#123**.
+- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-014**. El próximo:
+  **A-015**.
 
 **Reparado el 2026-10-17, y vale la pena saber por qué.** Este archivo declaraba «último usado
 #081» desde el 2026-09-24. Era **falso**: el archivo del tramo de ese mismo día registra
@@ -139,6 +141,12 @@ servidores del 2026-10-02 y, el 2026-10-17, el andamiaje de jornada.
 Las **seis** puertas del estado corren por máquina en `verificar.sh`
 (`.agents/scripts/puertas_estado.sh`, con su prueba de rechazo: 12 afirmaciones). Queda:
 
+0. **Pendientes de código, nacidos hoy** (detalle en el tramo, hallazgos 13 y 16): la sección
+   ENSAYO de la ayuda no nombra las subórdenes de `hestia`, aunque las ocho admiten
+   `--dry-run`; y el ensayo de `hestia exclusiones` anuncia una escritura que el camino real
+   se niega a hacer. Lo segundo se resuelve solo al cerrar el paso 8.
+
+
 5. **La guarda: DOS defectos distintos**, que frenaron el trabajo **cinco veces** el
    2026-10-17. Contarlos como uno haría que el arreglo dejara vivo el segundo; lo separó el
    coder.
@@ -180,12 +188,10 @@ Las **seis** puertas del estado corren por máquina en `verificar.sh`
 
 ## La lección que no se poda
 
-El 2026-09-23 se corrigieron cuatro ejemplos de `docs/hestiacp/protocolo-manual.md` y se
-anunció la guía como arreglada. Quedaban ocho en otros cuatro archivos, y **el 2026-09-24 esa
-misma documentación rompió un segundo servidor del PO**.
-
 **Una corrección parcial que se anuncia como completa es peor que no corregir**, porque quien
-la lee se fía. El relato entero y lo que salió de él, en `abrir-jornada` §7.
+la lee se fía. Y un documento correcto en lo que afirma puede ser peligroso por lo que omite.
+Las dos lecciones costaron un servidor del PO cada una. El relato entero, en `abrir-jornada`
+§7 y en el tramo del 2026-10-17.
 
 ## Para una sesión nueva
 

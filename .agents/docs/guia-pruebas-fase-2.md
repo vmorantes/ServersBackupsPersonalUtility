@@ -29,6 +29,23 @@ documentación que se sigue al pie de la letra y a la que le falta un dato.
 
 ---
 
+## LO SEGUNDO: el perfil decide contra QUÉ servidor se ejecuta
+
+Todas las órdenes de esta guía llevan **`-p <perfil-de-pruebas>`**. Sustituya el marcador por
+el nombre de su perfil de pruebas, y no lo quite.
+
+**Es lo único que decide contra qué servidor se ejecuta.** Que arriba ponga «servidor de
+PRUEBAS» es prosa; lo que se copia y se pega son las líneas.
+
+Y hay un caso que no avisa: **si en la máquina solo hay un perfil, se elige sin preguntar**.
+Con varios, `backupctl` se niega a adivinar y le pide `-p`, listando los disponibles —el
+comentario de `lib/config.sh` lo explica: adivinar cuál es el de producción sería peligroso—.
+Pero con uno solo, ese camino seguro no se recorre.
+
+`-p` puede ir en cualquier posición de la línea, también detrás de la suborden.
+
+---
+
 ## Reglas que valen para todos los pasos
 
 1. **El ensayo primero, siempre.** Se ejecuta con `--dry-run`, se lee lo que dice que va a
@@ -44,8 +61,8 @@ documentación que se sigue al pie de la letra y a la que le falta un dato.
 ## Paso 0 — el almacenamiento
 
 ```
-backupctl hestia rclone --dry-run
-backupctl hestia rclone
+backupctl -p <perfil-de-pruebas> hestia rclone --dry-run
+backupctl -p <perfil-de-pruebas> hestia rclone
 ```
 
 Es el primero de la cadena: sin remoto configurado, los demás no tienen dónde escribir. **Si
@@ -57,9 +74,9 @@ su servidor de pruebas ya lo tiene configurado, sáltelo**; `hestia status` se l
 
 | Paso | Orden (ensayo + real) | Qué comprobar POR FUERA |
 | --- | --- | --- |
-| Registrar el repositorio | `backupctl hestia restic --repo '<repo>' --dry-run`, luego sin `--dry-run` | que el panel muestre lo pedido; que el `.bak` conserve lo anterior; que el informe de la orden coincida con lo que enseña el panel |
-| Programar el respaldo | `backupctl hestia cron --dry-run`, luego sin ella | `crontab -u hestiaweb -l` enseña la línea con **ruta absoluta**; el crontab queda en modo `600` y propiedad `hestiaweb:hestiaweb` |
-| Marcar las cuentas | `backupctl hestia cuentas --usuarios <cuenta> --dry-run`, luego sin ella | `grep BACKUPS_INCREMENTAL /usr/local/hestia/data/users/*/user.conf`; **y que la cuenta siga igual en todo lo demás**: shell, cuotas, dominios |
+| Registrar el repositorio | `backupctl -p <perfil-de-pruebas> hestia restic --repo '<repo>' --dry-run`, luego sin `--dry-run` | que el panel muestre lo pedido; que el `.bak` conserve lo anterior; que el informe de la orden coincida con lo que enseña el panel |
+| Programar el respaldo | `backupctl -p <perfil-de-pruebas> hestia cron --dry-run`, luego sin ella | `crontab -u hestiaweb -l` enseña la línea con **ruta absoluta**; el crontab queda en modo `600` y propiedad `hestiaweb:hestiaweb` |
+| Marcar las cuentas | `backupctl -p <perfil-de-pruebas> hestia cuentas --usuarios <cuenta> --dry-run`, luego sin ella | `grep BACKUPS_INCREMENTAL /usr/local/hestia/data/users/*/user.conf`; **y que la cuenta siga igual en todo lo demás**: shell, cuotas, dominios |
 
 ### El tercero es el delicado
 
@@ -81,8 +98,8 @@ Son distintas.
 ## Paso 4 — la copia comprobada, que es la prueba de verdad
 
 ```
-backupctl hestia copia --usuarios <cuenta> --dry-run
-backupctl hestia copia --usuarios <cuenta>
+backupctl -p <perfil-de-pruebas> hestia copia --usuarios <cuenta> --dry-run
+backupctl -p <perfil-de-pruebas> hestia copia --usuarios <cuenta>
 ```
 
 **Este paso es el que demuestra que el respaldo funciona, y no hay que esperar al día
@@ -97,11 +114,11 @@ Hágalo **después** de marcar la cuenta y **antes** de dar nada por bueno.
 ## Paso 5 — las claves, y luego desactivar. En ese orden
 
 ```
-backupctl hestia keys --dry-run
-backupctl hestia keys
+backupctl -p <perfil-de-pruebas> hestia keys --dry-run
+backupctl -p <perfil-de-pruebas> hestia keys
 
-backupctl hestia desactivar --dry-run
-backupctl hestia desactivar
+backupctl -p <perfil-de-pruebas> hestia desactivar --dry-run
+backupctl -p <perfil-de-pruebas> hestia desactivar
 ```
 
 **No son dos pasos independientes.** `desactivar` **se niega** si no encuentra un rescate
@@ -133,7 +150,7 @@ copia lanzada a mano funciona. Falta que funcione **sola**.
 Al día siguiente, con el cron ya ejecutado:
 
 ```
-backupctl hestia status
+backupctl -p <perfil-de-pruebas> hestia status
 ```
 
 Tiene que enseñar **una instantánea reciente**. Si no la hay, algo de la cadena falló en
