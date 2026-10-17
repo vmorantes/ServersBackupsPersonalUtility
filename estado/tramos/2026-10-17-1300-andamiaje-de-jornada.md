@@ -17,7 +17,8 @@
 | #105→#106 | La puerta del contador contra los tramos, con su prueba de rechazo | completado | `4267744` `c2e67c2` |
 | #107→#108 | Documentación, el archivo de este tramo, y los números a tres dígitos | completado; **el coder separó dos defectos de la guarda que se contaban como uno** | `5427423` `dac630b` `0bf1291` |
 | #109→#110 | Cierre: bitácora 0003 y el estado al día | completado; **el coder encontró que los tres documentos daban tres recuentos distintos de los bloqueos de la guarda** | `3d4203b` `4fdc632` |
-| #111→#112 | Corregir los recuentos, con auditoría de los cinco bloqueos | completado | — |
+| #111→#112 | Corregir los recuentos, con auditoría de los cinco bloqueos | completado | `86cf1ae` |
+| #113→#114 | Dejar `AHORA.md` verdadero al cerrar | completado | — |
 
 ## Hallazgos
 
@@ -74,6 +75,14 @@
    jornada se dedicó a cazar**, cometido en el documento que lo cuenta. Ninguna puerta lo
    detecta: comparan números de mensaje, no prosa. Corregido con una auditoría de los cinco
    bloqueos, uno a uno.
+
+8. **Cerrar el estado tiene un bucle, y hay que escribir pre-fechado para salir de él.** Cada
+   actualización de `estado/` necesita un commit, que necesita una ronda, que genera estado
+   nuevo que actualizar. La salida es la que se usó aquí: el arquitecto escribe la ronda de
+   cierre **como ya ocurrida** —su número, su fila en este archivo, los contadores—, de modo
+   que cuando el coder la commitea, lo escrito es verdad. Es lo mismo que ya se hacía con los
+   contadores, aplicado también a la sección «En vuelo». Sin eso, `AHORA.md` termina siempre
+   el día diciendo que hay una ronda en vuelo que ya terminó.
 
 ## Decisiones
 

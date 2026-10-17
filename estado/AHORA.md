@@ -10,9 +10,10 @@
 ## Al retomar — el primer paso, uno solo
 
 1. Poner los dos nombres de sesión (§1) y comprobarlos en la lista.
-2. `bash .agents/scripts/verificar.sh` — tiene que salir en verde.
-3. **Commitear el árbol pendiente** (§2). Está escrito y verificado; solo falta el commit.
+2. **Medir si hay coder**, listando las sesiones. No suponerlo (regla `30`).
+3. `bash .agents/scripts/verificar.sh` — tiene que salir en verde, 23 suites y seis puertas.
 4. Preguntar al PO qué sigue: hay dos frentes abiertos y **él elige** (§5).
+
 
 ## Espera al PO
 
@@ -43,50 +44,27 @@ verificable del repositorio antes de la primera instrucción.
 
 ## 2. En vuelo
 
-**En vuelo: la instrucción #111**, que corrige los recuentos de los bloqueos de la guarda: los
-tres documentos de la jornada daban tres cifras distintas, y lo encontró el coder al firmarlos.
-Cuando reporte, **nada en vuelo**.
+**Nada en vuelo.** El tramo del andamiaje de jornada se cerró el 2026-10-17 con el reporte
+`#114`. No hay instrucción enviada sin reporte.
 
-Cerradas hoy: **#103→#104** (identificación del coder y su resumen de compactación; **él
+Rondas del día: **#103→#104** (identificación del coder y su resumen de compactación; **él
 encontró el desfase del contador**), **#105→#106** (la puerta del contador y su prueba de
-rechazo: 12 afirmaciones, y la puerta vista fallar contra una copia del repositorio real) y
-**#107→#108** (documentación, el archivo del tramo, y los números a tres dígitos). El detalle entero, en
+rechazo), **#107→#108** (documentación, el tramo, los números a tres dígitos), **#109→#110**
+(bitácora y cierre), **#111→#112** (cuadrar los recuentos de la guarda, **hallazgo suyo**) y
+**#113→#114** (dejar este archivo verdadero). El detalle, en
 `estado/tramos/2026-10-17-1300-andamiaje-de-jornada.md`.
 
-**El coder existe y está abierto**: `ServersBackupsPersonalUtility-Coder-Main`, renombrada por
-el PO el 2026-10-17 a las 13:29 y compactada después.
 
-**Desviación del 2026-10-17, anotada a propósito:** todo el andamiaje de jornada —las tres
-skills, las dos puertas y sus ocho commits— lo escribió y lo commiteó **el arquitecto, sin
-coder**, por orden expresa del PO («implementa las puertas, deja el árbol limpio»). La regla
-`30` reserva el commit al coder. La orden del PO autoriza la excepción; que quede escrita es
-lo que impide que se convierta en costumbre. **Lo siguiente que toque `lib/`, `bin/`, `web/`
-o `tools/` va por coder**, sin excepción: ahí la regla no la mueve la prisa.
+**El árbol queda limpio.** Nada sin commitear.
 
-Y el agravante, que es el que deja lección: el arquitecto afirmó que **no había coder** sin
-comprobarlo. Lo había, abierto y renombrado por el PO. Bastaba una orden —listar las sesiones—
-para saberlo. **Antes de afirmar que algo no existe, se mide**; para afirmar que algo NO está,
-hace falta la salida completa, no la impresión.
-
-**El árbol está sucio a propósito**, con trabajo del arquitecto sin commitear:
-
-| Archivo | Qué es | Commit propuesto |
-| :-- | :-- | :-- |
-| `.gitignore` | Excluye `migraciones/` salvo su README | `chore: excluir los archivos de migración` |
-| `.agents/docs/mejoras-herramienta-migracion.md` | Doce mejoras de la herramienta de migración, con la evidencia del 2026-10-02 | `docs: mejoras de la herramienta de migración` |
-| `.agents/skills/{abrir-jornada,asentar-estado,cerrar-jornada}/` + enlaces en `.claude/skills/` | Las tres skills de jornada | `docs(agentes): skills de jornada` |
-| `.agents/skills/cierre-de-tramo/` **borrada** + su enlace | Unificada en `cerrar-jornada` | el mismo commit |
-| `.agents/rules/30-protocolo-coder.md` | Contador `A-NNN` y partes numeradas | `docs(agentes): etiquetar los mensajes al PO` |
-| `.agents/scripts/puertas_estado.sh` + `probar_puertas_estado.sh` + `verificar.sh` | Las puertas del estado, con su prueba de rechazo | `feat(agentes): puertas del estado versionado` |
-| `migraciones/` | **Fuera de git**: lleva datos reales del PO | no se commitea |
 
 ## 3. Contadores
 
 Son **dos**, y los dos avanzan por separado (regla `30`):
 
-- **`#NNN`, cadena con el coder.** Último usado: **#112**. El próximo: **#113**.
-- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-009**. El próximo:
-  **A-010**.
+- **`#NNN`, cadena con el coder.** Último usado: **#114**. El próximo: **#115**.
+- **`A-NNN`, mensajes al PO.** Estrenado el 2026-10-17. Último usado: **A-010**. El próximo:
+  **A-011**.
 
 **Reparado el 2026-10-17, y vale la pena saber por qué.** Este archivo declaraba «último usado
 #081» desde el 2026-09-24. Era **falso**: el archivo del tramo de ese mismo día registra
