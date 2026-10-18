@@ -27,7 +27,8 @@
 | #148→#149 | Recrear zonas DNS en el destino (PO: «los DNS entran») | bloqueado en PASO 0: el arquitecto citó `#149` en el tramo sin subir el contador de `AHORA.md` (segunda vez hoy) | — |
 | #150→#151 | Contador corregido; seguir con #148 | completado; revisión: restauración sin probar de verdad, órdenes del panel sin ruta (fallarían con sudo), salida 0 con fallo de respaldo | `fcaf260` `164f7cf` `18b9792` |
 | #152→#153 | Arreglos de la revisión | completado; restauración probada (6 fallos con ella desactivada); el coder halló un aviso muerto suyo (variable en subshell) | `0e79e79` |
-| #154 | Commit de la guía de zonas y el estado | en vuelo | — |
+| #154→#155 | Commit de la guía de zonas y el estado | completado; lectura en frío: 3 discrepancias menores de la guía | `b338228` `1137d10` |
+| #156 | Commit de las tres correcciones | en vuelo | — |
 | #146→#147 | Tercera ronda de cierre: procedimiento para recrear una zona en la guía | ronda de cierre | ver `git log` |
 
 ## Hallazgos

@@ -58,18 +58,18 @@ instrucción. El coder de hoy se identificó en `#124→#125`.
 
 ## 2. En vuelo
 
-**`#154`: commitear la documentación de las zonas** (`docs/migracion/caliente.md`,
-`tools/migracion-caliente/README.md`) y este estado. Código ya hecho y revisado: `164f7cf`
-(analizador exporta zonas), `18b9792` y `0e79e79` (`recrear-zonas.sh`, endurecido tras revisión;
-122 afirmaciones). Reporte esperado: `#155`.
+**`#156`: commitear tres correcciones de la guía** que encontró la lectura en frío de `#155`
+(un aviso citado no literal, el estado `RECHAZADA` en el resumen, la plantilla `default-nomail`).
+Zonas DNS: código y guía commiteados (`164f7cf` `18b9792` `0e79e79` `b338228`). Reporte
+esperado: `#157`.
 
-Tramo: `estado/tramos/2026-10-17-1700-migracion-caliente.md`, rondas `#124`–`#155`.
+Tramo: `estado/tramos/2026-10-17-1700-migracion-caliente.md`, rondas `#124`–`#157`.
 
 ## 3. Contadores
 
-- **`#NNN`, cadena con el coder.** Último usado: **#154**. El próximo: **#155** (reporte).
+- **`#NNN`, cadena con el coder.** Último usado: **#156**. El próximo: **#157** (reporte).
   El `#123` se emitió y el canal lo descartó: consume número igual.
-- **`A-NNN`, mensajes al PO.** Último usado: **A-036**. El próximo: **A-037**.
+- **`A-NNN`, mensajes al PO.** Último usado: **A-037**. El próximo: **A-038**.
 
 Los mensajes etiquetados `#082` y `#083` del 2026-10-17 son en realidad el `#103` y el `#104`
 (tramo del andamiaje, hallazgo 1).
