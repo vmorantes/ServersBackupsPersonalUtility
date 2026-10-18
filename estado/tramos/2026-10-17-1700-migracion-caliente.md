@@ -28,7 +28,8 @@
 | #150→#151 | Contador corregido; seguir con #148 | completado; revisión: restauración sin probar de verdad, órdenes del panel sin ruta (fallarían con sudo), salida 0 con fallo de respaldo | `fcaf260` `164f7cf` `18b9792` |
 | #152→#153 | Arreglos de la revisión | completado; restauración probada (6 fallos con ella desactivada); el coder halló un aviso muerto suyo (variable en subshell) | `0e79e79` |
 | #154→#155 | Commit de la guía de zonas y el estado | completado; lectura en frío: 3 discrepancias menores de la guía | `b338228` `1137d10` |
-| #156 | Commit de las tres correcciones | en vuelo | — |
+| #156→#157 | Commit de las tres correcciones | completado | `9a39d74` `1b21ad9` |
+| #158 | Ronda de cierre: estado, tramo, roadmap | en vuelo | ver `git log` |
 | #146→#147 | Tercera ronda de cierre: procedimiento para recrear una zona en la guía | ronda de cierre | ver `git log` |
 
 ## Hallazgos
@@ -152,6 +153,18 @@
 35. **Tercera afirmación absoluta del arquitecto en la guía, el mismo día**: «nunca modifica el
     servidor viejo», contradicha por su propio ADR 0019. La cazó el coder en la ronda de cierre.
 
+36. **Segundo tramo (18:30-19:45): zonas DNS.** El PO preguntó si estaba listo; respuesta NO por el
+    DNS. PO: «Sí, los DNS entran» (A-033). Verificación en la fuente: `v-insert-dns-records` da
+    falso éxito si el archivo no existe (por eso el script compara con `cmp`); el rebuild ignora
+    el reinicio. Depositado en `50-hestiacp.md`.
+37. **Revisión del código del coder** (`#151`): las pruebas de restauración no la ejercitaban;
+    órdenes del panel sin ruta (fallarían con `sudo`); salida 0 con fallo de respaldo. Arreglado en
+    `#152→#153`; el coder halló además un aviso muerto suyo (variable dentro de `$(...)`).
+38. **Fallo propio, otra vez**: citar `#149` en el tramo sin subir `AHORA.md`; bloqueó el PASO 0
+    del coder. Mismo error que con `#133` esta mañana.
+39. **Guarda, defecto A otra vez**: bloqueó un heredoc del coder con `rm` dentro, y dos órdenes
+    del arquitecto por palabras de un texto (órdenes del panel; el posesivo «su»).
+
 ## Decisiones
 
 - ADR 0018: copia intacta primero, analizador de solo lectura, tipo CodeIgniter 3, y la
@@ -160,11 +173,15 @@
   migran; las propuestas dejan vacío lo que no saben.
 - ADR 0020: las claves de los respaldos fuera del repositorio (mandato del PO), sin implementar.
 - La fase 2 de la 2.1 queda aparcada.
+- PO, 2026-10-17 (A-033): las zonas DNS entran para el lunes. Diseño: el analizador exporta, el
+  destino recrea (ADR 0019: nada en el viejo). Sin ADR propio: cabe en 0018/0019.
 
 ## Cerrado
 
 - **Duración:** de 16:30 (apertura de la jornada) a 18:00 del 2026-10-17. Rondas `#124`–`#147`,
   doce pares con el coder.
+- **Segundo tramo:** de 18:30 a 19:45. Rondas `#148`–`#158` (más su reporte). Zonas DNS: código `164f7cf`
+  `18b9792` `0e79e79`, guía `b338228` `9a39d74`.
 - **Sin bitácora todavía**: el mandato no está cerrado; su primer uso real es el lunes. La entrada
   se escribe cuando el PO lo haya usado.
 - **Fallos propios del arquitecto, hoy**: escribir en la guía que el plan anuncia los cron
@@ -175,5 +192,5 @@
 ## Pendiente del PO
 
 En `estado/AHORA.md`, «Espera al PO», puntos 1 a 9. Lo más urgente: la migración del lunes con
-`docs/migracion/caliente.md`, la respuesta sobre el script de zonas DNS (A-028 §5), y rotar las
+`docs/migracion/caliente.md` (zonas incluidas), el `git push` de la rama, y rotar las
 credenciales que estuvieron versionadas.

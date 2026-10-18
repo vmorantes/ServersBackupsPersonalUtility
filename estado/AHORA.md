@@ -4,14 +4,14 @@
 > preguntas de abajo. Si alguna no se contesta aquí, **el estado falló y arreglarlo es el primer
 > trabajo del día**.
 
-- **Actualizado:** 2026-10-17, noche, al enviar `#148`.
+- **Actualizado:** 2026-10-17, 19:45, al cerrar la jornada (segundo tramo del día).
 - **Formato:** contrato de `cerrar-jornada` §2.2. Tope: 200 líneas.
 
 ## Al retomar — el primer paso, uno solo
 
 1. Comprobar los dos nombres de sesión (§1) en la lista de sesiones, y **medir si hay coder**.
 2. `bash .agents/scripts/verificar.sh` — tiene que salir en verde.
-3. Comprobar que la ronda de cierre `#146` llegó a commitearse (§2). Si no, pedir su reporte.
+3. Comprobar que la ronda de cierre `#158` llegó a commitearse (§2). Si no, pedir su reporte.
 4. Seguir lo que el PO conteste en «Espera al PO».
 
 ## Espera al PO
@@ -21,12 +21,10 @@
    `feat/migracion-caliente`. Primero el analizador con `--rapido` en el origen; empezar por la
    cuenta más pequeña. Lo añadido (analizador, `codeigniter3`, arreglos de `plan`/`verificar`, cron
    suspendidos) **nunca ha corrido en un servidor**: la guía lo dice arriba.
-2. **El DNS no se migra** y ese servidor sirve sus zonas. El alta del dominio en el destino crea
-   una zona desde plantilla, y añadir registros encima los duplica (dos MX). Hay que REEMPLAZAR los
-   registros de cada zona por los del origen, con la IP nueva: procedimiento en la guía, «Recrear
-   una zona en el servidor nuevo», **nunca probado**; primero con una zona poco importante.
-   Ya hay herramienta: `recrear-zonas.sh`, pasos en la guía, «Recrear una zona en el servidor
-   nuevo». Sin probar en servidor: una zona poco importante primero, sin `--aplicar`.
+2. **Zonas DNS: `recrear-zonas.sh`** (pedido por el PO, A-033). Va en el servidor nuevo, tras la
+   fase 1 y antes de cambiar los NS. Pasos en la guía, «Recrear una zona en el servidor nuevo».
+   **Nunca probado en un servidor**: una zona poco importante primero, sin `--aplicar`, revisar
+   el diff (IP, NS, `mail._domainkey`, un solo MX), aplicar, `dig` contra el nuevo.
 3. **Dominios con el correo en Microsoft 365**: en su propuesta, `eliminar_mail="true"` y
    `correo="false"`. CONFIRMADO en la fuente: con dominio de correo local, el servidor no manda al
    MX lo que él mismo envía a ese dominio (`50-hestiacp.md`, «Zonas DNS al migrar»).
@@ -58,18 +56,16 @@ instrucción. El coder de hoy se identificó en `#124→#125`.
 
 ## 2. En vuelo
 
-**`#156`: commitear tres correcciones de la guía** que encontró la lectura en frío de `#155`
-(un aviso citado no literal, el estado `RECHAZADA` en el resumen, la plantilla `default-nomail`).
-Zonas DNS: código y guía commiteados (`164f7cf` `18b9792` `0e79e79` `b338228`). Reporte
-esperado: `#157`.
+**`#158`: ronda de cierre**, commitea este estado, el tramo y el roadmap. Si al retomar no está
+su commit `docs(estado): …` en `git log`, se mide y se pide su reporte (`#159`).
 
-Tramo: `estado/tramos/2026-10-17-1700-migracion-caliente.md`, rondas `#124`–`#157`.
+Tramo: `estado/tramos/2026-10-17-1700-migracion-caliente.md`, rondas `#124`–`#159`.
 
 ## 3. Contadores
 
-- **`#NNN`, cadena con el coder.** Último usado: **#156**. El próximo: **#157** (reporte).
+- **`#NNN`, cadena con el coder.** Último usado: **#158** (ronda de cierre). El próximo: **#159** (su reporte).
   El `#123` se emitió y el canal lo descartó: consume número igual.
-- **`A-NNN`, mensajes al PO.** Último usado: **A-037**. El próximo: **A-038**.
+- **`A-NNN`, mensajes al PO.** Último usado: **A-039** (informe de cierre). El próximo: **A-040**.
 
 Los mensajes etiquetados `#082` y `#083` del 2026-10-17 son en realidad el `#103` y el `#104`
 (tramo del andamiaje, hallazgo 1).
@@ -94,8 +90,8 @@ Arriba, en «Espera al PO». Si cambia, se cambia en los dos sitios o en ninguno
 1. Hecho y commiteado en `feat/migracion-caliente`: copia intacta (13/13 sumas, `d3461b8`),
    `codeigniter3` (`3be710b`, `6220a9e`), falso OK de `verificar` (`641733a`), analizador
    (`dd414c2`, `51e0b2a`), IP de destino vacía (`c02449c`), cron suspendidos (`2efdc4b`), guía.
-2. **Zonas DNS**: HECHO (`recrear-zonas.sh`), sin probar en servidor. Antes: La vía verificada (reemplazar el `.conf` de la zona y regenerar)
-   está en `50-hestiacp.md`. Depende de la respuesta del PO (Espera §2).
+2. Zonas DNS: hecho (`164f7cf`, `18b9792`, `0e79e79`; guía `b338228`, `9a39d74`). Lo que solo
+   se ve en un servidor: Espera §2.
 3. `IP_ORIGEN="REVISAR_IP_ORIGEN"` cuando no se lee ninguna IP: dejar vacío (roadmap).
 
 ### Después del lunes
