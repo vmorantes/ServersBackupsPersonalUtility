@@ -64,8 +64,8 @@ conexión se corta de golpe, puede quedarse allí: búscalo y bórralo.
 !!! warning "Nunca probado en un servidor"
     `recrear-zonas.sh` está probado solo con datos inventados y órdenes del panel falsas.
     Lo que solo se ve en un servidor está sin comprobar: cómo escribe el panel la línea
-    `mail._domainkey`, las plantillas de zona distintas de `default` (`office365`,
-    `gmail`, `zoho`, `child-ns`), que el DNS recargue de verdad, y una zona con DNSSEC.
+    `mail._domainkey`, las plantillas de zona distintas de `default` (`default-nomail`,
+    `office365`, `gmail`, `zoho`, `child-ns`), que el DNS recargue de verdad, y una zona con DNSSEC.
     Empieza por **una** zona poco importante y no sigas hasta haberla comprobado (paso 5).
 
 Lo hace `tools/migracion-caliente/recrear-zonas.sh`, en el servidor **nuevo**, después de
@@ -117,8 +117,8 @@ Y **reemplaza** la zona entera: no quedan dos MX.
     - `mail._domainkey`: la clave del **nuevo**, no la del viejo. Esto es lo que menos
       seguro está (ver el aviso de arriba): míralo aquí antes de aplicar;
     - los MX: **uno**, el del viejo. Si dice 2, para;
-    - `apunta a una IP que no es ninguna de las dos`: registros hacia servicios de fuera,
-      que no se cambian. Comprueba que de verdad son de fuera;
+    - `el registro «…» (A) apunta a «…», que no es ninguna de las dos IP`: registros hacia
+      servicios de fuera, que no se cambian. Comprueba que de verdad son de fuera;
     - `ip4 con prefijo /N y se ha reescrito`: el SPF autorizaba una red entera, y el script
       la ha cambiado a la red del nuevo. Casi nunca es lo que quieres: decide a mano qué
       debe decir ese SPF;
@@ -133,7 +133,8 @@ Y **reemplaza** la zona entera: no quedan dos MX.
    zona a zona y comprueba que el archivo del panel quedó exactamente como la propuesta (la
    orden del panel puede decir que fue bien sin haber hecho nada); si no, restaura esa zona
    de su copia y sigue con las demás. Al final regenera las zonas una vez e imprime, por
-   zona, `CARGADA`, `SALTADA` o `FALLO`. Si alguna falló, sale con error.
+   zona, `CARGADA`, `SALTADA`, `RECHAZADA` (una línea que no sabe leer: no se cargó) o
+   `FALLO`. Si alguna falló, sale con error.
 
 5. **Compruébala contra el nuevo, antes de tocar los NS.** Que la regeneración salga bien no
    demuestra que el DNS sirva la zona nueva: el panel no comprueba el reinicio.
