@@ -15,9 +15,6 @@ Hecho en `feat/migracion-caliente`: copia intacta, tipo `codeigniter3`, analizad
 lectura, arreglos de `plan`/`verificar`, cron suspendidos y la guía `docs/migracion/caliente.md`.
 Primer uso real: el PO, el 2026-10-19. Lo que queda:
 
-- [ ] **Zonas DNS**: la herramienta no las migra. Propuesto que el analizador genere, por zona,
-      el script que las recrea en el destino con la IP nueva (A-028 §3.1). Pendiente de la
-      verificación de las órdenes DNS y de la respuesta del PO.
 - [ ] `IP_ORIGEN="REVISAR_IP_ORIGEN"` cuando el analizador no lee ninguna IP: dejarlo vacío.
 - [ ] `BASE_COMPROBAR.sh:285` busca `PROXY_TPL`; la clave es `PROXY`.
 - [ ] Crear suspendidos los cron suspendidos en vez de omitirlos (ADR 0019 §2), verificado.
