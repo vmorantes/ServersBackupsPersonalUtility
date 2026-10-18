@@ -28,9 +28,13 @@ La guía completa, paso a paso, está en `docs/migracion/caliente.md`. En resume
 3. `construir.sh` la empaqueta en un único archivo ejecutable, que se sube al servidor de
    **destino** y se ejecuta allí como root, por fases: `plan`, `1`, `sincronizar`, corte de DNS,
    `2`, `verificar`.
+4. `recrear-zonas.sh` recrea en el **destino** las zonas DNS que el analizador exportó del
+   origen (`zonas/<cuenta>/`), con la IP, los NS y la clave DKIM del destino. Va después de la
+   fase 1 y antes del corte de DNS. Sin `--aplicar` solo muestra el diff.
 
 Lo añadido aquí después de la copia (el analizador, el tipo `codeigniter3`, el arreglo de
-`plan` y `verificar`) solo se ha probado con datos inventados: ver `tests/probar_migracion_*.sh`.
+`plan` y `verificar`, `recrear-zonas.sh`) solo se ha probado con datos inventados: ver
+`tests/probar_migracion_*.sh`.
 
 ## Cuidado
 

@@ -33,7 +33,7 @@ Esta página es la vía rápida.
 | Correo | Sí | Cuentas, contraseñas sin cambiarlas, alias, reenvíos, cuotas y buzones enteros. **La clave DKIM es nueva**: hay que publicarla en el DNS |
 | Cron | Sí, salvo dos casos | Los suspendidos en el origen no se migran; los puestos a mano con `crontab -e` no los ve |
 | Cuentas FTP | **No** | Solo se informan |
-| **Zonas DNS** | **No se copian** | HestiaCP crea en el nuevo una zona por defecto, que no es la tuya. Ver abajo |
+| **Zonas DNS** | **No las copia la migración** | HestiaCP crea en el nuevo una zona por defecto, que no es la tuya. Se recrean aparte, con `recrear-zonas.sh`. Ver abajo |
 
 La herramienta **no cambia nada tuyo en el servidor viejo**: solo lee de él. Lo que haya
 que cambiar allí lo haces tú. La única excepción: si el acceso a MySQL del origen va con
@@ -41,8 +41,9 @@ usuario y contraseña (`MYSQL_ORIGEN_AUTH="user"`; por defecto es `socket`), dej
 `/tmp` un archivo temporal con esa contraseña mientras trabaja, y lo borra al salir. Si la
 conexión se corta de golpe, puede quedarse allí: búscalo y bórralo.
 
-!!! danger "El DNS no se migra"
-    La herramienta no copia ningún registro DNS. Pero al crear cada dominio en el
+!!! danger "La migración no copia el DNS"
+    Las fases de la migración no copian ningún registro DNS; eso lo hace aparte
+    `recrear-zonas.sh` (más abajo). Pero al crear cada dominio en el
     servidor nuevo, HestiaCP **sí le crea una zona**, desde la plantilla DNS del paquete
     de la cuenta. Con la plantilla `default` trae sus propios `@ NS` (los del servidor
     nuevo), `@ A`, `www`, `mail`, `@ MX 0 mail.<dominio>`, un SPF, `_dmarc` y registros
@@ -55,57 +56,109 @@ conexión se corta de golpe, puede quedarse allí: búscalo y bórralo.
     quedarían dos `@ A`, dos SPF y **dos MX**, y el correo se repartiría entre los dos
     destinos. Hay que **reemplazar** los registros de la zona por los tuyos, no sumarlos.
     Y borrarlos uno a uno no sirve: HestiaCP no deja borrar el último `A` ni el último
-    `NS`, y no tiene orden para vaciar una zona. El informe del analizador te dice qué
-    cuentas tienen zonas y cuántos registros tiene cada una.
+    `NS`, y no tiene orden para vaciar una zona. Por eso `recrear-zonas.sh` reemplaza la
+    zona entera.
 
 ### Recrear una zona en el servidor nuevo
 
-!!! warning "Nunca probado"
-    Este procedimiento sale de leer el código de HestiaCP 1.10.5, no de haberlo hecho.
-    Pruébalo primero con **una** zona poco importante y comprueba el resultado (paso 5)
-    antes de seguir con las demás.
+!!! warning "Nunca probado en un servidor"
+    `recrear-zonas.sh` está probado solo con datos inventados y órdenes del panel falsas.
+    Lo que solo se ve en un servidor está sin comprobar: cómo escribe el panel la línea
+    `mail._domainkey`, las plantillas de zona distintas de `default` (`office365`,
+    `gmail`, `zoho`, `child-ns`), que el DNS recargue de verdad, y una zona con DNSSEC.
+    Empieza por **una** zona poco importante y no sigas hasta haberla comprobado (paso 5).
 
-Después de la fase 1 (la zona ya existe en el nuevo), para cada dominio:
+Lo hace `tools/migracion-caliente/recrear-zonas.sh`, en el servidor **nuevo**, después de
+la fase 1 (la zona tiene que existir ya allí) y **antes** de cambiar los NS. Solo escribe en
+el nuevo. De cada zona del viejo conserva todo salvo tres cosas:
 
-1. **Copia los registros del viejo.** Están en
-   `/usr/local/hestia/data/users/<cuenta>/dns/<dominio>.conf`, un registro por línea. Es
-   solo leer: tráete una copia al servidor nuevo, por ejemplo a
-   `/root/zona-<dominio>.conf`.
-2. **Ajústala, a mano**, antes de cargarla:
-    - la IP del servidor viejo, por la del nuevo, en todos los registros que la lleven;
-    - los registros `NS`: los nombres de tus servidores de nombres tal como quedarán
-      después del cambio;
-    - `mail._domainkey`: si el dominio tiene correo en el servidor nuevo, la clave DKIM es
-      **nueva**. Sustituye esa línea por la que tiene ahora la zona del nuevo (en el mismo
-      archivo del nuevo). Si el correo está fuera (Microsoft 365), conserva los registros
-      que el proveedor te dio, no los del panel.
-3. **Cárgala**, reemplazando los registros de la zona del nuevo (el archivo se mueve, no
-   se copia):
+- la IP del viejo pasa a la del nuevo, en los valores que son exactamente esa IP y en el
+  `ip4:` del SPF;
+- los NS del vértice (`@`) se toman de la zona que ya tiene el nuevo; las delegaciones de
+  subdominios se conservan;
+- `mail._domainkey` se toma del nuevo (la clave DKIM del viejo no sirve allí). Otros
+  selectores, como el `selector1._domainkey` de Microsoft 365, se conservan.
 
-    ```bash
-    /usr/local/hestia/bin/v-insert-dns-records <cuenta> <dominio> /root/zona-<dominio>.conf
-    ```
+Y **reemplaza** la zona entera: no quedan dos MX.
 
-4. **Regenera las zonas de la cuenta**:
+1. **Exporta las zonas del viejo.** Lo hace el analizador (paso 1 de esta guía), sin
+   escribir nada en el viejo. Al final dice dónde quedaron:
+   `Zonas DNS : /tmp/analisis-hestia.XXXX/zonas/<cuenta>/`, y en el informe, por zona,
+   `exportada a zonas/<cuenta>/<dominio>.conf`. Si una dice `no disponible`, esa no se
+   exportó. Si alguna usa **DNSSEC**, el informe lo avisa: quita el DS en el registrador
+   antes de cambiar los NS, porque el nuevo genera claves propias.
 
-    ```bash
-    /usr/local/hestia/bin/v-rebuild-dns-domains <cuenta>
-    ```
-
-5. **Compruébala contra el servidor nuevo, antes de tocar los NS**, preguntándole a él
-   directamente:
+2. **Llévalas al nuevo, desde tu equipo** (no de servidor a servidor):
 
     ```bash
-    dig +short example.org A  @203.0.113.20
-    dig +short example.org MX @203.0.113.20
-    dig +short example.org TXT @203.0.113.20
+    scp -r root@<viejo>:/tmp/analisis-hestia.XXXX/zonas ./zonas
+    scp -r ./zonas root@<nuevo>:/root/
+    scp tools/migracion-caliente/recrear-zonas.sh root@<nuevo>:/root/
     ```
 
-    Tiene que salir lo mismo que en el viejo, con la IP nueva. Un solo MX, y el tuyo.
+3. **En el nuevo, primero sin aplicar.** No escribe nada; muestra, zona por zona, los
+   registros y MX antes y después, los avisos y el diff completo, y termina en
+   `NO SE HA APLICADO NADA`:
 
-Si el dominio usa **DNSSEC** en el viejo, el nuevo generará claves propias y el registro
-DS del registrador dejará de coincidir: sin verificar qué pasa exactamente, pero no
-cambies los NS de un dominio con DNSSEC sin revisar eso antes.
+    ```bash
+    bash /root/recrear-zonas.sh \
+      --cuenta <cuenta> \
+      --zonas /root/zonas/<cuenta> \
+      --ip-origen <IP del viejo> \
+      --ip-destino <IP del nuevo> \
+      --dominio <la zona poco importante>
+    ```
+
+    Qué mirar en el diff:
+
+    - la IP: `@ A`, `mail A` y el `ip4:` del SPF con la IP del **nuevo**, y ningún valor con
+      la del viejo;
+    - los NS del vértice: los del **nuevo**;
+    - `mail._domainkey`: la clave del **nuevo**, no la del viejo. Esto es lo que menos
+      seguro está (ver el aviso de arriba): míralo aquí antes de aplicar;
+    - los MX: **uno**, el del viejo. Si dice 2, para;
+    - `apunta a una IP que no es ninguna de las dos`: registros hacia servicios de fuera,
+      que no se cambian. Comprueba que de verdad son de fuera;
+    - `ip4 con prefijo /N y se ha reescrito`: el SPF autorizaba una red entera, y el script
+      la ha cambiado a la red del nuevo. Casi nunca es lo que quieres: decide a mano qué
+      debe decir ese SPF;
+    - `REVÍSALO: se cargaría con la IP vieja`: una línea que no pudo reescribir. No apliques;
+    - zonas `SALTADA` (no existen en el nuevo: crea el dominio primero) o `RECHAZADA` (una
+      línea que el script no sabe leer): esas no se cargarán.
+
+    Si el panel no está en `/usr/local/hestia`, pon `HESTIA_DIR=/ruta/del/panel` delante.
+
+4. **Aplica**: la misma orden con `--aplicar` al final. Antes de cargar nada copia cada zona
+   del nuevo a `/root/zonas-respaldo/<cuenta>-<fecha>/` y deja ahí `deshacer-zonas.sh`. Carga
+   zona a zona y comprueba que el archivo del panel quedó exactamente como la propuesta (la
+   orden del panel puede decir que fue bien sin haber hecho nada); si no, restaura esa zona
+   de su copia y sigue con las demás. Al final regenera las zonas una vez e imprime, por
+   zona, `CARGADA`, `SALTADA` o `FALLO`. Si alguna falló, sale con error.
+
+5. **Compruébala contra el nuevo, antes de tocar los NS.** Que la regeneración salga bien no
+   demuestra que el DNS sirva la zona nueva: el panel no comprueba el reinicio.
+
+    ```bash
+    dig @203.0.113.20 example.org SOA +norecurse
+    dig @203.0.113.20 example.org MX  +norecurse
+    dig @203.0.113.20 example.org A   +norecurse
+    dig @203.0.113.20 example.org TXT +norecurse
+    ```
+
+    Tiene que salir el `A` con la IP nueva, **un** MX, el SPF con el `ip4:` nuevo y los NS
+    del nuevo. Si no responde o dice `REFUSED`, no cambies los NS. El serial de la zona no
+    cambia.
+
+6. **Si algo sale mal**:
+
+    ```bash
+    bash /root/zonas-respaldo/<cuenta>-<fecha>/deshacer-zonas.sh
+    ```
+
+    Devuelve cada zona a como estaba justo antes de aplicar y dice, por zona, `restaurada` o
+    `FALLO al restaurar`.
+
+Con la primera zona comprobada, repite el paso 3 sin `--dominio` para el resto.
 
 !!! danger "Dominios con el correo fuera (por ejemplo, Microsoft 365)"
     La migración les crea igualmente un dominio de correo local en el servidor nuevo
@@ -229,7 +282,8 @@ Todas se ejecutan **en el destino**:
 bash /tmp/migracion-cuenta.paquete.sh plan
 bash /tmp/migracion-cuenta.paquete.sh 1
 bash /tmp/migracion-cuenta.paquete.sh sincronizar
-#  ─── aquí apuntas el DNS al servidor nuevo ───
+#  ─── aquí recreas las zonas (recrear-zonas.sh), las compruebas con dig ───
+#  ─── y solo entonces apuntas el DNS al servidor nuevo ───
 bash /tmp/migracion-cuenta.paquete.sh 2
 bash /tmp/migracion-cuenta.paquete.sh verificar
 ```
