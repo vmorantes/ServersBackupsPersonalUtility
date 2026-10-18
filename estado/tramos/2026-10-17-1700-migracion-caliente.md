@@ -24,6 +24,10 @@
 | #140→#141 | `IP_DESTINO` vacía en las propuestas; cron suspendido no se migra; correcciones de la guía | completado; 27 suites. La guía commiteada decía que el plan anuncia el cron suspendido: falso, lo escribió el arquitecto sin comprobarlo. Corregido después | `c02449c` `2efdc4b` `154bace` `afc6a3e` |
 | #142→#143 | Cierre: commitear la guía corregida (con «Qué se migra y qué no»), ADR 0019 y 0020, roadmap y estado | completado salvo la guía: una frase decía que la herramienta nunca escribe en el origen; el coder no la commiteó | `bb006b6` `3d0612c` `8bec5e9` |
 | #144→#145 | Segunda ronda de cierre: la guía corregida y la verificación de DNS en `50-hestiacp.md` | completado; la lectura en frío encontró que la guía decía qué hacer con las zonas y no cómo | `142ce15` `00b0f89` `086268b` |
+| #148→#149 | Recrear zonas DNS en el destino (PO: «los DNS entran») | bloqueado en PASO 0: el arquitecto citó `#149` en el tramo sin subir el contador de `AHORA.md` (segunda vez hoy) | — |
+| #150→#151 | Contador corregido; seguir con #148 | completado; revisión: restauración sin probar de verdad, órdenes del panel sin ruta (fallarían con sudo), salida 0 con fallo de respaldo | `fcaf260` `164f7cf` `18b9792` |
+| #152→#153 | Arreglos de la revisión | completado; restauración probada (6 fallos con ella desactivada); el coder halló un aviso muerto suyo (variable en subshell) | `0e79e79` |
+| #154 | Commit de la guía de zonas y el estado | en vuelo | — |
 | #146→#147 | Tercera ronda de cierre: procedimiento para recrear una zona en la guía | ronda de cierre | ver `git log` |
 
 ## Hallazgos

@@ -4,7 +4,7 @@
 > preguntas de abajo. Si alguna no se contesta aquí, **el estado falló y arreglarlo es el primer
 > trabajo del día**.
 
-- **Actualizado:** 2026-10-17, 18:00, al cerrar la jornada.
+- **Actualizado:** 2026-10-17, noche, al enviar `#148`.
 - **Formato:** contrato de `cerrar-jornada` §2.2. Tope: 200 líneas.
 
 ## Al retomar — el primer paso, uno solo
@@ -25,9 +25,8 @@
    una zona desde plantilla, y añadir registros encima los duplica (dos MX). Hay que REEMPLAZAR los
    registros de cada zona por los del origen, con la IP nueva: procedimiento en la guía, «Recrear
    una zona en el servidor nuevo», **nunca probado**; primero con una zona poco importante.
-   Sigue abierta la pregunta de A-028 §5: ¿se automatiza en el analizador? Contestar a A-028 §5: ¿se construye el script
-   que el analizador generaría para recrearlas en el destino? (El script para el origen quedó
-   retirado: la herramienta no toca el servidor viejo, ADR 0019.)
+   Ya hay herramienta: `recrear-zonas.sh`, pasos en la guía, «Recrear una zona en el servidor
+   nuevo». Sin probar en servidor: una zona poco importante primero, sin `--aplicar`.
 3. **Dominios con el correo en Microsoft 365**: en su propuesta, `eliminar_mail="true"` y
    `correo="false"`. CONFIRMADO en la fuente: con dominio de correo local, el servidor no manda al
    MX lo que él mismo envía a ese dominio (`50-hestiacp.md`, «Zonas DNS al migrar»).
@@ -59,17 +58,18 @@ instrucción. El coder de hoy se identificó en `#124→#125`.
 
 ## 2. En vuelo
 
-**`#146`: la tercera ronda de cierre**, que commitea el procedimiento para recrear una zona en la
-guía (lo pidió el coder en `#145` §6.3: la guía decía qué hacer y no cómo) y este estado. Si al
-retomar no está su commit `docs(estado): …` en `git log`, se mide y se pide.
+**`#154`: commitear la documentación de las zonas** (`docs/migracion/caliente.md`,
+`tools/migracion-caliente/README.md`) y este estado. Código ya hecho y revisado: `164f7cf`
+(analizador exporta zonas), `18b9792` y `0e79e79` (`recrear-zonas.sh`, endurecido tras revisión;
+122 afirmaciones). Reporte esperado: `#155`.
 
-Tramo: `estado/tramos/2026-10-17-1700-migracion-caliente.md`, rondas `#124`–`#147`.
+Tramo: `estado/tramos/2026-10-17-1700-migracion-caliente.md`, rondas `#124`–`#155`.
 
 ## 3. Contadores
 
-- **`#NNN`, cadena con el coder.** Último usado: **#147** (el reporte de cierre). El próximo: **#148**.
+- **`#NNN`, cadena con el coder.** Último usado: **#154**. El próximo: **#155** (reporte).
   El `#123` se emitió y el canal lo descartó: consume número igual.
-- **`A-NNN`, mensajes al PO.** Último usado: **A-030** (el informe final de la jornada). El próximo: **A-031**.
+- **`A-NNN`, mensajes al PO.** Último usado: **A-036**. El próximo: **A-037**.
 
 Los mensajes etiquetados `#082` y `#083` del 2026-10-17 son en realidad el `#103` y el `#104`
 (tramo del andamiaje, hallazgo 1).
@@ -94,7 +94,7 @@ Arriba, en «Espera al PO». Si cambia, se cambia en los dos sitios o en ninguno
 1. Hecho y commiteado en `feat/migracion-caliente`: copia intacta (13/13 sumas, `d3461b8`),
    `codeigniter3` (`3be710b`, `6220a9e`), falso OK de `verificar` (`641733a`), analizador
    (`dd414c2`, `51e0b2a`), IP de destino vacía (`c02449c`), cron suspendidos (`2efdc4b`), guía.
-2. **Zonas DNS**: sin herramienta. La vía verificada (reemplazar el `.conf` de la zona y regenerar)
+2. **Zonas DNS**: HECHO (`recrear-zonas.sh`), sin probar en servidor. Antes: La vía verificada (reemplazar el `.conf` de la zona y regenerar)
    está en `50-hestiacp.md`. Depende de la respuesta del PO (Espera §2).
 3. `IP_ORIGEN="REVISAR_IP_ORIGEN"` cuando no se lee ninguna IP: dejar vacío (roadmap).
 
