@@ -72,6 +72,13 @@ set -u
 HESTIA_DIR="${HESTIA_DIR:-/usr/local/hestia}";
 ZONAS_RESPALDO="${ZONAS_RESPALDO:-/root/zonas-respaldo}";
 
+# Las órdenes del panel se llaman por RUTA ABSOLUTA, nunca por
+# nombre: bajo sudo, secure_path no incluye el bin de HestiaCP
+# y la orden saldría con 127 sin haber hecho nada.
+HESTIA_BIN="${HESTIA_BIN:-$HESTIA_DIR/bin}";
+V_INSERT="$HESTIA_BIN/v-insert-dns-records";
+V_REBUILD="$HESTIA_BIN/v-rebuild-dns-domains";
+
 
 # Las únicas claves que una línea de zona puede llevar
 # (50-hestiacp.md, «Formato y carga de una zona»). Cualquier
@@ -206,6 +213,14 @@ CONF_DNS="$DIR_CUENTA/dns.conf";
 
 [ -r "$CONF_DNS" ] || morir "no hay dns.conf legible de la cuenta «$CUENTA» en este servidor: $CONF_DNS. ¿Es esta la cuenta del destino?";
 
+# Las órdenes del panel, comprobadas antes de prometer nada: si
+# no están donde se espera, se dice ahora y no a mitad de una
+# carga.
+if [ "$APLICAR" = "si" ]; then
+  [ -x "$V_INSERT" ]  || morir "no se encuentra o no es ejecutable: $V_INSERT. Si el panel está en otro sitio, pasa HESTIA_DIR.";
+  [ -x "$V_REBUILD" ] || morir "no se encuentra o no es ejecutable: $V_REBUILD. Si el panel está en otro sitio, pasa HESTIA_DIR.";
+fi;
+
 
 # Las zonas a tratar: las del directorio, o solo las pedidas.
 ZONAS=();
@@ -306,22 +321,30 @@ es_domainkey() {
 # Sustituye el primer VALUE='viejo' por VALUE='nuevo' en la
 # línea, sin reescribir el resto: TIME, DATE, TTL y los
 # espacios se conservan literales.
+#
+# El patrón Y el reemplazo van ENTRE COMILLAS. Sin comillas, el
+# patrón de ${x/patrón/reemplazo} se interpreta como glob —un
+# '[' o un '*' en el valor cambiarían a qué casa— y en bash 5.2
+# un '&' en el reemplazo se expande al texto que casó
+# (patsub_replacement). Los valores de una zona llevan los dos:
+# un SPF con 'a:[...]', un TXT con '&'.
 cambiar_valor() {
   local linea="$1" viejo="$2" nuevo="$3";
-  printf '%s' "${linea/VALUE=\'$viejo\'/VALUE=\'$nuevo\'}";
+  printf '%s' "${linea/"VALUE='$viejo'"/"VALUE='$nuevo'"}";
 }
 
 
-# Renumera el ID de la línea.
+# Renumera el ID de la línea. Mismas comillas, por lo mismo.
 cambiar_id() {
   local linea="$1" viejo="$2" nuevo="$3";
-  printf '%s' "${linea/ID=\'$viejo\'/ID=\'$nuevo\'}";
+  printf '%s' "${linea/"ID='$viejo'"/"ID='$nuevo'"}";
 }
 
 
 # El token ip4: del SPF, anclado por la derecha para que una
 # IP no case dentro de otra más larga (203.0.113.1 dentro de
 # 203.0.113.10).
+#
 cambiar_ip4() {
 
   local valor="$1";
@@ -329,6 +352,36 @@ cambiar_ip4() {
 
   printf '%s' "$valor" \
     | sed -E "s/ip4:${escapada}([^0-9.]|\$)/ip4:${IP_DESTINO}\1/g";
+}
+
+
+# Cierto si el valor lleva un ip4 con máscara (ip4:IP/24): ahí
+# lo que se autoriza es una RED entera, no una IP, y cambiarla
+# de sitio lo tiene que mirar una persona.
+#
+# Se comprueba desde el llamador y no dentro de cambiar_ip4: esa
+# se invoca en una sustitución de comandos, y una variable que
+# cambia dentro de un subshell no sobrevive al subshell
+# (.agents/context/30-trampas.md).
+lleva_ip4_con_prefijo() {
+
+  local valor="$1";
+  local escapada="${IP_ORIGEN//./\\.}";
+
+  printf '%s\n' "$valor" | grep -qE "ip4:${escapada}/[0-9]";
+}
+
+
+# Cierto si el valor contiene la IP de origen COMO TAL, no como
+# trozo de otra más larga: con origen 203.0.113.1, el valor
+# 203.0.113.10 no la contiene.
+contiene_ip_origen() {
+
+  local valor="$1";
+  local escapada="${IP_ORIGEN//./\\.}";
+
+  printf '%s\n' "$valor" \
+    | grep -qE "(^|[^0-9.])${escapada}([^0-9.]|\$)";
 }
 
 
@@ -344,6 +397,35 @@ cambiar_ip4() {
 
 MOTIVO="";
 AVISOS_ZONA=();
+
+# Comprueba que la línea ya leída solo lleva claves de una zona
+# DNS de HestiaCP. Deja el motivo en MOTIVO y devuelve 1 si no.
+# Vale para las líneas del origen Y para las del destino: una
+# línea del destino con una clave rara se copiaría igual de mal
+# a la propuesta.
+claves_conocidas() {
+
+  local linea="$1" donde="$2";
+  local clave;
+
+  for clave in "${CLAVES_ORDEN[@]}"
+  do
+    case "$CLAVES_VALIDAS" in
+      *" $clave "*) ;;
+      *)
+        MOTIVO="la línea «$linea» ($donde) lleva la clave «$clave», que no es de una zona DNS de HestiaCP. La zona no se carga.";
+        return 1;
+        ;;
+    esac;
+  done;
+
+  if [ -z "${CAMPO[ID]:-}" ] || [ -z "${CAMPO[RECORD]:-}" ] || [ -z "${CAMPO[TYPE]:-}" ]; then
+    MOTIVO="la línea «$linea» ($donde) no tiene ID, RECORD o TYPE. La zona no se carga.";
+    return 1;
+  fi;
+
+  return 0;
+}
 
 construir_propuesta() {
 
@@ -371,6 +453,8 @@ construir_propuesta() {
       return 1;
     fi;
 
+    claves_conocidas "$linea" "la zona que el destino tiene ahora" || return 1;
+
     if es_ns_del_vertice; then
       printf '%s\n' "$linea" >> "$ns_destino";
     elif es_domainkey; then
@@ -390,7 +474,7 @@ construir_propuesta() {
 
   local ns_puestos="no";
   local dkim_puesto="no";
-  local clave valor tipo nueva valor_nuevo;
+  local valor tipo nueva valor_nuevo prefijo;
 
   while IFS= read -r linea || [ -n "$linea" ]
   do
@@ -402,21 +486,7 @@ construir_propuesta() {
       return 1;
     fi;
 
-    for clave in "${CLAVES_ORDEN[@]}"
-    do
-      case "$CLAVES_VALIDAS" in
-        *" $clave "*) ;;
-        *)
-          MOTIVO="la línea «$linea» lleva la clave «$clave», que no es de una zona DNS de HestiaCP. La zona no se carga.";
-          return 1;
-          ;;
-      esac;
-    done;
-
-    if [ -z "${CAMPO[ID]:-}" ] || [ -z "${CAMPO[RECORD]:-}" ] || [ -z "${CAMPO[TYPE]:-}" ]; then
-      MOTIVO="la línea «$linea» no tiene ID, RECORD o TYPE. La zona no se carga.";
-      return 1;
-    fi;
+    claves_conocidas "$linea" "la zona exportada del origen" || return 1;
 
     # Los NS del origen se cambian en bloque por los del destino.
     if es_ns_del_vertice; then
@@ -443,25 +513,50 @@ construir_propuesta() {
     if [ "$valor" = "$IP_ORIGEN" ]; then
 
       nueva="$(cambiar_valor "$linea" "$valor" "$IP_DESTINO")";
-      valor="$IP_DESTINO";
+
+      # Si la línea no cambió, la sustitución NO se hizo y la
+      # zona se cargaría con la IP vieja. No se calla.
+      if [ "$nueva" = "$linea" ]; then
+        AVISOS_ZONA+=("el registro «${CAMPO[RECORD]}» ($tipo) valía exactamente la IP del origen pero la línea no se pudo reescribir: «$linea». REVÍSALO: se cargaría con la IP vieja.");
+      else
+        valor="$IP_DESTINO";
+      fi;
 
     elif [ "$tipo" = "TXT" ]; then
+
+      prefijo="no";
+
+      if lleva_ip4_con_prefijo "$valor"; then
+        prefijo="si";
+      fi;
 
       valor_nuevo="$(cambiar_ip4 "$valor")";
 
       if [ "$valor_nuevo" != "$valor" ]; then
+
         nueva="$(cambiar_valor "$linea" "$valor" "$valor_nuevo")";
-        valor="$valor_nuevo";
+
+        if [ "$nueva" = "$linea" ]; then
+          AVISOS_ZONA+=("el registro «${CAMPO[RECORD]}» (TXT) lleva un ip4: con la IP del origen pero la línea no se pudo reescribir: «$linea». REVÍSALO: se cargaría con la IP vieja.");
+        else
+          valor="$valor_nuevo";
+        fi;
+
+        if [ "$prefijo" = "si" ]; then
+          AVISOS_ZONA+=("el registro «${CAMPO[RECORD]}» (TXT) llevaba un ip4 con prefijo /N y se ha reescrito: eso autoriza una RED entera, no una IP. Revísalo: la red del servidor nuevo puede no ser la misma.");
+        fi;
+
       fi;
 
     fi;
 
     # --- Avisos que NO bloquean ---
-    case "$valor" in
-      *"$IP_ORIGEN"*)
-        AVISOS_ZONA+=("el registro «${CAMPO[RECORD]}» ($tipo) sigue conteniendo la IP del origen después de la sustitución: «$valor». Revísalo a mano.");
-        ;;
-    esac;
+    # La comprobación va anclada igual que la sustitución: con
+    # origen 203.0.113.1, un valor 203.0.113.10 no la contiene y
+    # no debe disparar este aviso.
+    if contiene_ip_origen "$valor"; then
+      AVISOS_ZONA+=("el registro «${CAMPO[RECORD]}» ($tipo) sigue conteniendo la IP del origen después de la sustitución: «$valor». Revísalo a mano.");
+    fi;
 
     if [ "$tipo" = "A" ] || [ "$tipo" = "AAAA" ]; then
       if [ "$valor" != "$IP_DESTINO" ] && [ "$valor" != "$IP_ORIGEN" ]; then
@@ -687,6 +782,8 @@ echo;
 
 # --- Copia de seguridad de cada zona, ANTES de cargar nada ---
 RESPALDADAS=();
+CARGADAS=0;
+FALLIDAS=0;
 
 for dom in "${TRATABLES[@]}"
 do
@@ -704,6 +801,7 @@ do
 
     echo "  $dom: FALLO al copiar: esta zona NO se toca.";
     RESULTADOS+=("$dom: FALLO (no se pudo hacer la copia de seguridad; la zona no se tocó)");
+    FALLIDAS=$((FALLIDAS + 1));
 
   fi;
 
@@ -721,43 +819,53 @@ fi;
 # --- El deshacer, ANTES de cargar la primera zona ---
 DESHACER="$DIR_RESPALDO/deshacer-zonas.sh";
 
+# Cada dato que entra en el script generado va con printf %q:
+# un nombre de cuenta o de dominio con un carácter raro no debe
+# poder convertirse en una orden dentro del deshacer. Las
+# órdenes del panel van con su ruta absoluta ya expandida: el
+# deshacer puede correrse bajo sudo, donde el PATH no las
+# alcanza.
 {
-  echo "#!/bin/bash";
-  echo;
-  echo "# Deshace la carga de zonas hecha el $SELLO sobre la cuenta $CUENTA.";
-  echo "# Reinserta cada zona tal como estaba justo antes. Se ejecuta en ESTE";
-  echo "# servidor, como root. v-insert-dns-records MUEVE el archivo que se le";
-  echo "# pasa, así que de cada copia se le da un duplicado y la copia se queda.";
-  echo;
-  echo "set -u";
-  echo;
-  echo "HESTIA_DIR=\"\${HESTIA_DIR:-$HESTIA_DIR}\";";
-  echo "AQUI=\"\$(cd \"\$(dirname \"\${BASH_SOURCE[0]}\")\" && pwd)\";";
-  echo;
-  echo "ENTREGA=\"\$(mktemp -d)\";";
-  echo "trap 'rm -rf -- \"\$ENTREGA\"' EXIT";
-  echo;
-  echo "fallos=0;";
-  echo;
+  printf '#!/bin/bash\n';
+  printf '\n';
+  printf '# Deshace la carga de zonas hecha el %s sobre la cuenta %s.\n' "$SELLO" "$CUENTA";
+  printf '# Reinserta cada zona tal como estaba justo antes. Se ejecuta en ESTE\n';
+  printf '# servidor, como root. v-insert-dns-records MUEVE el archivo que se le\n';
+  printf '# pasa, así que de cada copia se le da un duplicado y la copia se queda.\n';
+  printf '\n';
+  printf 'set -u\n';
+  printf '\n';
+  printf 'V_INSERT=%q;\n'  "$V_INSERT";
+  printf 'V_REBUILD=%q;\n' "$V_REBUILD";
+  printf 'CUENTA=%q;\n'    "$CUENTA";
+  printf 'DIR_ZONAS=%q;\n' "$DIR_CUENTA/dns";
+  printf 'AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)";\n';
+  printf '\n';
+  printf 'ENTREGA="$(mktemp -d)";\n';
+  printf 'trap '"'"'rm -rf -- "$ENTREGA"'"'"' EXIT\n';
+  printf '\n';
+  printf 'fallos=0;\n';
+  printf '\n';
 
   for dom in "${RESPALDADAS[@]}"
   do
-    echo "cp \"\$AQUI/$dom.conf\" \"\$ENTREGA/$dom.conf\" \\";
-    echo "  && v-insert-dns-records $CUENTA $dom \"\$ENTREGA/$dom.conf\";";
-    echo "if cmp -s \"\$HESTIA_DIR/data/users/$CUENTA/dns/$dom.conf\" \"\$AQUI/$dom.conf\"; then";
-    echo "  echo \"$dom: restaurada\";";
-    echo "else";
-    echo "  echo \"$dom: FALLO al restaurar\" >&2;";
-    echo "  fallos=\$((fallos + 1));";
-    echo "fi;";
-    echo;
+    printf 'dom=%q;\n' "$dom";
+    printf 'cp "$AQUI/$dom.conf" "$ENTREGA/$dom.conf" \\\n';
+    printf '  && "$V_INSERT" "$CUENTA" "$dom" "$ENTREGA/$dom.conf";\n';
+    printf 'if cmp -s "$DIR_ZONAS/$dom.conf" "$AQUI/$dom.conf"; then\n';
+    printf '  echo "$dom: restaurada";\n';
+    printf 'else\n';
+    printf '  echo "$dom: FALLO al restaurar" >&2;\n';
+    printf '  fallos=$((fallos + 1));\n';
+    printf 'fi;\n';
+    printf '\n';
   done
 
-  echo "v-rebuild-dns-domains $CUENTA;";
-  echo;
-  echo "echo \"Comprueba con dig contra este servidor antes de dar nada por bueno.\";";
-  echo;
-  echo "[ \"\$fallos\" -eq 0 ];";
+  printf '"$V_REBUILD" "$CUENTA";\n';
+  printf '\n';
+  printf 'echo "Comprueba con dig contra este servidor antes de dar nada por bueno.";\n';
+  printf '\n';
+  printf '[ "$fallos" -eq 0 ];\n';
 
 } > "$DESHACER"
 
@@ -773,9 +881,6 @@ echo "============================================================";
 echo "CARGANDO";
 echo "============================================================";
 echo;
-
-CARGADAS=0;
-FALLIDAS=0;
 
 for dom in "${RESPALDADAS[@]}"
 do
@@ -795,7 +900,7 @@ do
     continue;
   fi;
 
-  v-insert-dns-records "$CUENTA" "$dom" "$entrega";
+  "$V_INSERT" "$CUENTA" "$dom" "$entrega";
   codigo="$?";
 
   # El código de salida NO basta: con un archivo que no existe,
@@ -842,7 +947,7 @@ if [ "$CARGADAS" -gt 0 ]; then
   echo "============================================================";
   echo;
 
-  v-rebuild-dns-domains "$CUENTA";
+  "$V_REBUILD" "$CUENTA";
   CODIGO_REBUILD="$?";
 
   if [ "$CODIGO_REBUILD" -ne 0 ]; then

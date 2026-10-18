@@ -133,9 +133,23 @@ suma_del_arbol() {
 #   silencioso0  NO mueve y sale 0 — el falso éxito de 50-hestiacp.md
 #   codigo3      NO mueve y sale 3 — la zona no existe
 #
+# Dos modos más, para ejercitar de verdad el código que restaura:
+#
+#   mueve_y_falla  hace el mv y SALE 3 — la zona quedó cambiada aunque el
+#                  panel diga que falló
+#   escribe_otro   escribe en el .conf algo que NO es la propuesta y sale 0
+#
+# Sin estos dos, las pruebas de fallo salen antes de llegar al mv y pasarían
+# igual con el código de restauración borrado.
+#
 # v-rebuild-dns-domains solo apunta su invocación: aquí no hay bind.
+#
+# LOS FALSOS SE COLOCAN EN $HESTIA_DIR/bin DEL ÁRBOL FALSO, no en el PATH: el
+# script tiene que llamarlos por ruta absoluta, porque bajo sudo el
+# secure_path no incluye el bin de HestiaCP y por nombre saldrían con 127.
 montar_falsos() {
-  local dir="$1" registro="$2"
+  local raiz="$1" registro="$2"
+  local dir="$raiz/hestia/bin"
   mkdir -p "$dir"
   : > "$registro"
 
@@ -143,13 +157,17 @@ montar_falsos() {
     printf '#!/usr/bin/env bash\n'
     printf 'printf "insert %%s\\n" "$*" >> %q\n' "$registro"
     printf 'cuenta="$1"; dominio="$2"; archivo="$3"\n'
+    printf 'destino="$HESTIA_DIR/data/users/$cuenta/dns/$dominio.conf"\n'
     printf 'case "${FALSO_MODO:-normal}" in\n'
     printf '  silencioso0) exit 0 ;;\n'
     printf '  codigo3)     exit 3 ;;\n'
+    printf '  escribe_otro)\n'
+    printf '    printf "%%s\\n" "ID='"'"'1'"'"' RECORD='"'"'@'"'"' TYPE='"'"'A'"'"' PRIORITY='"'"''"'"' VALUE='"'"'192.0.2.99'"'"' SUSPENDED='"'"'no'"'"' TIME='"'"'00:00:00'"'"' DATE='"'"'2000-01-01'"'"'" > "$destino"\n'
+    printf '    exit 0 ;;\n'
     printf 'esac\n'
-    printf 'destino="$HESTIA_DIR/data/users/$cuenta/dns/$dominio.conf"\n'
     printf '[[ -f "$destino" ]] || exit 3\n'
     printf 'mv "$archivo" "$destino" || exit 4\n'
+    printf 'if [[ "${FALSO_MODO:-normal}" == "mueve_y_falla" ]]; then exit 3; fi\n'
     printf 'exit 0\n'
   } > "$dir/v-insert-dns-records"
 
@@ -160,17 +178,20 @@ montar_falsos() {
   } > "$dir/v-rebuild-dns-domains"
 
   chmod +x "$dir/v-insert-dns-records" "$dir/v-rebuild-dns-domains"
-  printf '%s' "$dir:$PATH"
 }
 
 # Corre el script sobre el árbol falso. Deja stdout y stderr en archivos y
 # devuelve su código de salida.
+#
+# El PATH que se le da NO contiene las órdenes del panel: si el script las
+# llamara por nombre, saldrían con 127 y estas pruebas se caerían. Es a
+# propósito.
 correr() {
-  local raiz="$1" ruta_path="$2" modo="$3" salida_std="$4" salida_err="$5"
-  shift 5
+  local raiz="$1" modo="$2" salida_std="$3" salida_err="$4"
+  shift 4
   env -i \
     HOME="${HOME:-/tmp}" \
-    PATH="$ruta_path" \
+    PATH="/usr/bin:/bin" \
     LANG=C.UTF-8 \
     HESTIA_DIR="$raiz/hestia" \
     ZONAS_RESPALDO="$raiz/respaldos" \
@@ -197,21 +218,20 @@ test_bad_arguments_change_nothing() {
   local raiz="$d/arbol"
   sembrar "$raiz"
 
-  local ruta_path
-  ruta_path="$(montar_falsos "$d/bin" "$d/registro.txt")"
+  montar_falsos "$raiz" "$d/registro.txt"
 
   local antes
   antes="$(suma_del_arbol "$raiz")"
 
   # --- Sin --ip-origen ---
-  correr "$raiz" "$ruta_path" normal "$d/o1.txt" "$d/e1.txt" \
+  correr "$raiz" normal "$d/o1.txt" "$d/e1.txt" \
     --cuenta cuenta1 --zonas "$raiz/zonas/cuenta1" --ip-destino "$IP_NUEVA" --aplicar
   afirmar_codigo 2 "$?" "V1: sin --ip-origen sale con código 2"
   afirmar_contiene "$d/e1.txt" "falta --ip-origen" \
     "V1: y dice qué falta"
 
   # --- Las dos IP iguales ---
-  correr "$raiz" "$ruta_path" normal "$d/o2.txt" "$d/e2.txt" \
+  correr "$raiz" normal "$d/o2.txt" "$d/e2.txt" \
     --cuenta cuenta1 --zonas "$raiz/zonas/cuenta1" \
     --ip-origen "$IP_NUEVA" --ip-destino "$IP_NUEVA" --aplicar
   afirmar_codigo 2 "$?" "V1: dos IP iguales salen con código 2"
@@ -219,19 +239,19 @@ test_bad_arguments_change_nothing() {
     "V1: y dice por qué"
 
   # --- Una IP que no es IPv4 ---
-  correr "$raiz" "$ruta_path" normal "$d/o3.txt" "$d/e3.txt" \
+  correr "$raiz" normal "$d/o3.txt" "$d/e3.txt" \
     --cuenta cuenta1 --zonas "$raiz/zonas/cuenta1" \
     --ip-origen "no.es.una.ip" --ip-destino "$IP_NUEVA" --aplicar
   afirmar_codigo 2 "$?" "V1: una IP mal formada sale con código 2"
 
   # --- Un directorio de zonas que no existe ---
-  correr "$raiz" "$ruta_path" normal "$d/o4.txt" "$d/e4.txt" \
+  correr "$raiz" normal "$d/o4.txt" "$d/e4.txt" \
     --cuenta cuenta1 --zonas "$raiz/no-existe" \
     --ip-origen "$IP_VIEJA" --ip-destino "$IP_NUEVA" --aplicar
   afirmar_codigo 2 "$?" "V1: un directorio de zonas que no existe sale con código 2"
 
   # --- Una cuenta que no está en este panel ---
-  correr "$raiz" "$ruta_path" normal "$d/o5.txt" "$d/e5.txt" \
+  correr "$raiz" normal "$d/o5.txt" "$d/e5.txt" \
     --cuenta cuenta9 --zonas "$raiz/zonas/cuenta1" \
     --ip-origen "$IP_VIEJA" --ip-destino "$IP_NUEVA" --aplicar
   afirmar_codigo 2 "$?" "V1: una cuenta sin dns.conf en el destino sale con código 2"
@@ -251,13 +271,12 @@ test_dry_run_writes_nothing() {
   local raiz="$d/arbol"
   sembrar "$raiz"
 
-  local ruta_path
-  ruta_path="$(montar_falsos "$d/bin" "$d/registro.txt")"
+  montar_falsos "$raiz" "$d/registro.txt"
 
   local antes
   antes="$(suma_del_arbol "$raiz")"
 
-  correr "$raiz" "$ruta_path" normal "$d/stdout.txt" "$d/stderr.txt" \
+  correr "$raiz" normal "$d/stdout.txt" "$d/stderr.txt" \
     --cuenta cuenta1 --zonas "$raiz/zonas/cuenta1" \
     --ip-origen "$IP_VIEJA" --ip-destino "$IP_NUEVA"
   local rc=$?
@@ -299,10 +318,9 @@ test_apply_rewrites_ip_ns_and_dkim() {
   CARGA_RAIZ="$raiz"
   sembrar "$raiz"
 
-  local ruta_path
-  ruta_path="$(montar_falsos "$d/bin" "$d/registro.txt")"
+  montar_falsos "$raiz" "$d/registro.txt"
 
-  correr "$raiz" "$ruta_path" normal "$d/stdout.txt" "$d/stderr.txt" \
+  correr "$raiz" normal "$d/stdout.txt" "$d/stderr.txt" \
     --cuenta cuenta1 --zonas "$raiz/zonas/cuenta1" \
     --ip-origen "$IP_VIEJA" --ip-destino "$IP_NUEVA" --aplicar
   local rc=$?
@@ -438,13 +456,19 @@ test_backups_and_undo_script() {
   local zona
   zona="$(zona_destino "$raiz" example.org)"
 
-  local ruta_path
-  ruta_path="$(montar_falsos "$d/bin2" "$d/registro2.txt")"
+  # Se vuelven a montar los falsos para que apunten a un registro limpio: lo
+  # que interesa es lo que invoca el DESHACER, no lo que invocó la carga.
+  montar_falsos "$raiz" "$d/registro2.txt"
 
-  env -i HOME="${HOME:-/tmp}" PATH="$ruta_path" LANG=C.UTF-8 \
+  # Sin las órdenes del panel en el PATH: el deshacer generado también tiene
+  # que llevarlas por ruta absoluta.
+  env -i HOME="${HOME:-/tmp}" PATH="/usr/bin:/bin" LANG=C.UTF-8 \
     HESTIA_DIR="$raiz/hestia" FALSO_MODO=normal \
     bash "$resp/deshacer-zonas.sh" > "$d/deshacer.txt" 2>&1
   afirmar_codigo 0 "$?" "A2: el deshacer termina bien"
+
+  afirmar_no_contiene "$d/deshacer.txt" "command not found|No such file" \
+    "A2: el deshacer no buscó ninguna orden en el PATH"
 
   afirmar_intacto "$zona" "$resp/example.org.conf" \
     "A2: tras deshacer, la zona está byte a byte como antes de cargarla"
@@ -466,14 +490,13 @@ test_silent_zero_is_detected_and_original_survives() {
   local raiz="$d/arbol"
   sembrar "$raiz"
 
-  local ruta_path
-  ruta_path="$(montar_falsos "$d/bin" "$d/registro.txt")"
+  montar_falsos "$raiz" "$d/registro.txt"
 
   local zona
   zona="$(zona_destino "$raiz" example.org)"
   cp "$zona" "$d/antes-example.org.conf"
 
-  correr "$raiz" "$ruta_path" silencioso0 "$d/stdout.txt" "$d/stderr.txt" \
+  correr "$raiz" silencioso0 "$d/stdout.txt" "$d/stderr.txt" \
     --cuenta cuenta1 --zonas "$raiz/zonas/cuenta1" --dominio example.org \
     --ip-origen "$IP_VIEJA" --ip-destino "$IP_NUEVA" --aplicar
   afirmar_codigo 1 "$?" "F1: un falso éxito hace que el script salga con código 1"
@@ -506,14 +529,13 @@ test_nonzero_exit_leaves_the_zone_untouched() {
   local raiz="$d/arbol"
   sembrar "$raiz"
 
-  local ruta_path
-  ruta_path="$(montar_falsos "$d/bin" "$d/registro.txt")"
+  montar_falsos "$raiz" "$d/registro.txt"
 
   local zona
   zona="$(zona_destino "$raiz" example.org)"
   cp "$zona" "$d/antes-example.org.conf"
 
-  correr "$raiz" "$ruta_path" codigo3 "$d/stdout.txt" "$d/stderr.txt" \
+  correr "$raiz" codigo3 "$d/stdout.txt" "$d/stderr.txt" \
     --cuenta cuenta1 --zonas "$raiz/zonas/cuenta1" --dominio example.org \
     --ip-origen "$IP_VIEJA" --ip-destino "$IP_NUEVA" --aplicar
   afirmar_codigo 1 "$?" "F2: con código 3 del panel, el script sale con código 1"
@@ -552,10 +574,9 @@ ID='3' RECORD='largo' TYPE='A' PRIORITY='' VALUE='203.0.113.10' SUSPENDED='no' T
 ID='4' RECORD='@' TYPE='TXT' PRIORITY='' VALUE='"v=spf1 ip4:203.0.113.1 ip4:203.0.113.10 -all"' SUSPENDED='no' TIME='08:00:00' DATE='2025-03-04'
 FIN
 
-  local ruta_path
-  ruta_path="$(montar_falsos "$d/bin" "$d/registro.txt")"
+  montar_falsos "$raiz" "$d/registro.txt"
 
-  correr "$raiz" "$ruta_path" normal "$d/stdout.txt" "$d/stderr.txt" \
+  correr "$raiz" normal "$d/stdout.txt" "$d/stderr.txt" \
     --cuenta cuenta1 --zonas "$Z" --dominio example.org \
     --ip-origen "203.0.113.1" --ip-destino "203.0.113.2" --aplicar
   afirmar_codigo 0 "$?" "I1: la carga termina bien"
@@ -573,12 +594,340 @@ FIN
     "I1: no aparece ninguna IP inventada por una sustitución a medias"
 }
 
+# -----------------------------------------------------------------------------
+# R1: camino de fallo — el panel MUEVE el archivo y luego falla
+# -----------------------------------------------------------------------------
+# Aquí sí se llega al mv: la zona del destino queda cambiada y el panel dice
+# que falló. Es el caso que obliga a restaurar de verdad. Si se borra el
+# código que restaura, esta prueba falla.
+test_moved_then_failed_is_restored() {
+  nueva_prueba mz_r1
+  local d="$BANCO_TMP/mz_r1"
+  local raiz="$d/arbol"
+  sembrar "$raiz"
+
+  montar_falsos "$raiz" "$d/registro.txt"
+
+  local zona
+  zona="$(zona_destino "$raiz" example.org)"
+  cp "$zona" "$d/antes.conf"
+
+  correr "$raiz" mueve_y_falla "$d/stdout.txt" "$d/stderr.txt" \
+    --cuenta cuenta1 --zonas "$raiz/zonas/cuenta1" --dominio example.org \
+    --ip-origen "$IP_VIEJA" --ip-destino "$IP_NUEVA" --aplicar
+  afirmar_codigo 1 "$?" "R1: sale con código 1"
+
+  afirmar_contiene "$d/stdout.txt" "salió con código 3" \
+    "R1: dice qué código dio el panel"
+  afirmar_contiene "$d/stdout.txt" "restaurada tal como estaba" \
+    "R1: y que restauró la zona"
+  afirmar_contiene "$d/stdout.txt" "example.org: FALLO" \
+    "R1: el resumen la marca FALLO"
+
+  # El mv SÍ ocurrió: lo que demuestra que se restauró es que la zona vuelve
+  # a ser la de antes, no la propuesta.
+  afirmar_intacto "$zona" "$d/antes.conf" \
+    "R1: la zona volvió byte a byte a como estaba"
+  local resp
+  resp="$(dir_de_respaldo "$raiz")"
+  afirmar_intacto "$zona" "$resp/example.org.conf" \
+    "R1: y coincide con su copia de seguridad"
+  afirmar_no_contiene "$zona" "viejo.example.org" \
+    "R1: no quedó nada de la propuesta en el destino"
+
+  afirmar_igual "$(grep -c '^rebuild ' "$d/registro.txt" || true)" "0" \
+    "R1: no se regenera nada"
+}
+
+# -----------------------------------------------------------------------------
+# R2: camino de fallo — el panel escribe OTRA cosa y sale 0
+# -----------------------------------------------------------------------------
+test_wrong_content_with_zero_exit_is_restored() {
+  nueva_prueba mz_r2
+  local d="$BANCO_TMP/mz_r2"
+  local raiz="$d/arbol"
+  sembrar "$raiz"
+
+  montar_falsos "$raiz" "$d/registro.txt"
+
+  local zona
+  zona="$(zona_destino "$raiz" example.org)"
+  cp "$zona" "$d/antes.conf"
+
+  correr "$raiz" escribe_otro "$d/stdout.txt" "$d/stderr.txt" \
+    --cuenta cuenta1 --zonas "$raiz/zonas/cuenta1" --dominio example.org \
+    --ip-origen "$IP_VIEJA" --ip-destino "$IP_NUEVA" --aplicar
+  afirmar_codigo 1 "$?" "R2: sale con código 1"
+
+  afirmar_contiene "$d/stdout.txt" "código 0 pero la zona del destino NO es la propuesta" \
+    "R2: detecta que el contenido no es el que debía quedar"
+  afirmar_contiene "$d/stdout.txt" "restaurada tal como estaba" \
+    "R2: y restaura"
+
+  afirmar_intacto "$zona" "$d/antes.conf" \
+    "R2: la zona volvió byte a byte a como estaba"
+  afirmar_no_contiene "$zona" "192.0.2.99" \
+    "R2: lo que el panel escribió por su cuenta no sobrevive"
+
+  afirmar_igual "$(grep -c '^rebuild ' "$d/registro.txt" || true)" "0" \
+    "R2: no se regenera nada"
+}
+
+# -----------------------------------------------------------------------------
+# B1: si falla la copia de seguridad, esa zona no se toca y cuenta como FALLO
+# -----------------------------------------------------------------------------
+# La copia se hace poniendo un ARCHIVO donde tendría que ir el .conf de la
+# copia: cp no puede escribir ahí porque es un directorio.
+test_backup_failure_is_a_failure_and_spares_the_zone() {
+  nueva_prueba mz_b1
+  local d="$BANCO_TMP/mz_b1"
+  local raiz="$d/arbol"
+  sembrar "$raiz"
+
+  montar_falsos "$raiz" "$d/registro.txt"
+
+  local zona
+  zona="$(zona_destino "$raiz" example.org)"
+  cp "$zona" "$d/antes.conf"
+
+  # El script crea $ZONAS_RESPALDO/cuenta1-<sello>/. Si ahí ya hay un
+  # DIRECTORIO llamado example.org.conf, el cp de la copia no puede escribir.
+  # Se adivina el sello: es la fecha, y la prueba crea los dos posibles por si
+  # el segundo cambia justo entre medias.
+  local s1 s2
+  s1="$(date '+%Y%m%d-%H%M%S')"
+  s2="$(date -d '+1 second' '+%Y%m%d-%H%M%S')"
+  mkdir -p "$raiz/respaldos/cuenta1-$s1/example.org.conf" \
+           "$raiz/respaldos/cuenta1-$s2/example.org.conf"
+
+  correr "$raiz" normal "$d/stdout.txt" "$d/stderr.txt" \
+    --cuenta cuenta1 --zonas "$raiz/zonas/cuenta1" \
+    --dominio example.org --dominio otra.example.org \
+    --ip-origen "$IP_VIEJA" --ip-destino "$IP_NUEVA" --aplicar
+  afirmar_codigo 1 "$?" "B1: con un respaldo imposible, el script sale con código 1"
+
+  afirmar_contiene "$d/stdout.txt" "example.org: FALLO al copiar" \
+    "B1: dice que no pudo respaldar esa zona"
+  afirmar_contiene "$d/stdout.txt" "no se pudo hacer la copia de seguridad" \
+    "B1: y el resumen lo recoge"
+  afirmar_intacto "$zona" "$d/antes.conf" \
+    "B1: una zona que no se pudo respaldar NO se toca"
+
+  # Y la otra zona sí se carga: un fallo no arrastra a las demás.
+  local otra
+  otra="$(zona_destino "$raiz" otra.example.org)"
+  afirmar_contiene "$d/stdout.txt" "otra.example.org: CARGADA" \
+    "B1: la otra zona se carga igual"
+  afirmar_contiene "$otra" "VALUE='ns1.nuevo.example.org.'" \
+    "B1: y queda con los NS del destino"
+
+  afirmar_igual "$(grep -c '^rebuild ' "$d/registro.txt" || true)" "1" \
+    "B1: el rebuild se llama una vez, porque una zona sí se cargó"
+}
+
+# -----------------------------------------------------------------------------
+# C1: caracteres de glob y de sustitución en los valores
+# -----------------------------------------------------------------------------
+# '[' y '*' convertirían el patrón de ${x/…/…} en un glob, y '&' en el
+# reemplazo se expande al texto que casó (bash 5.2, patsub_replacement). Las
+# dos cosas aparecen en valores de zona de verdad.
+test_glob_and_ampersand_in_values_survive_literally() {
+  nueva_prueba mz_c1
+  local d="$BANCO_TMP/mz_c1"
+  local raiz="$d/arbol"
+  sembrar "$raiz"
+
+  local Z="$raiz/zonas/cuenta1"
+  rm -f -- "$Z"/*.conf
+
+  cat > "$Z/example.org.conf" <<'FIN'
+ID='1' RECORD='@' TYPE='NS' PRIORITY='' VALUE='ns1.viejo.example.org.' SUSPENDED='no' TIME='08:00:00' DATE='2025-03-04'
+ID='2' RECORD='@' TYPE='TXT' PRIORITY='' VALUE='"v=spf1 ip4:203.0.113.10 a:[raro] y&mas -all"' SUSPENDED='no' TIME='08:00:00' DATE='2025-03-04'
+ID='3' RECORD='@' TYPE='A' PRIORITY='' VALUE='203.0.113.10' SUSPENDED='no' TIME='08:00:00' DATE='2025-03-04'
+FIN
+
+  montar_falsos "$raiz" "$d/registro.txt"
+
+  correr "$raiz" normal "$d/stdout.txt" "$d/stderr.txt" \
+    --cuenta cuenta1 --zonas "$Z" --dominio example.org \
+    --ip-origen "$IP_VIEJA" --ip-destino "$IP_NUEVA" --aplicar
+  afirmar_codigo 0 "$?" "C1: la carga termina bien"
+
+  local zona
+  zona="$(zona_destino "$raiz" example.org)"
+
+  afirmar_contiene "$zona" 'v=spf1 ip4:203.0.113.20 a:\[raro\] y&mas -all' \
+    "C1: la IP cambia y el resto del TXT queda literal, con '[' y '&'"
+  afirmar_contiene "$zona" "RECORD='@' TYPE='A' PRIORITY='' VALUE='203.0.113.20'" \
+    "C1: y el A también se cambia"
+  afirmar_no_contiene "$zona" "203.0.113.10" \
+    "C1: no queda la IP vieja en ninguna parte"
+}
+
+# -----------------------------------------------------------------------------
+# P1: un ip4 con prefijo /N se reescribe, pero avisando
+# -----------------------------------------------------------------------------
+test_ip4_with_prefix_is_rewritten_with_a_warning() {
+  nueva_prueba mz_p1
+  local d="$BANCO_TMP/mz_p1"
+  local raiz="$d/arbol"
+  sembrar "$raiz"
+
+  local Z="$raiz/zonas/cuenta1"
+  rm -f -- "$Z"/*.conf
+
+  cat > "$Z/example.org.conf" <<'FIN'
+ID='1' RECORD='@' TYPE='NS' PRIORITY='' VALUE='ns1.viejo.example.org.' SUSPENDED='no' TIME='08:00:00' DATE='2025-03-04'
+ID='2' RECORD='@' TYPE='TXT' PRIORITY='' VALUE='"v=spf1 ip4:203.0.113.10/24 -all"' SUSPENDED='no' TIME='08:00:00' DATE='2025-03-04'
+FIN
+
+  montar_falsos "$raiz" "$d/registro.txt"
+
+  correr "$raiz" normal "$d/stdout.txt" "$d/stderr.txt" \
+    --cuenta cuenta1 --zonas "$Z" --dominio example.org \
+    --ip-origen "$IP_VIEJA" --ip-destino "$IP_NUEVA"
+
+  afirmar_contiene "$d/stdout.txt" "ip4 con prefijo /N y se ha reescrito" \
+    "P1: avisa de que lo reescrito era una red entera"
+  afirmar_contiene "$d/stdout.txt" "ip4:203.0.113.20/24" \
+    "P1: y el diff muestra la red reescrita, para que se vea"
+}
+
+# -----------------------------------------------------------------------------
+# K1: una clave desconocida en la zona DEL DESTINO rechaza la zona
+# -----------------------------------------------------------------------------
+# Las líneas del destino (NS y mail._domainkey) se copian a la propuesta tal
+# cual: pasan por el mismo filtro que las del origen.
+test_unknown_key_on_the_destination_side_rejects_the_zone() {
+  nueva_prueba mz_k1
+  local d="$BANCO_TMP/mz_k1"
+  local raiz="$d/arbol"
+  sembrar "$raiz"
+
+  # La zona que el destino tiene ahora lleva una clave inventada.
+  cat > "$raiz/hestia/data/users/cuenta1/dns/example.org.conf" <<'FIN'
+ID='1' RECORD='@' TYPE='NS' PRIORITY='' VALUE='ns1.nuevo.example.org.' RARA='si' SUSPENDED='no' TIME='09:00:00' DATE='2026-10-17'
+ID='2' RECORD='@' TYPE='A' PRIORITY='' VALUE='203.0.113.20' SUSPENDED='no' TIME='09:00:00' DATE='2026-10-17'
+FIN
+
+  montar_falsos "$raiz" "$d/registro.txt"
+
+  local zona
+  zona="$(zona_destino "$raiz" example.org)"
+  cp "$zona" "$d/antes.conf"
+
+  correr "$raiz" normal "$d/stdout.txt" "$d/stderr.txt" \
+    --cuenta cuenta1 --zonas "$raiz/zonas/cuenta1" --dominio example.org \
+    --ip-origen "$IP_VIEJA" --ip-destino "$IP_NUEVA" --aplicar
+  afirmar_codigo 1 "$?" "K1: sale con código 1"
+
+  afirmar_contiene "$d/stdout.txt" "example.org: RECHAZADA" \
+    "K1: la zona se rechaza"
+  afirmar_contiene "$d/stdout.txt" "la clave «RARA»" \
+    "K1: nombrando la clave"
+  afirmar_contiene "$d/stdout.txt" "la zona que el destino tiene ahora" \
+    "K1: y diciendo que la línea rara es la del destino, no la del origen"
+  afirmar_intacto "$zona" "$d/antes.conf" \
+    "K1: y no se tocó nada"
+  afirmar_igual "$(wc -c < "$d/registro.txt" | tr -d ' ')" "0" \
+    "K1: ni se invocó el panel"
+}
+
+# -----------------------------------------------------------------------------
+# N1: destino sin NS en @ → la zona se rechaza
+# -----------------------------------------------------------------------------
+# Sin NS del destino no hay con qué sustituir los del origen, y cargar la zona
+# la dejaría con los NS del servidor viejo o sin ninguno.
+test_destination_without_apex_ns_is_rejected() {
+  nueva_prueba mz_n1
+  local d="$BANCO_TMP/mz_n1"
+  local raiz="$d/arbol"
+  sembrar "$raiz"
+
+  cat > "$raiz/hestia/data/users/cuenta1/dns/example.org.conf" <<'FIN'
+ID='1' RECORD='@' TYPE='A' PRIORITY='' VALUE='203.0.113.20' SUSPENDED='no' TIME='09:00:00' DATE='2026-10-17'
+FIN
+
+  montar_falsos "$raiz" "$d/registro.txt"
+
+  local zona
+  zona="$(zona_destino "$raiz" example.org)"
+  cp "$zona" "$d/antes.conf"
+
+  correr "$raiz" normal "$d/stdout.txt" "$d/stderr.txt" \
+    --cuenta cuenta1 --zonas "$raiz/zonas/cuenta1" --dominio example.org \
+    --ip-origen "$IP_VIEJA" --ip-destino "$IP_NUEVA" --aplicar
+  afirmar_codigo 1 "$?" "N1: sale con código 1"
+
+  afirmar_contiene "$d/stdout.txt" "no lleva ningún NS en @" \
+    "N1: dice exactamente qué falta"
+  afirmar_contiene "$d/stdout.txt" "example.org: RECHAZADA" \
+    "N1: y rechaza la zona"
+  afirmar_intacto "$zona" "$d/antes.conf" \
+    "N1: sin tocar nada"
+}
+
+# -----------------------------------------------------------------------------
+# S1: NS de subdominio y selectores DKIM que no son mail._domainkey
+# -----------------------------------------------------------------------------
+# Lo que se sustituye es el NS del VÉRTICE (RECORD='@'): una delegación de
+# subdominio es un dato del cliente y se copia tal cual. Y la clave que se
+# cambia es mail._domainkey: el selector de Microsoft 365
+# (selector1._domainkey) apunta a Microsoft, no al servidor viejo, y tiene que
+# sobrevivir intacto.
+test_subdomain_ns_and_foreign_dkim_selectors_survive() {
+  nueva_prueba mz_s1
+  local d="$BANCO_TMP/mz_s1"
+  local raiz="$d/arbol"
+  sembrar "$raiz"
+
+  local Z="$raiz/zonas/cuenta1"
+  rm -f -- "$Z"/*.conf
+
+  cat > "$Z/example.org.conf" <<'FIN'
+ID='1' RECORD='@' TYPE='NS' PRIORITY='' VALUE='ns1.viejo.example.org.' SUSPENDED='no' TIME='08:00:00' DATE='2025-03-04'
+ID='2' RECORD='deleg' TYPE='NS' PRIORITY='' VALUE='ns1.otroproveedor.example.net.' SUSPENDED='no' TIME='08:00:00' DATE='2025-03-04'
+ID='3' RECORD='selector1._domainkey' TYPE='CNAME' PRIORITY='' VALUE='selector1-example-org._domainkey.ejemplo.onmicrosoft.com.' SUSPENDED='no' TIME='08:00:00' DATE='2025-03-04'
+ID='4' RECORD='mail._domainkey' TYPE='TXT' PRIORITY='' VALUE='"v=DKIM1; k=rsa; p=CLAVE-DEL-VIEJO"' SUSPENDED='no' TIME='08:00:00' DATE='2025-03-04'
+ID='5' RECORD='@' TYPE='A' PRIORITY='' VALUE='203.0.113.10' SUSPENDED='no' TIME='08:00:00' DATE='2025-03-04'
+FIN
+
+  montar_falsos "$raiz" "$d/registro.txt"
+
+  correr "$raiz" normal "$d/stdout.txt" "$d/stderr.txt" \
+    --cuenta cuenta1 --zonas "$Z" --dominio example.org \
+    --ip-origen "$IP_VIEJA" --ip-destino "$IP_NUEVA" --aplicar
+  afirmar_codigo 0 "$?" "S1: la carga termina bien"
+
+  local zona
+  zona="$(zona_destino "$raiz" example.org)"
+
+  afirmar_contiene "$zona" "RECORD='deleg' TYPE='NS' PRIORITY='' VALUE='ns1.otroproveedor.example.net.'" \
+    "S1: un NS de subdominio se conserva tal cual"
+  afirmar_contiene "$zona" "RECORD='selector1._domainkey' TYPE='CNAME'.*onmicrosoft.com." \
+    "S1: el selector DKIM de Microsoft 365 sobrevive intacto"
+  afirmar_contiene "$zona" "p=CLAVE-DEL-NUEVO" \
+    "S1: y mail._domainkey sí es el del destino"
+  afirmar_no_contiene "$zona" "CLAVE-DEL-VIEJO" \
+    "S1: no el del viejo"
+  afirmar_no_contiene "$zona" "RECORD='@' TYPE='NS'.*viejo" \
+    "S1: el NS del vértice sí se sustituye"
+}
+
 test_bad_arguments_change_nothing
 test_dry_run_writes_nothing
 test_apply_rewrites_ip_ns_and_dkim
 test_backups_and_undo_script
 test_silent_zero_is_detected_and_original_survives
 test_nonzero_exit_leaves_the_zone_untouched
+test_moved_then_failed_is_restored
+test_wrong_content_with_zero_exit_is_restored
+test_backup_failure_is_a_failure_and_spares_the_zone
 test_a_shorter_ip_does_not_match_inside_a_longer_one
+test_glob_and_ampersand_in_values_survive_literally
+test_ip4_with_prefix_is_rewritten_with_a_warning
+test_unknown_key_on_the_destination_side_rejects_the_zone
+test_destination_without_apex_ns_is_rejected
+test_subdomain_ns_and_foreign_dkim_selectors_survive
 
 fin_de_suite
